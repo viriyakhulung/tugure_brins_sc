@@ -10,6 +10,8 @@ import NotificationCenter from './pages/NotificationCenter';
 import Profile from './pages/Profile';
 import AuditLog from './pages/AuditLog';
 import SystemConfiguration from './pages/SystemConfiguration';
+import PaymentStatus from './pages/PaymentStatus';
+import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
@@ -25,9 +27,11 @@ export const PAGES = {
     "Profile": Profile,
     "AuditLog": AuditLog,
     "SystemConfiguration": SystemConfiguration,
+    "PaymentStatus": PaymentStatus,
 }
 
 export const pagesConfig = {
     mainPage: "Dashboard",
     Pages: PAGES,
+    Layout: __Layout,
 };
