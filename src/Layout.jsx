@@ -21,12 +21,18 @@ export default function Layout({ children, currentPageName }) {
 
   const checkAuth = async () => {
     try {
-      const { base44 } = await import('@/api/base44Client');
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
-      loadNotificationCount();
+      // Check for demo user in localStorage
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        const demoUser = JSON.parse(demoUserStr);
+        setUser(demoUser);
+        loadNotificationCount();
+      } else if (currentPageName !== 'Home') {
+        // Not logged in, redirect to Home
+        window.location.href = createPageUrl('Home');
+      }
     } catch (error) {
-      // User not logged in, redirect to Home
+      // Error, redirect to Home
       if (currentPageName !== 'Home') {
         window.location.href = createPageUrl('Home');
       }
@@ -36,8 +42,7 @@ export default function Layout({ children, currentPageName }) {
 
   const logout = async () => {
     try {
-      const { base44 } = await import('@/api/base44Client');
-      await base44.auth.logout();
+      localStorage.removeItem('demo_user');
       window.location.href = createPageUrl('Home');
     } catch (error) {
       window.location.href = createPageUrl('Home');
@@ -70,28 +75,36 @@ export default function Layout({ children, currentPageName }) {
     );
   }
 
-  // Menu structure - all users can access all features in prototype mode
+  // Menu structure with role-based access control
   const menuItems = {
     common: [
-      { name: 'Dashboard', icon: LayoutDashboard, path: 'Dashboard' }
+      { name: 'Dashboard Analytics', icon: LayoutDashboard, path: 'Dashboard', roles: [] } // all users
     ],
     operations: [
-      { name: 'Submit Debtor', icon: Upload, path: 'SubmitDebtor' },
-      { name: 'Document Eligibility', icon: FileCheck, path: 'DocumentEligibility' },
-      { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview' },
-      { name: 'Payment Intent', icon: DollarSign, path: 'PaymentIntent' },
-      { name: 'Payment Status', icon: CreditCard, path: 'PaymentStatus' },
-      { name: 'Reconciliation', icon: Scale, path: 'Reconciliation' },
-      { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit' },
-      { name: 'Claim Review', icon: FileText, path: 'ClaimReview' }
+      { name: 'Submit Debtor', icon: Upload, path: 'SubmitDebtor', roles: ['BRINS'] },
+      { name: 'Document Eligibility', icon: FileCheck, path: 'DocumentEligibility', roles: ['BRINS'] },
+      { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview', roles: ['TUGURE'] },
+      { name: 'Payment Intent', icon: DollarSign, path: 'PaymentIntent', roles: ['BRINS'] },
+      { name: 'Reconciliation', icon: Scale, path: 'Reconciliation', roles: ['TUGURE'] },
+      { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit', roles: ['BRINS'] },
+      { name: 'Claim Review', icon: FileText, path: 'ClaimReview', roles: ['TUGURE'] }
     ],
     shared: [
-      { name: 'Bordero Management', icon: BarChart3, path: 'BorderoManagement' },
-      { name: 'Notifications', icon: Bell, path: 'NotificationCenter', badge: unreadNotifications },
-      { name: 'Audit Log', icon: Activity, path: 'AuditLog' },
-      { name: 'System Config', icon: Settings, path: 'SystemConfiguration' },
-      { name: 'Profile', icon: User, path: 'Profile' }
+      { name: 'Bordero Management', icon: BarChart3, path: 'BorderoManagement', roles: [] }, // all users
+      { name: 'Notifications', icon: Bell, path: 'NotificationCenter', badge: unreadNotifications, roles: [] }, // all users
+      { name: 'Audit Log', icon: Activity, path: 'AuditLog', roles: [] }, // all users
+      { name: 'System Config', icon: Settings, path: 'SystemConfiguration', roles: [] }, // all users
+      { name: 'Profile', icon: User, path: 'Profile', roles: [] } // all users
     ]
+  };
+
+  // Filter menu items based on user role
+  const filterMenuItems = (items) => {
+    return items.filter(item => {
+      if (!item.roles || item.roles.length === 0) return true; // accessible to all
+      if (user?.role === 'admin') return true; // admin can access everything
+      return item.roles.includes(user?.role?.toUpperCase());
+    });
   };
 
   // Don't render layout for Home page (show custom login)
@@ -193,20 +206,24 @@ export default function Layout({ children, currentPageName }) {
                 Main
               </p>
               <nav className="space-y-1">
-                {menuItems.common.map(renderMenuItem)}
+                {filterMenuItems(menuItems.common).map(renderMenuItem)}
               </nav>
             </div>
 
             {/* Operations */}
-            <Separator />
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">
-                Operations
-              </p>
-              <nav className="space-y-1">
-                {menuItems.operations.map(renderMenuItem)}
-              </nav>
-            </div>
+            {filterMenuItems(menuItems.operations).length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">
+                    Operations
+                  </p>
+                  <nav className="space-y-1">
+                    {filterMenuItems(menuItems.operations).map(renderMenuItem)}
+                  </nav>
+                </div>
+              </>
+            )}
 
             {/* Shared */}
             <Separator />
@@ -215,7 +232,7 @@ export default function Layout({ children, currentPageName }) {
                 Shared
               </p>
               <nav className="space-y-1">
-                {menuItems.shared.map(renderMenuItem)}
+                {filterMenuItems(menuItems.shared).map(renderMenuItem)}
               </nav>
             </div>
 
