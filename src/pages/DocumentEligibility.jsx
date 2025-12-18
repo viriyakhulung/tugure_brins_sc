@@ -1,0 +1,429 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { 
+  FileText, Upload, CheckCircle2, XCircle, AlertCircle, 
+  Clock, Eye, Trash2, RefreshCw, Loader2, Search
+} from "lucide-react";
+import { base44 } from '@/api/base44Client';
+import PageHeader from "@/components/common/PageHeader";
+import DataTable from "@/components/common/DataTable";
+import StatusBadge from "@/components/ui/StatusBadge";
+
+const DOCUMENT_TYPES = {
+  Individual: [
+    'Perjanjian Kredit',
+    'Jadwal Angsuran',
+    'Bukti Pencairan',
+    'Identitas Debitur'
+  ],
+  Corporate: [
+    'Facility Agreement',
+    'Akta Perusahaan',
+    'Board Resolution',
+    'Bukti Penarikan'
+  ]
+};
+
+export default function DocumentEligibility() {
+  const [debtors, setDebtors] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [selectedDebtor, setSelectedDebtor] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [uploadDocType, setUploadDocType] = useState('');
+  const [uploadFile, setUploadFile] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [debtorData, docData] = await Promise.all([
+        base44.entities.Debtor.list(),
+        base44.entities.Document.list()
+      ]);
+      setDebtors(debtorData || []);
+      setDocuments(docData || []);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    }
+    setLoading(false);
+  };
+
+  const getDebtorDocuments = (debtorId) => {
+    return documents.filter(d => d.debtor_id === debtorId);
+  };
+
+  const calculateCompleteness = (debtorId, creditType = 'Individual') => {
+    const requiredDocs = DOCUMENT_TYPES[creditType] || DOCUMENT_TYPES.Individual;
+    const debtorDocs = getDebtorDocuments(debtorId);
+    const completedDocs = requiredDocs.filter(type => 
+      debtorDocs.some(d => d.document_type === type && d.status === 'VERIFIED')
+    );
+    return Math.round((completedDocs.length / requiredDocs.length) * 100);
+  };
+
+  const handleUploadDocument = async () => {
+    if (!uploadFile || !uploadDocType || !selectedDebtor) return;
+
+    setUploading(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file: uploadFile });
+
+      await base44.entities.Document.create({
+        debtor_id: selectedDebtor.id,
+        document_type: uploadDocType,
+        document_name: uploadFile.name,
+        file_url,
+        upload_date: new Date().toISOString().split('T')[0],
+        status: 'PENDING'
+      });
+
+      setSuccessMessage('Document uploaded successfully');
+      setShowUploadDialog(false);
+      setUploadFile(null);
+      setUploadDocType('');
+      loadData();
+    } catch (error) {
+      console.error('Upload error:', error);
+    }
+    setUploading(false);
+  };
+
+  const handleSubmitCompletion = async (debtor) => {
+    const completeness = calculateCompleteness(debtor.id);
+    if (completeness < 100) {
+      return;
+    }
+
+    try {
+      await base44.entities.Debtor.update(debtor.id, {
+        admin_status: 'COMPLETE'
+      });
+
+      await base44.entities.Notification.create({
+        title: 'Document Eligibility Complete',
+        message: `Documents for ${debtor.nama_peserta} are now complete`,
+        type: 'INFO',
+        module: 'DOCUMENT',
+        reference_id: debtor.id,
+        target_role: 'ALL'
+      });
+
+      setSuccessMessage('Admin eligibility marked as complete');
+      loadData();
+    } catch (error) {
+      console.error('Update error:', error);
+    }
+  };
+
+  const filteredDebtors = debtors.filter(d => {
+    const matchesSearch = d.nama_peserta?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         d.nomor_peserta?.includes(searchTerm);
+    const matchesStatus = statusFilter === 'all' || d.admin_status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const columns = [
+    { 
+      header: 'Debtor Name', 
+      cell: (row) => (
+        <div>
+          <p className="font-medium">{row.nama_peserta}</p>
+          <p className="text-sm text-gray-500">{row.nomor_peserta}</p>
+        </div>
+      )
+    },
+    { 
+      header: 'Batch', 
+      accessorKey: 'batch_id',
+      cell: (row) => <span className="text-sm font-mono">{row.batch_id?.slice(0, 15)}</span>
+    },
+    { 
+      header: 'Submit Status', 
+      cell: (row) => <StatusBadge status={row.submit_status} />
+    },
+    { 
+      header: 'Document Completeness',
+      cell: (row) => {
+        const completeness = calculateCompleteness(row.id);
+        return (
+          <div className="w-32">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-medium">{completeness}%</span>
+            </div>
+            <Progress value={completeness} className="h-2" />
+          </div>
+        );
+      }
+    },
+    { 
+      header: 'Admin Status', 
+      cell: (row) => <StatusBadge status={row.admin_status} />
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedDebtor(row);
+            }}
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            View
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedDebtor(row);
+              setShowUploadDialog(true);
+            }}
+          >
+            <Upload className="w-4 h-4 mr-1" />
+            Upload
+          </Button>
+        </div>
+      )
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Document Eligibility"
+        subtitle="Manage debtor documents for coverage eligibility"
+        breadcrumbs={[
+          { label: 'Dashboard', url: 'Dashboard' },
+          { label: 'Document Eligibility' }
+        ]}
+      />
+
+      {successMessage && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Input
+                placeholder="Search by debtor name or ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Admin Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="INCOMPLETE">Incomplete</SelectItem>
+                <SelectItem value="COMPLETE">Complete</SelectItem>
+                <SelectItem value="EXPIRED">Expired</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={loadData}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Debtor List */}
+      <DataTable
+        columns={columns}
+        data={filteredDebtors}
+        isLoading={loading}
+        onRowClick={setSelectedDebtor}
+        emptyMessage="No debtors found"
+      />
+
+      {/* Debtor Detail Panel */}
+      {selectedDebtor && !showUploadDialog && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>{selectedDebtor.nama_peserta}</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedDebtor.nomor_peserta} | Batch: {selectedDebtor.batch_id}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setShowUploadDialog(true);
+                  }}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload Document
+                </Button>
+                {calculateCompleteness(selectedDebtor.id) === 100 && selectedDebtor.admin_status !== 'COMPLETE' && (
+                  <Button 
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={() => handleSubmitCompletion(selectedDebtor)}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Submit Completion
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Required Documents Checklist */}
+              <div>
+                <h4 className="font-semibold mb-4">Required Documents</h4>
+                <div className="space-y-3">
+                  {DOCUMENT_TYPES.Individual.map((docType, index) => {
+                    const doc = getDebtorDocuments(selectedDebtor.id)
+                      .find(d => d.document_type === docType);
+                    
+                    return (
+                      <div 
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          {doc?.status === 'VERIFIED' ? (
+                            <CheckCircle2 className="w-5 h-5 text-green-500" />
+                          ) : doc ? (
+                            <Clock className="w-5 h-5 text-yellow-500" />
+                          ) : (
+                            <XCircle className="w-5 h-5 text-gray-300" />
+                          )}
+                          <span className={doc?.status === 'VERIFIED' ? 'text-gray-900' : 'text-gray-500'}>
+                            {docType}
+                          </span>
+                        </div>
+                        {doc && (
+                          <StatusBadge status={doc.status} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Uploaded Documents */}
+              <div>
+                <h4 className="font-semibold mb-4">Uploaded Documents</h4>
+                <div className="space-y-3">
+                  {getDebtorDocuments(selectedDebtor.id).map((doc, index) => (
+                    <div 
+                      key={index}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-blue-500" />
+                        <div>
+                          <p className="font-medium text-sm">{doc.document_type}</p>
+                          <p className="text-xs text-gray-500">{doc.document_name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={doc.status} />
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
+                            <Eye className="w-4 h-4" />
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {getDebtorDocuments(selectedDebtor.id).length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No documents uploaded yet</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upload Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Document</DialogTitle>
+            <DialogDescription>
+              Upload document for {selectedDebtor?.nama_peserta}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium">Document Type</label>
+              <Select value={uploadDocType} onValueChange={setUploadDocType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select document type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.Individual.map(type => (
+                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">File</label>
+              <Input
+                type="file"
+                onChange={(e) => setUploadFile(e.target.files[0])}
+                accept=".pdf,.jpg,.jpeg,.png"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUploadDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUploadDocument}
+              disabled={uploading || !uploadFile || !uploadDocType}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
