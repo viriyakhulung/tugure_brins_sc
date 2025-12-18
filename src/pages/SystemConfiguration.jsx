@@ -115,8 +115,17 @@ export default function SystemConfiguration() {
   const handleSaveConfig = async () => {
     setProcessing(true);
     try {
+      const typeMap = {
+        'status': 'STATUS_REFERENCE',
+        'eligibility': 'ELIGIBILITY_RULE',
+        'financial': 'FINANCIAL_THRESHOLD',
+        'approval': 'APPROVAL_MATRIX',
+        'notification': 'NOTIFICATION_RULE',
+        'channel': 'NOTIFICATION_CHANNEL'
+      };
+      
       const configData = {
-        config_type: activeTab.toUpperCase().replace('-', '_'),
+        config_type: typeMap[activeTab],
         config_key: configKey,
         config_value: configValue,
         description: description,
@@ -159,7 +168,15 @@ export default function SystemConfiguration() {
   };
 
   const getConfigsByType = (type) => {
-    return configs.filter(c => c.config_type === type.toUpperCase().replace('-', '_'));
+    const typeMap = {
+      'status': 'STATUS_REFERENCE',
+      'eligibility': 'ELIGIBILITY_RULE',
+      'financial': 'FINANCIAL_THRESHOLD',
+      'approval': 'APPROVAL_MATRIX',
+      'notification': 'NOTIFICATION_RULE',
+      'channel': 'NOTIFICATION_CHANNEL'
+    };
+    return configs.filter(c => c.config_type === typeMap[type]);
   };
 
   const configColumns = [
