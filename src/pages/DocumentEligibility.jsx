@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   FileText, Upload, CheckCircle2, XCircle, AlertCircle, 
-  Clock, Eye, Trash2, RefreshCw, Loader2, Search
+  Clock, Eye, Trash2, RefreshCw, Loader2, Search, Download
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
@@ -29,6 +29,75 @@ const DOCUMENT_TYPES = {
     'Bukti Penarikan'
   ]
 };
+
+function DocumentUploadRow({ docType, debtorId, existingDoc, onUploadComplete }) {
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploaded, setUploaded] = useState(!!existingDoc);
+
+  const handleUpload = async () => {
+    if (!file || !debtorId) return;
+    
+    setUploading(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      await base44.entities.Document.create({
+        debtor_id: debtorId,
+        document_type: docType,
+        document_name: file.name,
+        file_url,
+        upload_date: new Date().toISOString().split('T')[0],
+        status: 'PENDING'
+      });
+      setUploaded(true);
+      setFile(null);
+      onUploadComplete();
+    } catch (error) {
+      console.error('Upload error:', error);
+    }
+    setUploading(false);
+  };
+
+  return (
+    <div className="flex items-center gap-3 p-3 border rounded-lg">
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-1">
+          {uploaded ? (
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+          ) : (
+            <Clock className="w-4 h-4 text-gray-400" />
+          )}
+          <span className="font-medium text-sm">{docType}</span>
+        </div>
+        {existingDoc && (
+          <p className="text-xs text-gray-500">{existingDoc.document_name}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          type="file"
+          onChange={(e) => setFile(e.target.files[0])}
+          accept=".pdf,.jpg,.jpeg,.png"
+          className="w-48 text-sm"
+          disabled={uploading}
+        />
+        <Button 
+          size="sm"
+          onClick={handleUpload}
+          disabled={!file || uploading}
+        >
+          {uploading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : uploaded ? (
+            'Re-upload'
+          ) : (
+            'Upload'
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function DocumentEligibility() {
   const [debtors, setDebtors] = useState([]);
@@ -247,10 +316,16 @@ export default function DocumentEligibility() {
                 <SelectItem value="EXPIRED">Expired</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={loadData}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={loadData}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+              <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white">
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -371,55 +446,30 @@ export default function DocumentEligibility() {
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Upload Document</DialogTitle>
+            <DialogTitle>Upload Documents</DialogTitle>
             <DialogDescription>
-              Upload document for {selectedDebtor?.nama_peserta}
+              Upload all required documents for {selectedDebtor?.nama_peserta}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium">Document Type</label>
-              <Select value={uploadDocType} onValueChange={setUploadDocType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select document type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DOCUMENT_TYPES.Individual.map(type => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">File</label>
-              <Input
-                type="file"
-                onChange={(e) => setUploadFile(e.target.files[0])}
-                accept=".pdf,.jpg,.jpeg,.png"
-              />
-            </div>
+          <div className="space-y-4 py-4 max-h-[500px] overflow-y-auto">
+            {DOCUMENT_TYPES.Individual.map((docType, idx) => {
+              const existingDoc = getDebtorDocuments(selectedDebtor?.id || '').find(d => d.document_type === docType);
+              return (
+                <DocumentUploadRow 
+                  key={idx}
+                  docType={docType}
+                  debtorId={selectedDebtor?.id}
+                  existingDoc={existingDoc}
+                  onUploadComplete={loadData}
+                />
+              );
+            })}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowUploadDialog(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleUploadDocument}
-              disabled={uploading || !uploadFile || !uploadDocType}
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload
-                </>
-              )}
+            <Button onClick={() => setShowUploadDialog(false)}>
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -22,23 +22,19 @@ export default function BorderoManagement() {
   const [debtors, setDebtors] = useState([]);
   const [borderos, setBorderos] = useState([]);
   const [contracts, setContracts] = useState([]);
+  const [claims, setClaims] = useState([]);
+  const [subrogations, setSubrogations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDebtor, setSelectedDebtor] = useState(null);
-  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
-  const [approvalAction, setApprovalAction] = useState('');
-  const [approvalRemarks, setApprovalRemarks] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
     submitStatus: 'all',
     reconStatus: 'all',
+    claimStatus: 'all',
+    subrogationStatus: 'all',
     startDate: '',
     endDate: ''
   });
-
-  const isTugure = hasAccess(['TUGURE']);
 
   useEffect(() => {
     loadData();
@@ -47,14 +43,18 @@ export default function BorderoManagement() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [debtorData, borderoData, contractData] = await Promise.all([
+      const [debtorData, borderoData, contractData, claimData, subrogationData] = await Promise.all([
         base44.entities.Debtor.list(),
         base44.entities.Bordero.list(),
-        base44.entities.Contract.list()
+        base44.entities.Contract.list(),
+        base44.entities.Claim.list(),
+        base44.entities.Subrogation.list()
       ]);
       setDebtors(debtorData || []);
       setBorderos(borderoData || []);
       setContracts(contractData || []);
+      setClaims(claimData || []);
+      setSubrogations(subrogationData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -71,60 +71,14 @@ export default function BorderoManagement() {
       batch: '',
       submitStatus: 'all',
       reconStatus: 'all',
+      claimStatus: 'all',
+      subrogationStatus: 'all',
       startDate: '',
       endDate: ''
     });
   };
 
-  const handleApprovalAction = async () => {
-    if (!selectedDebtor || !approvalAction) return;
 
-    setProcessing(true);
-    try {
-      const newStatus = approvalAction === 'approve' ? 'APPROVED' : 'REJECTED';
-      
-      await base44.entities.Debtor.update(selectedDebtor.id, {
-        submit_status: newStatus,
-        approval_remarks: approvalRemarks,
-        approval_date: new Date().toISOString().split('T')[0],
-        approved_by: user?.email,
-        exposure_status: newStatus === 'APPROVED' ? 'ACTIVE' : 'TERMINATED',
-        exposure_amount: newStatus === 'APPROVED' ? selectedDebtor.plafon * 0.75 : 0
-      });
-
-      // Create notification
-      await base44.entities.Notification.create({
-        title: `Debtor ${newStatus}`,
-        message: `${selectedDebtor.nama_peserta} has been ${newStatus.toLowerCase()}`,
-        type: newStatus === 'APPROVED' ? 'INFO' : 'WARNING',
-        module: 'DEBTOR',
-        reference_id: selectedDebtor.id,
-        target_role: 'BRINS'
-      });
-
-      // Create audit log
-      await base44.entities.AuditLog.create({
-        action: `DEBTOR_${newStatus}`,
-        module: 'DEBTOR',
-        entity_type: 'Debtor',
-        entity_id: selectedDebtor.id,
-        old_value: JSON.stringify({ status: selectedDebtor.submit_status }),
-        new_value: JSON.stringify({ status: newStatus }),
-        user_email: user?.email,
-        user_role: user?.role,
-        reason: approvalRemarks
-      });
-
-      setSuccessMessage(`Debtor ${approvalAction === 'approve' ? 'approved' : 'rejected'} successfully`);
-      setShowApprovalDialog(false);
-      setSelectedDebtor(null);
-      setApprovalRemarks('');
-      loadData();
-    } catch (error) {
-      console.error('Approval error:', error);
-    }
-    setProcessing(false);
-  };
 
   const handleExport = (format) => {
     console.log('Export to:', format);
@@ -135,6 +89,23 @@ export default function BorderoManagement() {
     if (filters.contract !== 'all' && d.contract_id !== filters.contract) return false;
     if (filters.batch && !d.batch_id?.includes(filters.batch)) return false;
     if (filters.submitStatus !== 'all' && d.submit_status !== filters.submitStatus) return false;
+    if (filters.reconStatus !== 'all' && d.recon_status !== filters.reconStatus) return false;
+    if (filters.startDate && d.created_date < filters.startDate) return false;
+    if (filters.endDate && d.created_date > filters.endDate) return false;
+    return true;
+  });
+
+  const filteredClaims = claims.filter(c => {
+    if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
+    if (filters.startDate && c.created_date < filters.startDate) return false;
+    if (filters.endDate && c.created_date > filters.endDate) return false;
+    return true;
+  });
+
+  const filteredSubrogations = subrogations.filter(s => {
+    if (filters.subrogationStatus !== 'all' && s.status !== filters.subrogationStatus) return false;
+    if (filters.startDate && s.created_date < filters.startDate) return false;
+    if (filters.endDate && s.created_date > filters.endDate) return false;
     return true;
   });
 
@@ -157,37 +128,10 @@ export default function BorderoManagement() {
     {
       header: 'Actions',
       cell: (row) => (
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setSelectedDebtor(row)}>
-            <Eye className="w-4 h-4" />
-          </Button>
-          {isTugure && row.submit_status === 'SUBMITTED' && (
-            <>
-              <Button 
-                size="sm" 
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => {
-                  setSelectedDebtor(row);
-                  setApprovalAction('approve');
-                  setShowApprovalDialog(true);
-                }}
-              >
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button 
-                size="sm" 
-                variant="destructive"
-                onClick={() => {
-                  setSelectedDebtor(row);
-                  setApprovalAction('reject');
-                  setShowApprovalDialog(true);
-                }}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </>
-          )}
-        </div>
+        <Button variant="outline" size="sm">
+          <Eye className="w-4 h-4 mr-1" />
+          View
+        </Button>
       )
     }
   ];
@@ -202,22 +146,10 @@ export default function BorderoManagement() {
     {
       header: 'Actions',
       cell: (row) => (
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Eye className="w-4 h-4 mr-1" />
-            View
-          </Button>
-          {isTugure && row.status === 'GENERATED' && (
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-              Review
-            </Button>
-          )}
-          {isTugure && row.status === 'UNDER_REVIEW' && (
-            <Button size="sm" className="bg-green-600 hover:bg-green-700">
-              Finalize
-            </Button>
-          )}
-        </div>
+        <Button variant="outline" size="sm">
+          <Eye className="w-4 h-4 mr-1" />
+          View
+        </Button>
       )
     }
   ];
@@ -226,25 +158,24 @@ export default function BorderoManagement() {
     <div className="space-y-6">
       <PageHeader
         title="Bordero Management"
-        subtitle="Manage debtors, exposure and bordero data"
+        subtitle="View debtors, exposure, bordero, claims, and process status"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Bordero Management' }
         ]}
         actions={
-          <Button variant="outline" onClick={loadData}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={loadData}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+            <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleExport('excel')}>
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+          </div>
         }
       />
-
-      {successMessage && (
-        <Alert className="bg-green-50 border-green-200">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
-        </Alert>
-      )}
 
       <FilterPanel
         filters={filters}
@@ -255,7 +186,7 @@ export default function BorderoManagement() {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="debtors">
             <FileText className="w-4 h-4 mr-2" />
             Debtors ({filteredDebtors.length})
@@ -267,6 +198,14 @@ export default function BorderoManagement() {
           <TabsTrigger value="borderos">
             <FileText className="w-4 h-4 mr-2" />
             Borderos ({borderos.length})
+          </TabsTrigger>
+          <TabsTrigger value="claims">
+            <FileText className="w-4 h-4 mr-2" />
+            Claims ({filteredClaims.length})
+          </TabsTrigger>
+          <TabsTrigger value="subrogation">
+            <FileText className="w-4 h-4 mr-2" />
+            Subrogation ({filteredSubrogations.length})
           </TabsTrigger>
         </TabsList>
 
@@ -303,66 +242,41 @@ export default function BorderoManagement() {
             emptyMessage="No borderos generated yet"
           />
         </TabsContent>
-      </Tabs>
 
-      {/* Approval Dialog */}
-      <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {approvalAction === 'approve' ? 'Approve Debtor' : 'Reject Debtor'}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedDebtor?.nama_peserta}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Plafon:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedDebtor?.plafon || 0).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Net Premi:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedDebtor?.net_premi || 0).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Remarks *</label>
-              <Textarea
-                value={approvalRemarks}
-                onChange={(e) => setApprovalRemarks(e.target.value)}
-                placeholder="Enter approval/rejection reason..."
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleApprovalAction}
-              disabled={processing || !approvalRemarks}
-              className={approvalAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  {approvalAction === 'approve' ? <Check className="w-4 h-4 mr-2" /> : <X className="w-4 h-4 mr-2" />}
-                  {approvalAction === 'approve' ? 'Approve' : 'Reject'}
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <TabsContent value="claims" className="mt-4">
+          <DataTable
+            columns={[
+              { header: 'Claim No', accessorKey: 'claim_no' },
+              { header: 'Debtor', cell: (row) => row.nama_tertanggung },
+              { header: 'Policy No', accessorKey: 'policy_no' },
+              { header: 'DOL', accessorKey: 'dol' },
+              { header: 'Claim Amount', cell: (row) => `IDR ${(row.nilai_klaim || 0).toLocaleString()}` },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> },
+              { header: 'Actions', cell: () => <Button variant="outline" size="sm"><Eye className="w-4 h-4" /></Button> }
+            ]}
+            data={filteredClaims}
+            isLoading={loading}
+            emptyMessage="No claims found"
+          />
+        </TabsContent>
+
+        <TabsContent value="subrogation" className="mt-4">
+          <DataTable
+            columns={[
+              { header: 'Subrogation ID', accessorKey: 'subrogation_id' },
+              { header: 'Claim ID', accessorKey: 'claim_id' },
+              { header: 'Debtor ID', accessorKey: 'debtor_id' },
+              { header: 'Recovery Amount', cell: (row) => `IDR ${(row.recovery_amount || 0).toLocaleString()}` },
+              { header: 'Recovery Date', accessorKey: 'recovery_date' },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              { header: 'Actions', cell: () => <Button variant="outline" size="sm"><Eye className="w-4 h-4" /></Button> }
+            ]}
+            data={filteredSubrogations}
+            isLoading={loading}
+            emptyMessage="No subrogation records found"
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

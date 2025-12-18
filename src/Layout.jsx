@@ -57,7 +57,7 @@ function LayoutContent({ children, currentPageName }) {
       { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit', roles: ['ADMIN', 'BRINS'] }
     ],
     tugure: [
-      { name: 'Debtor Review', icon: FileCheck, path: 'BorderoManagement', roles: ['ADMIN', 'TUGURE'] },
+      { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview', roles: ['ADMIN', 'TUGURE'] },
       { name: 'Reconciliation', icon: Scale, path: 'Reconciliation', roles: ['ADMIN', 'TUGURE'] },
       { name: 'Claim Review', icon: FileText, path: 'ClaimReview', roles: ['ADMIN', 'TUGURE'] }
     ],

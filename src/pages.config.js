@@ -12,6 +12,7 @@ import Profile from './pages/Profile';
 import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
+import DebtorReview from './pages/DebtorReview';
 import __Layout from './Layout.jsx';
 
 
@@ -30,6 +31,7 @@ export const PAGES = {
     "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
+    "DebtorReview": DebtorReview,
 }
 
 export const pagesConfig = {
