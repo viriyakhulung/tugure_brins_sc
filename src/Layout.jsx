@@ -250,6 +250,3 @@ export default function Layout({ children, currentPageName }) {
     </div>
   );
 }
-
-// Wrap pages with auth check
-LayoutContent.requireAuth = true;
