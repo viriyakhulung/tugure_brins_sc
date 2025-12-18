@@ -29,8 +29,18 @@ export default function NotificationCenter() {
   });
 
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const currentUser = await base44.auth.me();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
