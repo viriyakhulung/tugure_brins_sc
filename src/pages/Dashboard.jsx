@@ -177,26 +177,26 @@ export default function Dashboard() {
               ))}
             </SelectContent>
           </Select>
-          <ExportButton 
-            data={getFilteredData()} 
-            filename="dashboard-export" 
-            format="excel"
+          <Button 
             variant="outline"
             className="bg-green-600 hover:bg-green-700 text-white"
+            onClick={() => {
+              const data = getFilteredData();
+              const csv = [
+                ['Debtor', 'Batch', 'Plafon', 'Submit Status'].join(','),
+                ...data.map(d => [d.nama_peserta, d.batch_id, d.plafon, d.submit_status].join(','))
+              ].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'dashboard-export.csv';
+              a.click();
+            }}
           >
             <Download className="w-4 h-4 mr-2" />
-            Export Excel
-          </ExportButton>
-          <ExportButton 
-            data={getFilteredData()} 
-            filename="dashboard-export" 
-            format="pdf"
-            variant="outline"
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export PDF
-          </ExportButton>
+            Export
+          </Button>
         </div>
       </div>
 

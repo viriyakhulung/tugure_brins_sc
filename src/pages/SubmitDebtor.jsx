@@ -282,52 +282,6 @@ export default function SubmitDebtor() {
         </Alert>
       )}
 
-      {/* Contract Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contract Selection</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label>Reinsurance Contract</Label>
-              <Select value={selectedContract} onValueChange={setSelectedContract}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select contract" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contracts.map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.contract_number} - {c.contract_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Credit Type</Label>
-              <Select value={creditType} onValueChange={setCreditType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Individual">Individual</SelectItem>
-                  <SelectItem value="Corporate">Corporate</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Coverage Start</Label>
-              <Input type="date" value={coverageStart} onChange={(e) => setCoverageStart(e.target.value)} />
-            </div>
-            <div>
-              <Label>Coverage End</Label>
-              <Input type="date" value={coverageEnd} onChange={(e) => setCoverageEnd(e.target.value)} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Debtor Input */}
       <Tabs defaultValue="upload" className="space-y-4">
         <TabsList>

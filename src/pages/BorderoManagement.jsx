@@ -175,7 +175,34 @@ export default function BorderoManagement() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleExport('excel')}>
+            <Button 
+              variant="outline" 
+              className="bg-green-600 hover:bg-green-700 text-white" 
+              onClick={() => {
+                let data = [];
+                let headers = [];
+                if (activeTab === 'debtors') {
+                  headers = ['Debtor', 'Batch', 'Plafon', 'Net Premi', 'Submit Status', 'Exposure Status'];
+                  data = filteredDebtors.map(d => [d.nama_peserta, d.batch_id, d.plafon, d.net_premi, d.submit_status, d.exposure_status]);
+                } else if (activeTab === 'borderos') {
+                  headers = ['Bordero ID', 'Period', 'Total Debtors', 'Total Exposure', 'Total Premium', 'Status'];
+                  data = borderos.map(b => [b.bordero_id, b.period, b.total_debtors, b.total_exposure, b.total_premium, b.status]);
+                } else if (activeTab === 'claims') {
+                  headers = ['Claim No', 'Debtor', 'DOL', 'Claim Amount', 'Status'];
+                  data = filteredClaims.map(c => [c.claim_no, c.nama_tertanggung, c.dol, c.nilai_klaim, c.claim_status]);
+                } else if (activeTab === 'subrogation') {
+                  headers = ['Subrogation ID', 'Claim ID', 'Recovery Amount', 'Recovery Date', 'Status'];
+                  data = filteredSubrogations.map(s => [s.subrogation_id, s.claim_id, s.recovery_amount, s.recovery_date, s.status]);
+                }
+                const csv = [headers.join(','), ...data.map(row => row.join(','))].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `bordero-${activeTab}.csv`;
+                a.click();
+              }}
+            >
               <Download className="w-4 h-4 mr-2" />
               Export
             </Button>

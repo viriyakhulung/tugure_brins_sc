@@ -194,15 +194,27 @@ export default function PaymentStatus() {
                 </SelectContent>
               </Select>
             </div>
-            <ExportButton 
-              data={filteredInvoices} 
-              filename="payment-status"
-              format="excel"
+            <Button 
               variant="outline"
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                const csv = [
+                  ['Invoice Number', 'Period', 'Amount', 'Paid', 'Outstanding', 'Status'].join(','),
+                  ...filteredInvoices.map(i => [
+                    i.invoice_number, i.period, i.total_amount, i.paid_amount, i.outstanding_amount, i.status
+                  ].join(','))
+                ].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'payment-status.csv';
+                a.click();
+              }}
             >
               <Download className="w-4 h-4 mr-2" />
-              Export to Excel
-            </ExportButton>
+              Export
+            </Button>
           </div>
         </CardContent>
       </Card>

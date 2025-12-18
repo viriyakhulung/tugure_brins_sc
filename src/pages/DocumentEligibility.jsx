@@ -324,7 +324,24 @@ export default function DocumentEligibility() {
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Refresh
               </Button>
-              <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white">
+              <Button 
+                variant="outline" 
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => {
+                  const csv = [
+                    ['Debtor', 'Batch', 'Submit Status', 'Admin Status', 'Completeness'].join(','),
+                    ...filteredDebtors.map(d => [
+                      d.nama_peserta, d.batch_id, d.submit_status, d.admin_status, `${calculateCompleteness(d.id)}%`
+                    ].join(','))
+                  ].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'document-eligibility.csv';
+                  a.click();
+                }}
+              >
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>

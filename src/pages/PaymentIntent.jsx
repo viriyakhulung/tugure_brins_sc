@@ -201,15 +201,26 @@ export default function PaymentIntent() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <ExportButton 
-              data={selectedDebtors.length > 0 ? approvedDebtors.filter(d => selectedDebtors.includes(d.id)) : approvedDebtors} 
-              filename="payment-intent-debtors"
-              format="excel"
+            <Button 
               variant="outline"
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                const data = selectedDebtors.length > 0 ? approvedDebtors.filter(d => selectedDebtors.includes(d.id)) : approvedDebtors;
+                const csv = [
+                  ['Debtor', 'Batch', 'Plafon', 'Net Premi', 'Submit Status'].join(','),
+                  ...data.map(d => [d.nama_peserta, d.batch_id, d.plafon, d.net_premi, d.submit_status].join(','))
+                ].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'payment-intent.csv';
+                a.click();
+              }}
             >
               <Download className="w-4 h-4 mr-2" />
-              {selectedDebtors.length > 0 ? `Export Selected (${selectedDebtors.length})` : 'Export All'}
-            </ExportButton>
+              Export
+            </Button>
           </div>
         }
       />

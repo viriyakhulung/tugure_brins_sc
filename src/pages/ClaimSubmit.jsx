@@ -197,6 +197,17 @@ export default function ClaimSubmit() {
 
   const approvedDebtors = debtors.filter(d => d.submit_status === 'APPROVED');
 
+  const [selectedClaimForDocs, setSelectedClaimForDocs] = useState(null);
+  const [showDocUploadDialog, setShowDocUploadDialog] = useState(false);
+
+  const REQUIRED_CLAIM_DOCS = [
+    'Claim Advice',
+    'Default Letter',
+    'Outstanding Statement',
+    'Collection Evidence',
+    'Other Supporting Documents'
+  ];
+
   const claimColumns = [
     { header: 'Claim ID', accessorKey: 'claim_id' },
     {
@@ -217,12 +228,16 @@ export default function ClaimSubmit() {
       header: 'Actions',
       cell: (row) => (
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Eye className="w-4 h-4 mr-1" />
-            View
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => alert('Export Excel')}>
-            <Download className="w-4 h-4" />
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              setSelectedClaimForDocs(row);
+              setShowDocUploadDialog(true);
+            }}
+          >
+            <Upload className="w-4 h-4 mr-1" />
+            Docs
           </Button>
         </div>
       )
@@ -274,10 +289,28 @@ export default function ClaimSubmit() {
             </Button>
             <Button 
               className="bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => setShowCreateDialog(true)}
+              onClick={() => {
+                const filteredData = claims.filter(c => {
+                  if (filters.contract !== 'all' && c.contract_id !== filters.contract) return false;
+                  if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
+                  return true;
+                });
+                const csv = [
+                  ['Claim ID', 'Debtor', 'DOL', 'Claim Amount', 'Share Tugure', 'Status'].join(','),
+                  ...filteredData.map(c => [
+                    c.claim_id, c.nama_tertanggung, c.dol, c.nilai_klaim, c.share_tugure, c.claim_status
+                  ].join(','))
+                ].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'claims-export.csv';
+                a.click();
+              }}
             >
-              <Plus className="w-4 h-4 mr-2" />
-              New Claim
+              <Download className="w-4 h-4 mr-2" />
+              Export
             </Button>
           </div>
         }
@@ -349,6 +382,31 @@ export default function ClaimSubmit() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Document Upload Dialog */}
+      <Dialog open={showDocUploadDialog} onOpenChange={setShowDocUploadDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Upload Claim Documents</DialogTitle>
+            <DialogDescription>
+              Upload required documents for claim: {selectedClaimForDocs?.claim_id || 'N/A'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {REQUIRED_CLAIM_DOCS.map(docType => (
+              <ClaimDocumentUploadRow key={docType} docType={docType} />
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowDocUploadDialog(false);
+              setSelectedClaimForDocs(null);
+            }}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Claim Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
