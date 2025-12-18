@@ -1,46 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/components/auth/AuthContext';
 import { createPageUrl } from '@/utils';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Shield, AlertCircle, Eye, EyeOff } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Shield, ArrowRight } from "lucide-react";
+import { base44 } from '@/api/base44Client';
 
 export default function Home() {
-  const { user, login, loading } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!loading && user) {
-      window.location.href = createPageUrl('Dashboard');
-    }
-  }, [user, loading]);
+    checkAuth();
+  }, []);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    const result = await login(email, password);
-    
-    if (result.success) {
-      window.location.href = createPageUrl('Dashboard');
-    } else {
-      setError(result.error || 'Invalid email or password');
-      setIsLoading(false);
+  const checkAuth = async () => {
+    try {
+      const user = await base44.auth.me();
+      if (user) {
+        // Already logged in, redirect to Dashboard
+        window.location.href = createPageUrl('Dashboard');
+      } else {
+        setLoading(false);
+      }
+    } catch (error) {
+      // Not logged in
+      setLoading(false);
     }
   };
 
-  const sampleUsers = [
-    { email: 'admin@sample.com', password: 'admin', role: 'Administrator' },
-    { email: 'brins@sample.com', password: 'brins', role: 'BRINS User' },
-    { email: 'tugure@sample.com', password: 'tugure', role: 'Tugure User' }
-  ];
+  const handleLogin = () => {
+    // Redirect to Base44 login
+    base44.auth.redirectToLogin(createPageUrl('Dashboard'));
+  };
 
   if (loading) {
     return (
@@ -51,10 +41,6 @@ export default function Home() {
         </div>
       </div>
     );
-  }
-
-  if (user) {
-    return null; // Will redirect
   }
 
   return (
@@ -80,97 +66,35 @@ export default function Home() {
           </div>
         </CardHeader>
 
-        <form onSubmit={handleLogin}>
-          <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+        <CardContent className="space-y-6">
+          <div className="text-center space-y-3">
+            <p className="text-gray-600">
+              Welcome to the Credit Reinsurance Platform prototype.
+            </p>
+            <p className="text-sm text-gray-500">
+              This is a comprehensive system for managing reinsurance processes between BRINS and TUGURE.
+            </p>
+          </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Email</label>
-              <Input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-11"
-              />
-            </div>
+          <Button 
+            onClick={handleLogin}
+            className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg"
+          >
+            <span className="mr-2">Sign In to Continue</span>
+            <ArrowRight className="w-5 h-5" />
+          </Button>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Password</label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-11 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            <Button 
-              type="submit" 
-              className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign In'
-              )}
-            </Button>
-
-            {/* Sample Users */}
-            <div className="mt-6 pt-6 border-t">
-              <p className="text-sm font-medium text-gray-700 mb-3 text-center">Demo Users</p>
-              <div className="space-y-2">
-                {sampleUsers.map((user, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => {
-                      setEmail(user.email);
-                      setPassword(user.password);
-                    }}
-                    className="w-full text-left px-4 py-2.5 rounded-lg border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{user.role}</p>
-                        <p className="text-xs text-gray-500">{user.email}</p>
-                      </div>
-                      <div className="text-xs px-2 py-1 rounded bg-slate-100 group-hover:bg-blue-100 text-slate-600 group-hover:text-blue-600 font-mono">
-                        {user.password}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </form>
-
-        <CardFooter className="flex flex-col space-y-2 text-center text-xs text-gray-500">
-          <p>© 2025 Credit Reinsurance Platform</p>
-          <p>BRINS & TUGURE - Secure Insurance System</p>
-        </CardFooter>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800 font-medium mb-2">Key Features:</p>
+            <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+              <li>Debtor submission and review workflow</li>
+              <li>Document eligibility management</li>
+              <li>Payment intent and reconciliation</li>
+              <li>Claims submission and review</li>
+              <li>Bordero and subrogation tracking</li>
+            </ul>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

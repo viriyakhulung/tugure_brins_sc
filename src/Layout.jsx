@@ -9,38 +9,48 @@ import {
   DollarSign, CreditCard, Scale, Bell, User, Settings, 
   LogOut, Menu, X, ChevronRight, Shield, Activity
 } from "lucide-react";
-import { AuthProvider, useAuth } from "@/components/auth/AuthContext";
-
 export default function Layout({ children, currentPageName }) {
-  return (
-    <AuthProvider>
-      <LayoutContent currentPageName={currentPageName}>
-        {children}
-      </LayoutContent>
-    </AuthProvider>
-  );
-}
-
-function LayoutContent({ children, currentPageName }) {
-  const { user, logout, hasAccess, loading } = useAuth();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
-  // Redirect to Home if not authenticated (except for Home page)
   useEffect(() => {
-    if (!loading && !user && currentPageName !== 'Home') {
-      window.location.href = '/';
-    }
-  }, [user, loading, currentPageName]);
+    checkAuth();
+  }, []);
 
-  useEffect(() => {
-    if (user) {
+  const checkAuth = async () => {
+    try {
+      const { base44 } = await import('@/api/base44Client');
+      const currentUser = await base44.auth.me();
+      setUser(currentUser);
       loadNotificationCount();
+    } catch (error) {
+      // User not logged in, redirect to Home
+      if (currentPageName !== 'Home') {
+        window.location.href = createPageUrl('Home');
+      }
     }
-  }, [user]);
+    setLoading(false);
+  };
+
+  const logout = async () => {
+    try {
+      const { base44 } = await import('@/api/base44Client');
+      await base44.auth.logout();
+      window.location.href = createPageUrl('Home');
+    } catch (error) {
+      window.location.href = createPageUrl('Home');
+    }
+  };
+
+  const hasAccess = (allowedRoles) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    return allowedRoles.includes(user.role?.toUpperCase());
+  };
 
   const loadNotificationCount = async () => {
-    if (!user) return;
     try {
       const { base44 } = await import('@/api/base44Client');
       const notifs = await base44.entities.Notification.list();
@@ -51,40 +61,45 @@ function LayoutContent({ children, currentPageName }) {
     }
   };
 
-  // Menu structure based on roles
+  // Show loading
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Menu structure - all users can access all features in prototype mode
   const menuItems = {
     common: [
-      { name: 'Dashboard', icon: LayoutDashboard, path: 'Dashboard', roles: ['ADMIN', 'BRINS', 'TUGURE'] }
+      { name: 'Dashboard', icon: LayoutDashboard, path: 'Dashboard' }
     ],
-    brins: [
-      { name: 'Submit Debtor', icon: Upload, path: 'SubmitDebtor', roles: ['ADMIN', 'BRINS'] },
-      { name: 'Document Eligibility', icon: FileCheck, path: 'DocumentEligibility', roles: ['ADMIN', 'BRINS'] },
-      { name: 'Payment Intent', icon: DollarSign, path: 'PaymentIntent', roles: ['ADMIN', 'BRINS'] },
-      { name: 'Payment Status', icon: CreditCard, path: 'PaymentStatus', roles: ['ADMIN', 'BRINS'] },
-      { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit', roles: ['ADMIN', 'BRINS'] }
-    ],
-    tugure: [
-      { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview', roles: ['ADMIN', 'TUGURE'] },
-      { name: 'Reconciliation', icon: Scale, path: 'Reconciliation', roles: ['ADMIN', 'TUGURE'] },
-      { name: 'Claim Review', icon: FileText, path: 'ClaimReview', roles: ['ADMIN', 'TUGURE'] }
+    operations: [
+      { name: 'Submit Debtor', icon: Upload, path: 'SubmitDebtor' },
+      { name: 'Document Eligibility', icon: FileCheck, path: 'DocumentEligibility' },
+      { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview' },
+      { name: 'Payment Intent', icon: DollarSign, path: 'PaymentIntent' },
+      { name: 'Payment Status', icon: CreditCard, path: 'PaymentStatus' },
+      { name: 'Reconciliation', icon: Scale, path: 'Reconciliation' },
+      { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit' },
+      { name: 'Claim Review', icon: FileText, path: 'ClaimReview' }
     ],
     shared: [
-      { name: 'Bordero Management', icon: BarChart3, path: 'BorderoManagement', roles: ['ADMIN', 'BRINS', 'TUGURE'] },
-      { name: 'Notifications', icon: Bell, path: 'NotificationCenter', roles: ['ADMIN', 'BRINS', 'TUGURE'], badge: unreadNotifications },
-      { name: 'Audit Log', icon: Activity, path: 'AuditLog', roles: ['ADMIN', 'BRINS', 'TUGURE'] },
-      { name: 'System Config', icon: Settings, path: 'SystemConfiguration', roles: ['ADMIN', 'TUGURE'] },
-      { name: 'Profile', icon: User, path: 'Profile', roles: ['ADMIN', 'BRINS', 'TUGURE'] }
+      { name: 'Bordero Management', icon: BarChart3, path: 'BorderoManagement' },
+      { name: 'Notifications', icon: Bell, path: 'NotificationCenter', badge: unreadNotifications },
+      { name: 'Audit Log', icon: Activity, path: 'AuditLog' },
+      { name: 'System Config', icon: Settings, path: 'SystemConfiguration' },
+      { name: 'Profile', icon: User, path: 'Profile' }
     ]
   };
 
-  // Don't render layout for Home page
-  if (currentPageName === 'Home' || !user) {
+  // Don't render layout for Home page (show custom login)
+  if (currentPageName === 'Home') {
     return <>{children}</>;
   }
 
   const renderMenuItem = (item) => {
-    if (!hasAccess(item.roles)) return null;
-
     const isActive = currentPageName === item.path;
     const Icon = item.icon;
 
@@ -152,8 +167,8 @@ function LayoutContent({ children, currentPageName }) {
             <Link to={createPageUrl('Profile')}>
               <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity">
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
-                  <p className="text-xs text-gray-500">{user?.role}</p>
+                  <p className="text-sm font-medium text-gray-900">{user?.full_name || user?.email}</p>
+                  <p className="text-xs text-gray-500">{user?.role?.toUpperCase() || 'USER'}</p>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
                   <User className="w-5 h-5 text-white" />
@@ -182,35 +197,16 @@ function LayoutContent({ children, currentPageName }) {
               </nav>
             </div>
 
-            {/* BRINS Section */}
-            {hasAccess(['BRINS']) && (
-              <>
-                <Separator />
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">
-                    BRINS Operations
-                  </p>
-                  <nav className="space-y-1">
-                    {menuItems.brins.map(renderMenuItem)}
-                  </nav>
-                </div>
-              </>
-            )}
-
-            {/* TUGURE Section */}
-            {hasAccess(['TUGURE']) && (
-              <>
-                <Separator />
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">
-                    TUGURE Operations
-                  </p>
-                  <nav className="space-y-1">
-                    {menuItems.tugure.map(renderMenuItem)}
-                  </nav>
-                </div>
-              </>
-            )}
+            {/* Operations */}
+            <Separator />
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">
+                Operations
+              </p>
+              <nav className="space-y-1">
+                {menuItems.operations.map(renderMenuItem)}
+              </nav>
+            </div>
 
             {/* Shared */}
             <Separator />
