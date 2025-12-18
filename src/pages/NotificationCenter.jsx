@@ -8,7 +8,6 @@ import {
   RefreshCw, Check, Trash2, Eye, Download, Filter
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
-import { useAuth } from "@/components/auth/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
@@ -17,7 +16,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
 export default function NotificationCenter() {
-  const { user } = useAuth();
+  const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
