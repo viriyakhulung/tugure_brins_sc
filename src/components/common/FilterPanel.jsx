@@ -6,7 +6,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Calendar as CalendarIcon, Filter, X, Download, FileSpreadsheet, FileText } from "lucide-react";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 export default function FilterPanel({ 
@@ -108,7 +107,7 @@ export default function FilterPanel({
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {filters.startDate ? format(new Date(filters.startDate), 'PP') : 'Select'}
+                {filters.startDate ? new Date(filters.startDate).toLocaleDateString() : 'Select'}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
@@ -133,7 +132,7 @@ export default function FilterPanel({
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {filters.endDate ? format(new Date(filters.endDate), 'PP') : 'Select'}
+                {filters.endDate ? new Date(filters.endDate).toLocaleDateString() : 'Select'}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
