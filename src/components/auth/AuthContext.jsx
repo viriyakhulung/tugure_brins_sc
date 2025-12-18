@@ -41,6 +41,7 @@ export function AuthProvider({ children }) {
   const logout = () => {
     setUser(null);
     localStorage.removeItem('crp_user');
+    window.location.href = '/';
   };
 
   const hasAccess = (allowedRoles) => {

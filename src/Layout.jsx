@@ -155,7 +155,7 @@ function LayoutContent({ children, currentPageName }) {
         <aside className={`
           fixed lg:sticky top-[73px] left-0 h-[calc(100vh-73px)] bg-white border-r shadow-lg
           transition-all duration-300 z-30 overflow-y-auto
-          ${sidebarOpen ? 'w-64' : 'w-0 lg:w-0'}
+          ${sidebarOpen ? 'w-64 lg:w-64' : 'w-0 lg:w-64'}
         `}>
           <div className="p-4 space-y-6">
             {/* Common */}
@@ -223,7 +223,7 @@ function LayoutContent({ children, currentPageName }) {
         </aside>
 
         {/* Main Content */}
-        <main className={`flex-1 p-6 transition-all duration-300 ${sidebarOpen ? 'lg:ml-0' : ''}`}>
+        <main className="flex-1 p-6 transition-all duration-300">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>

@@ -1,34 +1,34 @@
-import Dashboard from './pages/Dashboard';
-import SubmitDebtor from './pages/SubmitDebtor';
-import DocumentEligibility from './pages/DocumentEligibility';
-import BorderoManagement from './pages/BorderoManagement';
-import PaymentIntent from './pages/PaymentIntent';
-import Reconciliation from './pages/Reconciliation';
-import ClaimSubmit from './pages/ClaimSubmit';
-import ClaimReview from './pages/ClaimReview';
-import NotificationCenter from './pages/NotificationCenter';
-import Profile from './pages/Profile';
 import AuditLog from './pages/AuditLog';
-import SystemConfiguration from './pages/SystemConfiguration';
+import BorderoManagement from './pages/BorderoManagement';
+import ClaimReview from './pages/ClaimReview';
+import ClaimSubmit from './pages/ClaimSubmit';
+import Dashboard from './pages/Dashboard';
+import DocumentEligibility from './pages/DocumentEligibility';
+import NotificationCenter from './pages/NotificationCenter';
+import PaymentIntent from './pages/PaymentIntent';
 import PaymentStatus from './pages/PaymentStatus';
+import Profile from './pages/Profile';
+import Reconciliation from './pages/Reconciliation';
+import SubmitDebtor from './pages/SubmitDebtor';
+import SystemConfiguration from './pages/SystemConfiguration';
 import Home from './pages/Home';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Dashboard": Dashboard,
-    "SubmitDebtor": SubmitDebtor,
-    "DocumentEligibility": DocumentEligibility,
-    "BorderoManagement": BorderoManagement,
-    "PaymentIntent": PaymentIntent,
-    "Reconciliation": Reconciliation,
-    "ClaimSubmit": ClaimSubmit,
-    "ClaimReview": ClaimReview,
-    "NotificationCenter": NotificationCenter,
-    "Profile": Profile,
     "AuditLog": AuditLog,
-    "SystemConfiguration": SystemConfiguration,
+    "BorderoManagement": BorderoManagement,
+    "ClaimReview": ClaimReview,
+    "ClaimSubmit": ClaimSubmit,
+    "Dashboard": Dashboard,
+    "DocumentEligibility": DocumentEligibility,
+    "NotificationCenter": NotificationCenter,
+    "PaymentIntent": PaymentIntent,
     "PaymentStatus": PaymentStatus,
+    "Profile": Profile,
+    "Reconciliation": Reconciliation,
+    "SubmitDebtor": SubmitDebtor,
+    "SystemConfiguration": SystemConfiguration,
     "Home": Home,
 }
 
