@@ -11,7 +11,6 @@ import {
   RefreshCw, Check, X, Loader2, FileText, Link, Split, Download
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
-import { useAuth } from "@/components/auth/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
@@ -20,7 +19,7 @@ import StatCard from "@/components/dashboard/StatCard";
 import ExportButton from "@/components/common/ExportButton";
 
 export default function Reconciliation() {
-  const { user, hasAccess } = useAuth();
+  const [user, setUser] = useState(null);
   const [payments, setPayments] = useState([]);
   const [reconciliations, setReconciliations] = useState([]);
   const [paymentIntents, setPaymentIntents] = useState([]);
@@ -40,11 +39,23 @@ export default function Reconciliation() {
     reconStatus: 'all'
   });
 
-  const isTugure = hasAccess(['TUGURE']);
+  const isTugure = user?.role === 'TUGURE' || user?.role === 'admin';
 
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        setUser(JSON.parse(demoUserStr));
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
