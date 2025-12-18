@@ -5,13 +5,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   CreditCard, DollarSign, CheckCircle2, AlertTriangle, 
-  Clock, RefreshCw, Eye, TrendingDown, Download
+  Clock, RefreshCw, Eye, TrendingDown, Download, FileText
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
+import ExportButton from "@/components/common/ExportButton";
 
 export default function PaymentStatus() {
   const [invoices, setInvoices] = useState([]);
@@ -193,10 +194,15 @@ export default function PaymentStatus() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline">
+            <ExportButton 
+              data={filteredInvoices} 
+              filename="payment-status"
+              format="excel"
+              variant="outline"
+            >
               <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+              Export to Excel
+            </ExportButton>
           </div>
         </CardContent>
       </Card>

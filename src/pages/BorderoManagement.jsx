@@ -146,6 +146,14 @@ export default function BorderoManagement() {
     {
       header: 'Actions',
       cell: (row) => (
+        <Button variant="outline" size="sm" onClick={() => openDetailDialog(row)}>
+          <Eye className="w-4 h-4" />
+        </Button>
+      )
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
         <Button variant="outline" size="sm">
           <Eye className="w-4 h-4 mr-1" />
           View
@@ -277,6 +285,49 @@ export default function BorderoManagement() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Detail Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {activeTab === 'debtors' && 'Debtor Detail'}
+              {activeTab === 'borderos' && 'Bordero Detail'}
+              {activeTab === 'claims' && 'Claim Detail'}
+              {activeTab === 'subrogations' && 'Subrogation Detail'}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedItem && (
+            <div className="space-y-4">
+              {activeTab === 'debtors' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div><Label className="text-gray-500">Nama Peserta</Label><p className="font-medium">{selectedItem.nama_peserta}</p></div>
+                  <div><Label className="text-gray-500">Batch ID</Label><p className="font-medium">{selectedItem.batch_id}</p></div>
+                  <div><Label className="text-gray-500">Plafon</Label><p className="font-medium">IDR {(selectedItem.plafon || 0).toLocaleString()}</p></div>
+                  <div><Label className="text-gray-500">Outstanding</Label><p className="font-medium">IDR {(selectedItem.outstanding || 0).toLocaleString()}</p></div>
+                  <div><Label className="text-gray-500">Net Premi</Label><p className="font-medium">IDR {(selectedItem.net_premi || 0).toLocaleString()}</p></div>
+                  <div><Label className="text-gray-500">Exposure Amount</Label><p className="font-medium">IDR {(selectedItem.exposure_amount || 0).toLocaleString()}</p></div>
+                  <div><Label className="text-gray-500">Submit Status</Label><StatusBadge status={selectedItem.submit_status} /></div>
+                  <div><Label className="text-gray-500">Exposure Status</Label><StatusBadge status={selectedItem.exposure_status} /></div>
+                </div>
+              )}
+              {activeTab === 'borderos' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div><Label className="text-gray-500">Bordero ID</Label><p className="font-medium">{selectedItem.bordero_id}</p></div>
+                  <div><Label className="text-gray-500">Period</Label><p className="font-medium">{selectedItem.period}</p></div>
+                  <div><Label className="text-gray-500">Total Debtors</Label><p className="font-medium">{selectedItem.total_debtors}</p></div>
+                  <div><Label className="text-gray-500">Total Exposure</Label><p className="font-medium">IDR {(selectedItem.total_exposure || 0).toLocaleString()}</p></div>
+                  <div><Label className="text-gray-500">Total Premium</Label><p className="font-medium">IDR {(selectedItem.total_premium || 0).toLocaleString()}</p></div>
+                  <div><Label className="text-gray-500">Status</Label><StatusBadge status={selectedItem.status} /></div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

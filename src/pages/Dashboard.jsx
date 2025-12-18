@@ -12,6 +12,7 @@ import { PieChart as RePieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip
 import { useAuth } from "@/components/auth/AuthContext";
 import StatCard from "@/components/dashboard/StatCard";
 import StatusBadge from "@/components/ui/StatusBadge";
+import ExportButton from "@/components/common/ExportButton";
 import { base44 } from '@/api/base44Client';
 import { format } from 'date-fns';
 
@@ -21,6 +22,13 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [period, setPeriod] = useState('2025-03');
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    batch: 'all',
+    submitStatus: 'all',
+    reconStatus: 'all',
+    claimStatus: 'all',
+    subrogationStatus: 'all'
+  });
   const [stats, setStats] = useState({
     totalDebtors: 0,
     approvedDebtors: 0,
@@ -131,6 +139,14 @@ export default function Dashboard() {
     return value.toLocaleString();
   };
 
+  const getFilteredData = () => {
+    return debtors.filter(d => {
+      if (filters.batch !== 'all' && d.batch_id !== filters.batch) return false;
+      if (filters.submitStatus !== 'all' && d.submit_status !== filters.submitStatus) return false;
+      return true;
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -150,18 +166,37 @@ export default function Dashboard() {
               <SelectItem value="2025-01">January 2025</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline">
-            <Filter className="w-4 h-4 mr-2" />
-            Filters
-          </Button>
-          <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white">
+          <Select value={filters.batch} onValueChange={(v) => setFilters({...filters, batch: v})}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Batches" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Batches</SelectItem>
+              {[...new Set(debtors.map(d => d.batch_id))].filter(Boolean).map(batch => (
+                <SelectItem key={batch} value={batch}>{batch.slice(0, 20)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <ExportButton 
+            data={getFilteredData()} 
+            filename="dashboard-export" 
+            format="excel"
+            variant="outline"
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
             <Download className="w-4 h-4 mr-2" />
             Export Excel
-          </Button>
-          <Button variant="outline" className="bg-red-600 hover:bg-red-700 text-white">
+          </ExportButton>
+          <ExportButton 
+            data={getFilteredData()} 
+            filename="dashboard-export" 
+            format="pdf"
+            variant="outline"
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
             <Download className="w-4 h-4 mr-2" />
             Export PDF
-          </Button>
+          </ExportButton>
         </div>
       </div>
 

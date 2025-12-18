@@ -107,6 +107,9 @@ export default function DocumentEligibility() {
   const [uploading, setUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [batchFilter, setBatchFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [uploadDocType, setUploadDocType] = useState('');
   const [uploadFile, setUploadFile] = useState(null);

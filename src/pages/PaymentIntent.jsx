@@ -17,6 +17,7 @@ import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import ExportButton from "@/components/common/ExportButton";
 import { format } from 'date-fns';
 
 export default function PaymentIntent() {
@@ -200,12 +201,15 @@ export default function PaymentIntent() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            {selectedDebtors.length > 0 && (
-              <Button variant="outline" onClick={handleExportSelected}>
-                <Download className="w-4 h-4 mr-2" />
-                Export Selected ({selectedDebtors.length})
-              </Button>
-            )}
+            <ExportButton 
+              data={selectedDebtors.length > 0 ? approvedDebtors.filter(d => selectedDebtors.includes(d.id)) : approvedDebtors} 
+              filename="payment-intent-debtors"
+              format="excel"
+              variant="outline"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {selectedDebtors.length > 0 ? `Export Selected (${selectedDebtors.length})` : 'Export All'}
+            </ExportButton>
           </div>
         }
       />
