@@ -134,7 +134,7 @@ export default function BorderoManagement() {
     {
       header: 'Actions',
       cell: (row) => (
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={() => openDetailDialog(row)}>
           <Eye className="w-4 h-4 mr-1" />
           View
         </Button>
