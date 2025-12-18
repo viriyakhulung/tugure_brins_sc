@@ -17,6 +17,46 @@ import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 
+function ClaimDocumentUploadRow({ docType }) {
+  const [file, setFile] = useState(null);
+  const [uploaded, setUploaded] = useState(false);
+
+  return (
+    <div className="flex items-center gap-3 p-3 border rounded-lg">
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          {uploaded ? (
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+          ) : (
+            <FileText className="w-4 h-4 text-gray-400" />
+          )}
+          <span className="font-medium text-sm">{docType}</span>
+        </div>
+        {file && <p className="text-xs text-gray-500 mt-1">{file.name}</p>}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          type="file"
+          onChange={(e) => {
+            setFile(e.target.files[0]);
+            setUploaded(false);
+          }}
+          accept=".pdf,.jpg,.jpeg,.png"
+          className="w-48 text-sm"
+        />
+        <Button 
+          size="sm"
+          variant="outline"
+          disabled={!file}
+          onClick={() => setUploaded(true)}
+        >
+          {uploaded ? 'Re-upload' : 'Upload'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ClaimSubmit() {
   const [claims, setClaims] = useState([]);
   const [subrogations, setSubrogations] = useState([]);
@@ -232,6 +272,13 @@ export default function ClaimSubmit() {
               <Upload className="w-4 h-4 mr-2" />
               Upload Claims
             </Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => setShowCreateDialog(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Claim
+            </Button>
           </div>
         }
       />
@@ -279,6 +326,21 @@ export default function ClaimSubmit() {
         </TabsContent>
 
         <TabsContent value="subrogation" className="mt-4">
+          <div className="mb-4 flex justify-between items-center">
+            <p className="text-sm text-gray-600">
+              Subrogation records for settled claims
+            </p>
+            <Button 
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => {
+                // Create subrogation dialog
+                console.log('Create subrogation');
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Subrogation
+            </Button>
+          </div>
           <DataTable
             columns={subrogationColumns}
             data={subrogations}
@@ -290,11 +352,11 @@ export default function ClaimSubmit() {
 
       {/* Create Claim Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Submit New Claim</DialogTitle>
             <DialogDescription>
-              Create a claim for an approved debtor
+              Create a claim for an approved debtor and upload required documents
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -350,17 +412,16 @@ export default function ClaimSubmit() {
                 placeholder="Enter claim amount"
               />
             </div>
-            <div>
-              <Label>Upload Documents</Label>
-              <Input
-                type="file"
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => setClaimDocuments(Array.from(e.target.files))}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Claim Advice, Default Letter, Outstanding Statement, Collection Evidence
-              </p>
+            
+            <div className="border-t pt-4">
+              <Label className="text-base font-semibold mb-3 block">Upload Required Documents</Label>
+              <div className="space-y-3">
+                <ClaimDocumentUploadRow docType="Claim Advice" />
+                <ClaimDocumentUploadRow docType="Default Letter" />
+                <ClaimDocumentUploadRow docType="Outstanding Statement" />
+                <ClaimDocumentUploadRow docType="Collection Evidence" />
+                <ClaimDocumentUploadRow docType="Other Supporting Documents" />
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -383,6 +444,55 @@ export default function ClaimSubmit() {
                   Submit Claim
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Claims Dialog (Excel/CSV) */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Claims (Excel/CSV)</DialogTitle>
+            <DialogDescription>
+              Upload multiple claims from Excel or CSV file
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Upload File</Label>
+              <Input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    console.log('File selected:', file.name);
+                    // Handle file upload and processing
+                  }
+                }}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Supported formats: Excel (.xlsx, .xls) or CSV (.csv)
+              </p>
+            </div>
+            <Alert>
+              <AlertDescription>
+                Make sure your file follows the template format. Download the template if needed.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUploadDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={downloadTemplate}>
+              <Download className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              <Upload className="w-4 h-4 mr-2" />
+              Upload
             </Button>
           </DialogFooter>
         </DialogContent>

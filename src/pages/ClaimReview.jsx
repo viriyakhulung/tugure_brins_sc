@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   FileText, CheckCircle2, Eye, RefreshCw, Check, X, 
-  Loader2, AlertTriangle, MessageSquare, DollarSign
+  Loader2, AlertTriangle, MessageSquare, DollarSign, Download
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import { useAuth } from "@/components/auth/AuthContext";
@@ -35,6 +35,10 @@ export default function ClaimReview() {
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
+    startDate: '',
+    endDate: '',
+    submitStatus: 'all',
+    reconStatus: 'all',
     claimStatus: 'all',
     subrogationStatus: 'all'
   });
@@ -68,6 +72,10 @@ export default function ClaimReview() {
     setFilters({
       contract: 'all',
       batch: '',
+      startDate: '',
+      endDate: '',
+      submitStatus: 'all',
+      reconStatus: 'all',
       claimStatus: 'all',
       subrogationStatus: 'all'
     });
@@ -229,10 +237,35 @@ export default function ClaimReview() {
     {
       header: 'Actions',
       cell: (row) => (
-        <Button variant="outline" size="sm">
-          <Eye className="w-4 h-4 mr-1" />
-          Review
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm">
+            <Eye className="w-4 h-4" />
+          </Button>
+          {row.status === 'IN_PROGRESS' && (
+            <>
+              <Button 
+                size="sm" 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => {
+                  // Handle approve subrogation
+                  console.log('Approve subrogation', row);
+                }}
+              >
+                <Check className="w-4 h-4" />
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => {
+                  // Handle update status
+                  console.log('Update subrogation', row);
+                }}
+              >
+                <MessageSquare className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+        </div>
       )
     }
   ];
@@ -252,13 +285,33 @@ export default function ClaimReview() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white">
+            <Button 
+              variant="outline" 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                const exportData = claims.map(c => ({
+                  claim_id: c.claim_id,
+                  debtor: c.nama_tertanggung,
+                  dol: c.dol,
+                  claim_amount: c.nilai_klaim,
+                  share_tugure: c.share_tugure,
+                  status: c.claim_status,
+                  eligibility: c.eligibility_status
+                }));
+                const csvContent = [
+                  Object.keys(exportData[0]).join(','),
+                  ...exportData.map(row => Object.values(row).join(','))
+                ].join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `claims_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+              }}
+            >
               <Download className="w-4 h-4 mr-2" />
               Export Excel
-            </Button>
-            <Button variant="outline" className="bg-red-600 hover:bg-red-700 text-white">
-              <Download className="w-4 h-4 mr-2" />
-              Export PDF
             </Button>
           </div>
         }
@@ -304,12 +357,70 @@ export default function ClaimReview() {
         />
       </div>
 
-      <FilterPanel
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        onClear={clearFilters}
-        contracts={contracts}
-      />
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <Select value={filters.contract} onValueChange={(val) => handleFilterChange('contract', val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Polis" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Contracts</SelectItem>
+                {contracts.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              placeholder="Batch ID..."
+              value={filters.batch}
+              onChange={(e) => handleFilterChange('batch', e.target.value)}
+            />
+            <Input
+              type="date"
+              placeholder="Start Date"
+              value={filters.startDate || ''}
+              onChange={(e) => handleFilterChange('startDate', e.target.value)}
+            />
+            <Input
+              type="date"
+              placeholder="End Date"
+              value={filters.endDate || ''}
+              onChange={(e) => handleFilterChange('endDate', e.target.value)}
+            />
+            <Select value={filters.claimStatus} onValueChange={(val) => handleFilterChange('claimStatus', val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Claim Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Claim Status</SelectItem>
+                <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
+                <SelectItem value="APPROVED">Approved</SelectItem>
+                <SelectItem value="REJECTED">Rejected</SelectItem>
+                <SelectItem value="SETTLED">Settled</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.subrogationStatus} onValueChange={(val) => handleFilterChange('subrogationStatus', val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Subrogation" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Subrogation</SelectItem>
+                <SelectItem value="PENDING">Pending</SelectItem>
+                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                <SelectItem value="RECOVERED">Recovered</SelectItem>
+                <SelectItem value="CLOSED">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Clear Filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
