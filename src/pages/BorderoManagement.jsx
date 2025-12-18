@@ -10,7 +10,6 @@ import {
   Filter, RefreshCw, Check, X, AlertCircle, Loader2
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
-import { useAuth } from "@/components/auth/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
@@ -18,7 +17,6 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import { Label } from "@/components/ui/label";
 
 export default function BorderoManagement() {
-  const { user, hasAccess } = useAuth();
   const [activeTab, setActiveTab] = useState('debtors');
   const [debtors, setDebtors] = useState([]);
   const [borderos, setBorderos] = useState([]);
