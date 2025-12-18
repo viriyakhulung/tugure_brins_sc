@@ -176,10 +176,15 @@ export default function ClaimSubmit() {
     {
       header: 'Actions',
       cell: (row) => (
-        <Button variant="outline" size="sm">
-          <Eye className="w-4 h-4 mr-1" />
-          View
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm">
+            <Eye className="w-4 h-4 mr-1" />
+            View
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => alert('Export Excel')}>
+            <Download className="w-4 h-4" />
+          </Button>
+        </div>
       )
     }
   ];
@@ -220,11 +225,12 @@ export default function ClaimSubmit() {
               Template
             </Button>
             <Button 
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => setShowCreateDialog(true)}
+              variant="outline"
+              onClick={() => setShowUploadDialog(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              <Plus className="w-4 h-4 mr-2" />
-              New Claim
+              <Upload className="w-4 h-4 mr-2" />
+              Upload Claims
             </Button>
           </div>
         }

@@ -124,7 +124,7 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard Analytics</h1>
-          <p className="text-gray-500">Credit Reinsurance Overview - {user?.role || 'User'}</p>
+          <p className="text-gray-500">Credit Reinsurance Overview</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={period} onValueChange={setPeriod}>
@@ -141,9 +141,13 @@ export default function Dashboard() {
             <Filter className="w-4 h-4 mr-2" />
             Filters
           </Button>
-          <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+          <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white">
             <Download className="w-4 h-4 mr-2" />
-            Export Report
+            Export Excel
+          </Button>
+          <Button variant="outline" className="bg-red-600 hover:bg-red-700 text-white">
+            <Download className="w-4 h-4 mr-2" />
+            Export PDF
           </Button>
         </div>
       </div>
@@ -320,52 +324,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Debtor Submissions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {debtors.slice(0, 5).map((debtor, index) => (
-                <div key={debtor.id || index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900">{debtor.nama_peserta}</p>
-                    <p className="text-sm text-gray-500">Plafon: IDR {formatCurrency(debtor.plafon || 0)}</p>
-                  </div>
-                  <StatusBadge status={debtor.submit_status || 'DRAFT'} />
-                </div>
-              ))}
-              {debtors.length === 0 && (
-                <p className="text-center text-gray-500 py-8">No debtor submissions yet</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Claims</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {claims.slice(0, 5).map((claim, index) => (
-                <div key={claim.id || index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900">{claim.nama_tertanggung}</p>
-                    <p className="text-sm text-gray-500">Claim: IDR {formatCurrency(claim.nilai_klaim || 0)}</p>
-                  </div>
-                  <StatusBadge status={claim.claim_status || 'DRAFT'} />
-                </div>
-              ))}
-              {claims.length === 0 && (
-                <p className="text-center text-gray-500 py-8">No claims submitted yet</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
