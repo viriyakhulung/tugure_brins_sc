@@ -22,9 +22,16 @@ export default function Layout({ children, currentPageName }) {
 }
 
 function LayoutContent({ children, currentPageName }) {
-  const { user, logout, hasAccess } = useAuth();
+  const { user, logout, hasAccess, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  // Redirect to Home if not authenticated (except for Home page)
+  useEffect(() => {
+    if (!loading && !user && currentPageName !== 'Home') {
+      window.location.href = '/';
+    }
+  }, [user, loading, currentPageName]);
 
   useEffect(() => {
     if (user) {
@@ -69,6 +76,11 @@ function LayoutContent({ children, currentPageName }) {
       { name: 'Profile', icon: User, path: 'Profile', roles: ['ADMIN', 'BRINS', 'TUGURE'] }
     ]
   };
+
+  // Don't render layout for Home page
+  if (currentPageName === 'Home' || !user) {
+    return <>{children}</>;
+  }
 
   const renderMenuItem = (item) => {
     if (!hasAccess(item.roles)) return null;
