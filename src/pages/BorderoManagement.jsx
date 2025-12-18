@@ -15,6 +15,7 @@ import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { Label } from "@/components/ui/label";
 
 export default function BorderoManagement() {
   const { user, hasAccess } = useAuth();
@@ -25,6 +26,8 @@ export default function BorderoManagement() {
   const [claims, setClaims] = useState([]);
   const [subrogations, setSubrogations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
@@ -78,7 +81,10 @@ export default function BorderoManagement() {
     });
   };
 
-
+  const openDetailDialog = (item) => {
+    setSelectedItem(item);
+    setShowDetailDialog(true);
+  };
 
   const handleExport = (format) => {
     console.log('Export to:', format);
@@ -147,14 +153,6 @@ export default function BorderoManagement() {
       header: 'Actions',
       cell: (row) => (
         <Button variant="outline" size="sm" onClick={() => openDetailDialog(row)}>
-          <Eye className="w-4 h-4" />
-        </Button>
-      )
-    },
-    {
-      header: 'Actions',
-      cell: (row) => (
-        <Button variant="outline" size="sm">
           <Eye className="w-4 h-4 mr-1" />
           View
         </Button>
