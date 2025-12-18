@@ -247,10 +247,20 @@ export default function ClaimReview() {
           { label: 'Claim Review' }
         ]}
         actions={
-          <Button variant="outline" onClick={loadData}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={loadData}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+            <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white">
+              <Download className="w-4 h-4 mr-2" />
+              Export Excel
+            </Button>
+            <Button variant="outline" className="bg-red-600 hover:bg-red-700 text-white">
+              <Download className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
+          </div>
         }
       />
 
