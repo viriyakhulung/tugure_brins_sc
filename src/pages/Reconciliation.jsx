@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Scale, CheckCircle2, AlertTriangle, Clock, Eye, 
-  RefreshCw, Check, X, Loader2, FileText, Link, Split
+  RefreshCw, Check, X, Loader2, FileText, Link, Split, Download
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import { useAuth } from "@/components/auth/AuthContext";
@@ -244,6 +244,32 @@ export default function Reconciliation() {
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
+            </Button>
+            <Button 
+              variant="outline"
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                let data = activeTab === 'payments' ? payments : activeTab === 'reconciliations' ? reconciliations : unmatchedPayments;
+                let headers = [];
+                let rows = [];
+                if (activeTab === 'payments' || activeTab === 'exceptions') {
+                  headers = ['Payment Ref', 'Date', 'Amount', 'Match Status', 'Exception'];
+                  rows = data.map(p => [p.payment_ref, p.payment_date, p.amount, p.match_status, p.exception_type]);
+                } else {
+                  headers = ['Recon ID', 'Period', 'Total Invoiced', 'Total Paid', 'Difference', 'Status'];
+                  rows = data.map(r => [r.recon_id, r.period, r.total_invoiced, r.total_paid, r.difference, r.status]);
+                }
+                const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `reconciliation-${activeTab}.csv`;
+                a.click();
+              }}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
             </Button>
             {isTugure && (
               <Button 
