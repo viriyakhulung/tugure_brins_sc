@@ -28,8 +28,9 @@ export default function Home() {
 
   const checkAuth = async () => {
     try {
-      const user = await base44.auth.me();
-      if (user) {
+      // Check for demo user in localStorage
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
         // Already logged in, redirect to Dashboard
         window.location.href = createPageUrl('Dashboard');
       } else {
@@ -56,25 +57,12 @@ export default function Home() {
         return;
       }
 
-      // Try to find or create user in the system
-      let users = await base44.entities.User.list();
-      let user = users.find(u => u.email === email.toLowerCase());
-      
-      if (!user) {
-        // Create user if doesn't exist
-        user = await base44.entities.User.create({
-          email: email.toLowerCase(),
-          full_name: demoUser.full_name,
-          role: demoUser.role
-        });
-      }
-
       // Store in localStorage for demo purposes
       localStorage.setItem('demo_user', JSON.stringify({
-        email: user.email,
-        full_name: user.full_name,
-        role: user.role,
-        id: user.id
+        email: email.toLowerCase(),
+        full_name: demoUser.full_name,
+        role: demoUser.role,
+        id: Date.now().toString()
       }));
 
       // Redirect to Dashboard
