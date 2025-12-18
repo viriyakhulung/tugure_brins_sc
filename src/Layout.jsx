@@ -9,20 +9,33 @@ import {
   DollarSign, CreditCard, Scale, Bell, User, Settings, 
   LogOut, Menu, X, ChevronRight, Shield, Activity
 } from "lucide-react";
-import { useAuth } from "@/components/auth/AuthContext";
-import { base44 } from '@/api/base44Client';
+import { AuthProvider, useAuth } from "@/components/auth/AuthContext";
 
 export default function Layout({ children, currentPageName }) {
+  return (
+    <AuthProvider>
+      <LayoutContent currentPageName={currentPageName}>
+        {children}
+      </LayoutContent>
+    </AuthProvider>
+  );
+}
+
+function LayoutContent({ children, currentPageName }) {
   const { user, logout, hasAccess } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
-    loadNotificationCount();
-  }, []);
+    if (user) {
+      loadNotificationCount();
+    }
+  }, [user]);
 
   const loadNotificationCount = async () => {
+    if (!user) return;
     try {
+      const { base44 } = await import('@/api/base44Client');
       const notifs = await base44.entities.Notification.list();
       const unread = (notifs || []).filter(n => !n.is_read).length;
       setUnreadNotifications(unread);
@@ -227,3 +240,6 @@ export default function Layout({ children, currentPageName }) {
     </div>
   );
 }
+
+// Wrap pages with auth check
+LayoutContent.requireAuth = true;
