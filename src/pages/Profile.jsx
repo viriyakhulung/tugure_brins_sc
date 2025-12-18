@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,19 +9,38 @@ import {
   User, Mail, Shield, Building2, Calendar, 
   Lock, CheckCircle2, AlertCircle, LogOut
 } from "lucide-react";
-import { useAuth } from "@/components/auth/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { format } from 'date-fns';
+import { base44 } from '@/api/base44Client';
+import { createPageUrl } from "@/utils";
 
 export default function Profile() {
-  const { user, logout } = useAuth();
+  const [user, setUser] = useState(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [changing, setChanging] = useState(false);
+
+  useEffect(() => {
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    try {
+      const currentUser = await base44.auth.me();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
+
+  const logout = async () => {
+    await base44.auth.logout();
+    window.location.href = createPageUrl('Home');
+  };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -57,12 +76,11 @@ export default function Profile() {
   };
 
   const roleInfo = {
-    ADMIN: { label: 'Administrator', color: 'bg-purple-100 text-purple-700 border-purple-200', access: 'Full Access' },
-    BRINS: { label: 'BRINS User', color: 'bg-blue-100 text-blue-700 border-blue-200', access: 'BRINS Operations' },
-    TUGURE: { label: 'Tugure User', color: 'bg-green-100 text-green-700 border-green-200', access: 'Tugure Operations' }
+    admin: { label: 'Administrator', color: 'bg-purple-100 text-purple-700 border-purple-200', access: 'Full Access' },
+    user: { label: 'User', color: 'bg-blue-100 text-blue-700 border-blue-200', access: 'Standard Access' }
   };
 
-  const currentRoleInfo = roleInfo[user?.role] || roleInfo.BRINS;
+  const currentRoleInfo = roleInfo[user?.role] || roleInfo.user;
 
   return (
     <div className="space-y-6">

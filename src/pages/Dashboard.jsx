@@ -9,7 +9,6 @@ import {
   ArrowUpRight, ArrowDownRight, Download, Filter
 } from "lucide-react";
 import { PieChart as RePieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
-import { useAuth } from "@/components/auth/AuthContext";
 import StatCard from "@/components/dashboard/StatCard";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ExportButton from "@/components/common/ExportButton";
@@ -19,7 +18,7 @@ import { format } from 'date-fns';
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const [user, setUser] = useState(null);
   const [period, setPeriod] = useState('2025-03');
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -47,8 +46,18 @@ export default function Dashboard() {
   const [borderos, setBorderos] = useState([]);
 
   useEffect(() => {
+    checkAuth();
     loadDashboardData();
   }, [period]);
+
+  const checkAuth = async () => {
+    try {
+      const currentUser = await base44.auth.me();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Auth error:', error);
+    }
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
