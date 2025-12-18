@@ -87,7 +87,7 @@ export default function Dashboard() {
   };
 
   // Chart data
-  const premiumByStatusData = [
+  const debtorStatusData = [
     { name: 'Approved', value: stats.approvedDebtors, color: '#10B981' },
     { name: 'Pending', value: stats.pendingDebtors, color: '#F59E0B' },
     { name: 'Rejected', value: stats.rejectedDebtors, color: '#EF4444' },
@@ -95,12 +95,25 @@ export default function Dashboard() {
   ].filter(d => d.value > 0);
 
   const monthlyTrendData = [
-    { month: 'Jan', premium: 2500000000, claims: 500000000 },
-    { month: 'Feb', premium: 2800000000, claims: 600000000 },
-    { month: 'Mar', premium: 3200000000, claims: 450000000 },
-    { month: 'Apr', premium: 2900000000, claims: 700000000 },
-    { month: 'May', premium: 3500000000, claims: 550000000 },
-    { month: 'Jun', premium: 3800000000, claims: 800000000 }
+    { month: 'Jan', premium: 2500000000, claims: 500000000, lossRatio: 20, recovery: 50000000 },
+    { month: 'Feb', premium: 2800000000, claims: 600000000, lossRatio: 21.4, recovery: 60000000 },
+    { month: 'Mar', premium: 3200000000, claims: 450000000, lossRatio: 14.1, recovery: 45000000 },
+    { month: 'Apr', premium: 2900000000, claims: 700000000, lossRatio: 24.1, recovery: 70000000 },
+    { month: 'May', premium: 3500000000, claims: 550000000, lossRatio: 15.7, recovery: 55000000 },
+    { month: 'Jun', premium: 3800000000, claims: 800000000, lossRatio: 21.1, recovery: 80000000 }
+  ];
+
+  const premiumByStatusData = [
+    { name: 'Approved', value: stats.totalPremium * 0.7, color: '#10B981' },
+    { name: 'Pending', value: stats.totalPremium * 0.2, color: '#F59E0B' },
+    { name: 'Rejected', value: stats.totalPremium * 0.1, color: '#EF4444' }
+  ];
+
+  const subrogationData = [
+    { status: 'Pending', amount: 200000000, count: 15 },
+    { status: 'In Progress', amount: 350000000, count: 22 },
+    { status: 'Recovered', amount: 280000000, count: 18 },
+    { status: 'Closed', amount: 170000000, count: 12 }
   ];
 
   const claimStatusData = [
@@ -228,7 +241,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Charts Row */}
+      {/* Charts Row 1 - Debtor & Premium Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Debtor Status Pie Chart */}
         <Card>
@@ -243,7 +256,7 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <RePieChart>
                   <Pie
-                    data={premiumByStatusData}
+                    data={debtorStatusData}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -252,11 +265,52 @@ export default function Dashboard() {
                     dataKey="value"
                     label={({ name, value }) => `${name}: ${value}`}
                   >
-                    {premiumByStatusData.map((entry, index) => (
+                    {debtorStatusData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip />
+                </RePieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap justify-center gap-4 mt-4">
+              {debtorStatusData.map((entry, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                  <span className="text-sm text-gray-600">{entry.name}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Premium by Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-gray-500" />
+              Premium by Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <RePieChart>
+                  <Pie
+                    data={premiumByStatusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={3}
+                    dataKey="value"
+                    label={({ value }) => `IDR ${formatCurrency(value)}`}
+                  >
+                    {premiumByStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `IDR ${formatCurrency(value)}`} />
                 </RePieChart>
               </ResponsiveContainer>
             </div>
@@ -270,13 +324,74 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Charts Row 2 - Loss Ratio & Claims Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Loss Ratio Trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-gray-500" />
+              Loss Ratio Trend (%)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#6B7280" />
+                  <YAxis tick={{ fontSize: 12 }} stroke="#6B7280" domain={[0, 30]} />
+                  <Tooltip formatter={(value) => `${value}%`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="lossRatio" stroke="#8B5CF6" strokeWidth={3} name="Loss Ratio %" dot={{ fill: '#8B5CF6', r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 p-3 bg-purple-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                <span className="font-semibold text-purple-700">Current Loss Ratio: {stats.lossRatio}%</span>
+                <span className="text-gray-500 ml-2">(Industry average: ~20-25%)</span>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Premium vs Claims Trend */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-gray-500" />
+              Premium vs Claims Paid
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#6B7280" />
+                  <YAxis tick={{ fontSize: 12 }} stroke="#6B7280" tickFormatter={formatCurrency} />
+                  <Tooltip formatter={(value) => `IDR ${formatCurrency(value)}`} />
+                  <Legend />
+                  <Bar dataKey="premium" fill="#3B82F6" name="Premium" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="claims" fill="#EF4444" name="Claims Paid" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Row 3 - Recovery & Subrogation */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Outstanding Recovery Trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-gray-500" />
-              Premium vs Claims Trend
+              Outstanding Recovery Trend
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -288,38 +403,93 @@ export default function Dashboard() {
                   <YAxis tick={{ fontSize: 12 }} stroke="#6B7280" tickFormatter={formatCurrency} />
                   <Tooltip formatter={(value) => `IDR ${formatCurrency(value)}`} />
                   <Legend />
-                  <Area type="monotone" dataKey="premium" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.3} name="Premium" />
-                  <Area type="monotone" dataKey="claims" stackId="2" stroke="#EF4444" fill="#EF4444" fillOpacity={0.3} name="Claims" />
+                  <Area type="monotone" dataKey="recovery" stroke="#F59E0B" fill="#F59E0B" fillOpacity={0.4} name="Recovery Amount" />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+            <div className="mt-4 p-3 bg-orange-50 rounded-lg">
+              <p className="text-sm">
+                <span className="font-semibold text-orange-700">Total OS Recovery: IDR {formatCurrency(stats.osRecovery)}</span>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Subrogation Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-gray-500" />
+              Subrogation by Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={subrogationData} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis type="category" dataKey="status" tick={{ fontSize: 12 }} stroke="#6B7280" />
+                  <YAxis type="number" tick={{ fontSize: 12 }} stroke="#6B7280" tickFormatter={formatCurrency} />
+                  <Tooltip formatter={(value) => `IDR ${formatCurrency(value)}`} />
+                  <Bar dataKey="amount" fill="#10B981" name="Recovery Amount" radius={[4, 4, 0, 0]}>
+                    {subrogationData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {subrogationData.map((item, idx) => (
+                <div key={idx} className="p-2 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500">{item.status}</p>
+                  <p className="text-sm font-semibold">{item.count} cases</p>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Claims Status Bar Chart */}
+      {/* Claims Status Summary Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-gray-500" />
-            Claims by Status
+            <FileText className="w-5 h-5 text-gray-500" />
+            Claims Summary by Status
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={claimStatusData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis type="number" tick={{ fontSize: 12 }} stroke="#6B7280" />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} stroke="#6B7280" width={100} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#3B82F6" radius={[0, 4, 4, 0]}>
-                  {claimStatusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {claimStatusData.map((status, idx) => (
+              <div key={idx} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                  <span className="text-2xl font-bold">{status.value}</span>
+                </div>
+                <p className="text-sm text-gray-600">{status.name}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {((status.value / claims.length) * 100).toFixed(1)}% of total
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6">
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={claimStatusData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} stroke="#6B7280" />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} stroke="#6B7280" width={100} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+                    {claimStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </CardContent>
       </Card>
