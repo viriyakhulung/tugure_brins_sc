@@ -11,6 +11,7 @@ import Profile from './pages/Profile';
 import AuditLog from './pages/AuditLog';
 import SystemConfiguration from './pages/SystemConfiguration';
 import PaymentStatus from './pages/PaymentStatus';
+import Home from './pages/Home';
 import __Layout from './Layout.jsx';
 
 
@@ -28,6 +29,7 @@ export const PAGES = {
     "AuditLog": AuditLog,
     "SystemConfiguration": SystemConfiguration,
     "PaymentStatus": PaymentStatus,
+    "Home": Home,
 }
 
 export const pagesConfig = {
