@@ -137,15 +137,17 @@ function LayoutContent({ children, currentPageName }) {
               </Button>
             </Link>
             <Separator orientation="vertical" className="h-6" />
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
-                <p className="text-xs text-gray-500">{user?.role}</p>
+            <Link to={createPageUrl('Profile')}>
+              <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
+                  <p className="text-xs text-gray-500">{user?.role}</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                  <User className="w-5 h-5 text-white" />
+                </div>
               </div>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                <User className="w-5 h-5 text-white" />
-              </div>
-            </div>
+            </Link>
           </div>
         </div>
       </header>

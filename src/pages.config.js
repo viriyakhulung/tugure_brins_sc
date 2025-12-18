@@ -4,6 +4,7 @@ import ClaimReview from './pages/ClaimReview';
 import ClaimSubmit from './pages/ClaimSubmit';
 import Dashboard from './pages/Dashboard';
 import DocumentEligibility from './pages/DocumentEligibility';
+import Home from './pages/Home';
 import NotificationCenter from './pages/NotificationCenter';
 import PaymentIntent from './pages/PaymentIntent';
 import PaymentStatus from './pages/PaymentStatus';
@@ -11,7 +12,6 @@ import Profile from './pages/Profile';
 import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
-import Home from './pages/Home';
 import __Layout from './Layout.jsx';
 
 
@@ -22,6 +22,7 @@ export const PAGES = {
     "ClaimSubmit": ClaimSubmit,
     "Dashboard": Dashboard,
     "DocumentEligibility": DocumentEligibility,
+    "Home": Home,
     "NotificationCenter": NotificationCenter,
     "PaymentIntent": PaymentIntent,
     "PaymentStatus": PaymentStatus,
@@ -29,7 +30,6 @@ export const PAGES = {
     "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
-    "Home": Home,
 }
 
 export const pagesConfig = {

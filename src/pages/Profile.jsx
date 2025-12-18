@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/components/auth/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import { Badge } from "@/components/ui/badge";
+import { format } from 'date-fns';
 
 export default function Profile() {
   const { user, logout } = useAuth();
@@ -241,12 +242,8 @@ export default function Profile() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm text-gray-600">Notifications</span>
-                <Badge>{notifications.length}</Badge>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm text-gray-600">Unread</span>
-                <Badge className="bg-red-100 text-red-700">{unreadCount}</Badge>
+                <span className="text-sm text-gray-600">Status</span>
+                <Badge className="bg-green-100 text-green-700">Active</Badge>
               </div>
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-600">Member Since</span>
