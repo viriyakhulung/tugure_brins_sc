@@ -12,7 +12,6 @@ import {
   RefreshCw, Check, X, Loader2, Search, AlertCircle
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
-import { useAuth } from "@/components/auth/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -25,7 +24,7 @@ const DOCUMENT_TYPES = [
 ];
 
 export default function DebtorReview() {
-  const { user, hasAccess } = useAuth();
+  const [user, setUser] = useState(null);
   const [debtors, setDebtors] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [contracts, setContracts] = useState([]);
@@ -45,11 +44,19 @@ export default function DebtorReview() {
     endDate: ''
   });
 
-  const isTugure = hasAccess(['TUGURE']);
-
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const currentUser = await base44.auth.me();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -198,7 +205,7 @@ export default function DebtorReview() {
           >
             <Eye className="w-4 h-4" />
           </Button>
-          {isTugure && row.submit_status === 'SUBMITTED' && (
+          {row.submit_status === 'SUBMITTED' && (
             <>
               <Button 
                 size="sm" 

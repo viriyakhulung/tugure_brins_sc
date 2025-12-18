@@ -12,7 +12,6 @@ import {
   Loader2, AlertTriangle, MessageSquare, DollarSign, Download
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
-import { useAuth } from "@/components/auth/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
@@ -20,7 +19,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
 
 export default function ClaimReview() {
-  const { user } = useAuth();
+  const [user, setUser] = useState(null);
   const [claims, setClaims] = useState([]);
   const [subrogations, setSubrogations] = useState([]);
   const [contracts, setContracts] = useState([]);
@@ -45,8 +44,18 @@ export default function ClaimReview() {
   });
 
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const currentUser = await base44.auth.me();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
