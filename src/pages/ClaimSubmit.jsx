@@ -657,6 +657,12 @@ export default function ClaimSubmit() {
                 setProcessing(true);
                 try {
                   const claim = claims.find(c => c.id === selectedClaim);
+                  if (!claim) {
+                    setErrorMessage('Selected claim not found');
+                    setProcessing(false);
+                    return;
+                  }
+                  
                   const subrogationId = `SUB-${Date.now()}`;
                   
                   await base44.entities.Subrogation.create({
