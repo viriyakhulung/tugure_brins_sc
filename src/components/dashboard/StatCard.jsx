@@ -1,48 +1,42 @@
 import React from 'react';
-import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
-export default function StatCard({ title, value, subtitle, icon: Icon, trend, trendUp, className, gradient }) {
+export default function StatCard({ title, value, subtitle, icon: Icon, trend, className, gradient }) {
   return (
-    <Card className={cn(
-      "relative overflow-hidden p-6 transition-all hover:shadow-2xl border-3",
-      gradient ? "bg-gradient-to-br shadow-xl" : "bg-white",
-      className
-    )}>
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-bold text-gray-900">
-            {title}
-          </p>
-          <h3 className="text-3xl font-black tracking-tight text-gray-900">
-            {value}
-          </h3>
-          {subtitle && (
-            <p className="text-sm font-semibold text-gray-800">
-              {subtitle}
-            </p>
-          )}
-          {trend && (
-            <div className={cn(
-              "flex items-center gap-1 text-sm font-bold",
-              trendUp ? "text-green-600" : "text-red-600"
-            )}>
-              <span>{trendUp ? '↑' : '↓'}</span>
-              <span>{trend}</span>
+    <Card className={`relative overflow-hidden transition-all hover:shadow-lg ${className || ''}`}>
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <p className="text-sm text-gray-500 mb-2">{title}</p>
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-3xl text-gray-900">{value}</h3>
+              {trend && (
+                <span className={`text-sm ${trend > 0 ? 'text-green-600' : 'text-red-600'} flex items-center gap-1`}>
+                  {trend > 0 ? (
+                    <ArrowUpRight className="w-4 h-4" />
+                  ) : (
+                    <ArrowDownRight className="w-4 h-4" />
+                  )}
+                  {Math.abs(trend)}%
+                </span>
+              )}
+            </div>
+            {subtitle && <p className="text-sm text-gray-500 mt-2">{subtitle}</p>}
+          </div>
+          {Icon && gradient && (
+            <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${className} flex items-center justify-center`}>
+              <Icon className="w-6 h-6 text-white" />
             </div>
           )}
+          {Icon && !gradient && (
+            <Icon className="w-8 h-8 text-gray-400" />
+          )}
         </div>
-        {Icon && (
-          <div className={cn(
-            "p-4 rounded-2xl shadow-lg",
-            gradient ? "bg-white/30 backdrop-blur-sm" : "bg-gradient-to-br from-blue-100 to-indigo-100"
-          )}>
-            <Icon className="w-7 h-7 text-gray-900 font-bold" />
-          </div>
-        )}
-      </div>
-      {/* Decorative element */}
-      <div className="absolute -bottom-6 -right-6 w-32 h-32 rounded-full opacity-20 bg-gradient-to-br from-blue-400 to-purple-500" />
+      </CardContent>
+      {gradient && (
+        <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${className}`} />
+      )}
     </Card>
   );
 }
