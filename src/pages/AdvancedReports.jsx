@@ -199,7 +199,7 @@ export default function AdvancedReports() {
   const years = [...new Set(debtors.map(d => d.batch_year?.toString()))];
 
   return (
-    <div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
       <PageHeader
         title="Advanced Reports"
         subtitle="Executive summary and analytics dashboard"
@@ -208,7 +208,7 @@ export default function AdvancedReports() {
           { label: 'Advanced Reports' }
         ]}
         actions={
-          <Button onClick={loadData} variant="outline">
+          <Button onClick={loadData} variant="outline" className="bg-white hover:bg-gray-50">
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -216,7 +216,7 @@ export default function AdvancedReports() {
       />
 
       {/* Filter Panel */}
-      <Card className="mb-6 border-2 shadow-lg">
+      <Card className="mb-6 border-2 shadow-xl bg-gradient-to-r from-white via-blue-50 to-purple-50">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
@@ -272,7 +272,7 @@ export default function AdvancedReports() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <Button variant="outline" size="sm" onClick={() => setFilters({ batch: 'all', period: 'all', branch: 'all', plafonRange: 'all' })}>
+            <Button variant="outline" size="sm" onClick={() => setFilters({ batch: 'all', period: 'all', branch: 'all', plafonRange: 'all' })} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold">
               Clear Filters
             </Button>
           </div>
@@ -281,22 +281,22 @@ export default function AdvancedReports() {
 
       <div id="report-content">
         <Tabs defaultValue="loss-ratio" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="loss-ratio">Loss Ratio</TabsTrigger>
-            <TabsTrigger value="premium-status">Premium by Status</TabsTrigger>
-            <TabsTrigger value="claim-paid">Claim Paid</TabsTrigger>
-            <TabsTrigger value="recovery">OS Recovery</TabsTrigger>
-            <TabsTrigger value="subrogation">Subrogation</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5 bg-white border-2 shadow-lg p-2">
+            <TabsTrigger value="loss-ratio" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white text-gray-900 font-bold">Loss Ratio</TabsTrigger>
+            <TabsTrigger value="premium-status" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-600 data-[state=active]:text-white text-gray-900 font-bold">Premium by Status</TabsTrigger>
+            <TabsTrigger value="claim-paid" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white text-gray-900 font-bold">Claim Paid</TabsTrigger>
+            <TabsTrigger value="recovery" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white text-gray-900 font-bold">OS Recovery</TabsTrigger>
+            <TabsTrigger value="subrogation" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white text-gray-900 font-bold">Subrogation</TabsTrigger>
           </TabsList>
 
           {/* Loss Ratio Tab */}
           <TabsContent value="loss-ratio" className="space-y-6">
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => exportToPDF('loss-ratio')}>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('loss-ratio')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportToExcel(lossRatio.trend, 'loss-ratio')}>
+              <Button variant="outline" size="sm" onClick={() => exportToExcel(lossRatio.trend, 'loss-ratio')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 Excel
               </Button>
@@ -326,28 +326,35 @@ export default function AdvancedReports() {
               />
             </div>
 
-            <Card className="shadow-lg border-2">
-              <CardHeader className="bg-gradient-to-r from-gray-50 to-blue-50">
-                <CardTitle className="text-gray-900 font-bold">Loss Ratio Trend</CardTitle>
+            <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-blue-50">
+              <CardHeader className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-b-4 border-indigo-700">
+                <CardTitle className="text-white font-bold text-xl">📊 Loss Ratio Trend</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-blue-50">
                 {loading ? (
                   <Skeleton className="h-80 w-full" />
                 ) : (
                   <ResponsiveContainer width="100%" height={400}>
                     <LineChart data={lossRatio.trend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="month" tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
-                      <YAxis yAxisId="left" tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
+                      <defs>
+                        <linearGradient id="colorPremium" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
+                      <XAxis dataKey="month" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                      <YAxis yAxisId="left" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
                       <Tooltip 
                         formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                        contentStyle={{ backgroundColor: '#fff', border: '2px solid #3B82F6', borderRadius: '8px', color: '#1F2937', fontWeight: 600 }}
+                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #3B82F6', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
+                        labelStyle={{ color: '#000000', fontWeight: 700 }}
                       />
-                      <Legend wrapperStyle={{ color: '#1F2937', fontWeight: 600 }} />
-                      <Line yAxisId="left" type="monotone" dataKey="premium" stroke="#3b82f6" strokeWidth={3} name="Premium" dot={{ fill: '#3b82f6', r: 5 }} />
-                      <Line yAxisId="left" type="monotone" dataKey="claim" stroke="#ef4444" strokeWidth={3} name="Claim" dot={{ fill: '#ef4444', r: 5 }} />
-                      <Line yAxisId="right" type="monotone" dataKey="lossRatio" stroke="#10b981" strokeWidth={3} name="Loss Ratio %" dot={{ fill: '#10b981', r: 5 }} />
+                      <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
+                      <Line yAxisId="left" type="monotone" dataKey="premium" stroke="#3b82f6" strokeWidth={4} name="Premium" dot={{ fill: '#3b82f6', r: 6, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                      <Line yAxisId="left" type="monotone" dataKey="claim" stroke="#ef4444" strokeWidth={4} name="Claim" dot={{ fill: '#ef4444', r: 6, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                      <Line yAxisId="right" type="monotone" dataKey="lossRatio" stroke="#10b981" strokeWidth={4} name="Loss Ratio %" dot={{ fill: '#10b981', r: 6, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -358,22 +365,22 @@ export default function AdvancedReports() {
           {/* Premium by Status Tab */}
           <TabsContent value="premium-status" className="space-y-6">
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => exportToPDF('premium-status')}>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('premium-status')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportToExcel(premiumStatus, 'premium-status')}>
+              <Button variant="outline" size="sm" onClick={() => exportToExcel(premiumStatus, 'premium-status')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 Excel
               </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="shadow-lg border-2">
-                <CardHeader className="bg-gradient-to-r from-gray-50 to-purple-50">
-                  <CardTitle className="text-gray-900 font-bold">Premium Distribution by Status</CardTitle>
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-purple-50">
+                <CardHeader className="bg-gradient-to-r from-purple-500 to-pink-600 text-white border-b-4 border-pink-700">
+                  <CardTitle className="text-white font-bold text-xl">🎨 Premium Distribution by Status</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-purple-50">
                   {loading ? (
                     <Skeleton className="h-80 w-full" />
                   ) : (
@@ -387,7 +394,7 @@ export default function AdvancedReports() {
                           cy="50%"
                           outerRadius={100}
                           label={(entry) => `${entry.status} (${entry.percentage}%)`}
-                          labelStyle={{ fill: '#1F2937', fontSize: '13px', fontWeight: '700' }}
+                          labelStyle={{ fill: '#000000', fontSize: '14px', fontWeight: '900' }}
                         >
                           {premiumStatus.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -395,7 +402,8 @@ export default function AdvancedReports() {
                         </Pie>
                         <Tooltip 
                           formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                          contentStyle={{ backgroundColor: '#fff', border: '2px solid #3B82F6', borderRadius: '8px', color: '#1F2937', fontWeight: 600 }}
+                          contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #A855F7', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
+                          labelStyle={{ color: '#000000', fontWeight: 700 }}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -403,25 +411,26 @@ export default function AdvancedReports() {
                 </CardContent>
               </Card>
 
-              <Card className="shadow-lg border-2">
-                <CardHeader className="bg-gradient-to-r from-gray-50 to-indigo-50">
-                  <CardTitle className="text-gray-900 font-bold">Premium by Status Breakdown</CardTitle>
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-indigo-50">
+                <CardHeader className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-b-4 border-blue-700">
+                  <CardTitle className="text-white font-bold text-xl">📈 Premium by Status Breakdown</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-indigo-50">
                   {loading ? (
                     <Skeleton className="h-80 w-full" />
                   ) : (
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={premiumStatus}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                        <XAxis dataKey="status" tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
-                        <YAxis tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
+                        <XAxis dataKey="status" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                        <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
                         <Tooltip 
                           formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                          contentStyle={{ backgroundColor: '#fff', border: '2px solid #3B82F6', borderRadius: '8px', color: '#1F2937', fontWeight: 600 }}
+                          contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #6366F1', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
+                          labelStyle={{ color: '#000000', fontWeight: 700 }}
                         />
-                        <Legend wrapperStyle={{ color: '#1F2937', fontWeight: 600 }} />
-                        <Bar dataKey="amount" fill="#3b82f6" name="Premium Amount" radius={[8, 8, 0, 0]} />
+                        <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
+                        <Bar dataKey="amount" fill="#6366f1" name="Premium Amount" radius={[10, 10, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -433,11 +442,11 @@ export default function AdvancedReports() {
           {/* Claim Paid Tab */}
           <TabsContent value="claim-paid" className="space-y-6">
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => exportToPDF('claim-paid')}>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('claim-paid')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportToExcel(claimPaid.byRange, 'claim-paid')}>
+              <Button variant="outline" size="sm" onClick={() => exportToExcel(claimPaid.byRange, 'claim-paid')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 Excel
               </Button>
@@ -467,25 +476,26 @@ export default function AdvancedReports() {
               />
             </div>
 
-            <Card className="shadow-lg border-2">
-              <CardHeader className="bg-gradient-to-r from-gray-50 to-green-50">
-                <CardTitle className="text-gray-900 font-bold">Claims by Plafon Range</CardTitle>
+            <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-green-50">
+              <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-b-4 border-emerald-700">
+                <CardTitle className="text-white font-bold text-xl">💰 Claims by Plafon Range</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-green-50">
                 {loading ? (
                   <Skeleton className="h-80 w-full" />
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={claimPaid.byRange}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="range" tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
-                      <YAxis tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
+                      <XAxis dataKey="range" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                      <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
                       <Tooltip 
                         formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                        contentStyle={{ backgroundColor: '#fff', border: '2px solid #10B981', borderRadius: '8px', color: '#1F2937', fontWeight: 600 }}
+                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #10B981', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
+                        labelStyle={{ color: '#000000', fontWeight: 700 }}
                       />
-                      <Legend wrapperStyle={{ color: '#1F2937', fontWeight: 600 }} />
-                      <Bar dataKey="amount" fill="#10b981" name="Claim Amount" radius={[8, 8, 0, 0]} />
+                      <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
+                      <Bar dataKey="amount" fill="#10b981" name="Claim Amount" radius={[10, 10, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -496,7 +506,7 @@ export default function AdvancedReports() {
           {/* Outstanding Recovery Tab */}
           <TabsContent value="recovery" className="space-y-6">
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => exportToPDF('recovery')}>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('recovery')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
@@ -533,11 +543,11 @@ export default function AdvancedReports() {
               />
             </div>
 
-            <Card className="shadow-lg border-2">
-              <CardHeader className="bg-gradient-to-r from-gray-50 to-orange-50">
-                <CardTitle className="text-gray-900 font-bold">Recovery Breakdown</CardTitle>
+            <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-orange-50">
+              <CardHeader className="bg-gradient-to-r from-orange-500 to-red-600 text-white border-b-4 border-red-700">
+                <CardTitle className="text-white font-bold text-xl">🔄 Recovery Breakdown</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-orange-50">
                 {loading ? (
                   <Skeleton className="h-80 w-full" />
                 ) : (
@@ -547,14 +557,15 @@ export default function AdvancedReports() {
                       { name: 'Recovered', value: recovery.totalRecovered },
                       { name: 'Outstanding', value: recovery.outstanding }
                     ]}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="name" tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
-                      <YAxis tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
+                      <XAxis dataKey="name" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                      <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
                       <Tooltip 
                         formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                        contentStyle={{ backgroundColor: '#fff', border: '2px solid #F59E0B', borderRadius: '8px', color: '#1F2937', fontWeight: 600 }}
+                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #F59E0B', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
+                        labelStyle={{ color: '#000000', fontWeight: 700 }}
                       />
-                      <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]}>
+                      <Bar dataKey="value" fill="#3b82f6" radius={[10, 10, 0, 0]}>
                         {[0, 1, 2].map((index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
@@ -569,11 +580,11 @@ export default function AdvancedReports() {
           {/* Subrogation Tab */}
           <TabsContent value="subrogation" className="space-y-6">
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => exportToPDF('subrogation')}>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('subrogation')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportToExcel(subrogation.statusData, 'subrogation')}>
+              <Button variant="outline" size="sm" onClick={() => exportToExcel(subrogation.statusData, 'subrogation')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 Excel
               </Button>
@@ -596,24 +607,25 @@ export default function AdvancedReports() {
               />
             </div>
 
-            <Card className="shadow-lg border-2">
-              <CardHeader className="bg-gradient-to-r from-gray-50 to-purple-50">
-                <CardTitle className="text-gray-900 font-bold">Subrogation Status Distribution</CardTitle>
+            <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-purple-50">
+              <CardHeader className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white border-b-4 border-indigo-700">
+                <CardTitle className="text-white font-bold text-xl">⚖️ Subrogation Status Distribution</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-purple-50">
                 {loading ? (
                   <Skeleton className="h-80 w-full" />
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={subrogation.statusData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                      <XAxis dataKey="status" tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
-                      <YAxis tick={{ fontSize: 13, fill: '#1F2937', fontWeight: 500 }} stroke="#9CA3AF" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
+                      <XAxis dataKey="status" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                      <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
                       <Tooltip 
-                        contentStyle={{ backgroundColor: '#fff', border: '2px solid #8B5CF6', borderRadius: '8px', color: '#1F2937', fontWeight: 600 }}
+                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #8B5CF6', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
+                        labelStyle={{ color: '#000000', fontWeight: 700 }}
                       />
-                      <Legend wrapperStyle={{ color: '#1F2937', fontWeight: 600 }} />
-                      <Bar dataKey="count" fill="#8b5cf6" name="Cases Count" radius={[8, 8, 0, 0]} />
+                      <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
+                      <Bar dataKey="count" fill="#8b5cf6" name="Cases Count" radius={[10, 10, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
