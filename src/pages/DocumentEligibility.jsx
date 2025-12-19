@@ -432,7 +432,7 @@ export default function DocumentEligibility() {
                   <Upload className="w-4 h-4 mr-2" />
                   Upload Document
                 </Button>
-                {calculateCompleteness(selectedDebtor) === 100 && selectedDebtor?.batch_status !== 'VALIDATED' && (
+                {selectedDebtor && calculateCompleteness(selectedDebtor) === 100 && selectedDebtor?.batch_status !== 'VALIDATED' && (
                   <Button 
                     className="bg-green-600 hover:bg-green-700"
                     onClick={() => {
