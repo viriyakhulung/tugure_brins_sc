@@ -138,10 +138,10 @@ export default function PaymentIntent() {
     // Export functionality
   };
 
-  const approvedDebtors = debtors.filter(d => d.submit_status === 'APPROVED');
+  const approvedDebtors = debtors.filter(d => d.underwriting_status === 'APPROVED');
   const selectedTotal = approvedDebtors
     .filter(d => selectedDebtors.includes(d.id))
-    .reduce((sum, d) => sum + (d.net_premi || 0), 0);
+    .reduce((sum, d) => sum + (d.net_premium || 0), 0);
 
   const debtorColumns = [
     {
@@ -158,15 +158,16 @@ export default function PaymentIntent() {
       header: 'Debtor',
       cell: (row) => (
         <div>
-          <p className="font-medium">{row.nama_peserta}</p>
+          <p className="font-medium">{row.debtor_name}</p>
           <p className="text-sm text-gray-500">{row.batch_id?.slice(0, 15)}</p>
         </div>
       )
     },
-    { header: 'Plafon', cell: (row) => `IDR ${(row.plafon || 0).toLocaleString()}` },
-    { header: 'Net Premi', cell: (row) => `IDR ${(row.net_premi || 0).toLocaleString()}` },
-    { header: 'Submit Status', cell: (row) => <StatusBadge status={row.submit_status} /> },
-    { header: 'Exposure Status', cell: (row) => <StatusBadge status={row.exposure_status} /> }
+    { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
+    { header: 'Net Premium', cell: (row) => `Rp ${(row.net_premium || 0).toLocaleString('id-ID')}` },
+    { header: 'Invoice No', cell: (row) => row.invoice_no || '-' },
+    { header: 'Invoice Status', cell: (row) => <StatusBadge status={row.invoice_status} /> },
+    { header: 'Recon Status', cell: (row) => <StatusBadge status={row.recon_status} /> }
   ];
 
   const intentColumns = [
@@ -207,8 +208,8 @@ export default function PaymentIntent() {
               onClick={() => {
                 const data = selectedDebtors.length > 0 ? approvedDebtors.filter(d => selectedDebtors.includes(d.id)) : approvedDebtors;
                 const csv = [
-                  ['Debtor', 'Batch', 'Plafon', 'Net Premi', 'Submit Status'].join(','),
-                  ...data.map(d => [d.nama_peserta, d.batch_id, d.plafon, d.net_premi, d.submit_status].join(','))
+                  ['Debtor', 'Batch', 'Plafond', 'Net Premium', 'Invoice Status'].join(','),
+                  ...data.map(d => [d.debtor_name, d.batch_id, d.credit_plafond, d.net_premium, d.invoice_status].join(','))
                 ].join('\n');
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = URL.createObjectURL(blob);

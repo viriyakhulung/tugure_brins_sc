@@ -138,9 +138,11 @@ export default function DocumentEligibility() {
     return documents.filter(d => d.debtor_id === debtorId);
   };
 
-  const calculateCompleteness = (debtorId, creditType = 'Individual') => {
+  const calculateCompleteness = (debtor) => {
+    const debtorId = debtor.id || debtor;
+    const creditType = debtor.credit_type || 'Individual';
     const requiredDocs = DOCUMENT_TYPES[creditType] || DOCUMENT_TYPES.Individual;
-    const debtorDocs = getDebtorDocuments(debtorId);
+    const debtorDocs = getDebtorDocuments(typeof debtorId === 'string' ? debtorId : debtorId.id);
     const completedDocs = requiredDocs.filter(type => 
       debtorDocs.some(d => d.document_type === type && d.status === 'VERIFIED')
     );
@@ -182,12 +184,12 @@ export default function DocumentEligibility() {
 
     try {
       await base44.entities.Debtor.update(debtor.id, {
-        admin_status: 'COMPLETE'
+        batch_status: 'VALIDATED'
       });
 
       await base44.entities.Notification.create({
         title: 'Document Eligibility Complete',
-        message: `Documents for ${debtor.nama_peserta} are now complete`,
+        message: `Documents for ${debtor.debtor_name} are now complete`,
         type: 'INFO',
         module: 'DOCUMENT',
         reference_id: debtor.id,
@@ -202,9 +204,9 @@ export default function DocumentEligibility() {
   };
 
   const filteredDebtors = debtors.filter(d => {
-    const matchesSearch = d.nama_peserta?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         d.nomor_peserta?.includes(searchTerm);
-    const matchesStatus = statusFilter === 'all' || d.admin_status === statusFilter;
+    const matchesSearch = d.debtor_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         d.participant_no?.includes(searchTerm);
+    const matchesStatus = statusFilter === 'all' || d.batch_status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
@@ -213,8 +215,8 @@ export default function DocumentEligibility() {
       header: 'Debtor Name', 
       cell: (row) => (
         <div>
-          <p className="font-medium">{row.nama_peserta}</p>
-          <p className="text-sm text-gray-500">{row.nomor_peserta}</p>
+          <p className="font-medium">{row.debtor_name}</p>
+          <p className="text-sm text-gray-500">{row.participant_no}</p>
         </div>
       )
     },
@@ -224,8 +226,8 @@ export default function DocumentEligibility() {
       cell: (row) => <span className="text-sm font-mono">{row.batch_id?.slice(0, 15)}</span>
     },
     { 
-      header: 'Submit Status', 
-      cell: (row) => <StatusBadge status={row.submit_status} />
+      header: 'Credit Type', 
+      cell: (row) => <StatusBadge status={row.credit_type} />
     },
     { 
       header: 'Document Completeness',
@@ -242,8 +244,8 @@ export default function DocumentEligibility() {
       }
     },
     { 
-      header: 'Admin Status', 
-      cell: (row) => <StatusBadge status={row.admin_status} />
+      header: 'Batch Status', 
+      cell: (row) => <StatusBadge status={row.batch_status} />
     },
     {
       header: 'Actions',
@@ -329,9 +331,9 @@ export default function DocumentEligibility() {
                 className="bg-green-600 hover:bg-green-700 text-white"
                 onClick={() => {
                   const csv = [
-                    ['Debtor', 'Batch', 'Submit Status', 'Admin Status', 'Completeness'].join(','),
+                    ['Debtor', 'Batch', 'Credit Type', 'Batch Status', 'Completeness'].join(','),
                     ...filteredDebtors.map(d => [
-                      d.nama_peserta, d.batch_id, d.submit_status, d.admin_status, `${calculateCompleteness(d.id)}%`
+                      d.debtor_name, d.batch_id, d.credit_type, d.batch_status, `${calculateCompleteness(d)}%`
                     ].join(','))
                   ].join('\n');
                   const blob = new Blob([csv], { type: 'text/csv' });
@@ -365,9 +367,9 @@ export default function DocumentEligibility() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>{selectedDebtor.nama_peserta}</CardTitle>
+                <CardTitle>{selectedDebtor.debtor_name}</CardTitle>
                 <p className="text-sm text-gray-500 mt-1">
-                  {selectedDebtor.nomor_peserta} | Batch: {selectedDebtor.batch_id}
+                  {selectedDebtor.participant_no} | Batch: {selectedDebtor.batch_id}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -380,7 +382,7 @@ export default function DocumentEligibility() {
                   <Upload className="w-4 h-4 mr-2" />
                   Upload Document
                 </Button>
-                {calculateCompleteness(selectedDebtor.id) === 100 && selectedDebtor.admin_status !== 'COMPLETE' && (
+                {calculateCompleteness(selectedDebtor) === 100 && selectedDebtor.batch_status !== 'VALIDATED' && (
                   <Button 
                     className="bg-green-600 hover:bg-green-700"
                     onClick={() => handleSubmitCompletion(selectedDebtor)}
@@ -398,7 +400,7 @@ export default function DocumentEligibility() {
               <div>
                 <h4 className="font-semibold mb-4">Required Documents</h4>
                 <div className="space-y-3">
-                  {DOCUMENT_TYPES.Individual.map((docType, index) => {
+                  {(DOCUMENT_TYPES[selectedDebtor.credit_type] || DOCUMENT_TYPES.Individual).map((docType, index) => {
                     const doc = getDebtorDocuments(selectedDebtor.id)
                       .find(d => d.document_type === docType);
                     
@@ -470,11 +472,11 @@ export default function DocumentEligibility() {
           <DialogHeader>
             <DialogTitle>Upload Documents</DialogTitle>
             <DialogDescription>
-              Upload all required documents for {selectedDebtor?.nama_peserta}
+              Upload all required documents for {selectedDebtor?.debtor_name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[500px] overflow-y-auto">
-            {DOCUMENT_TYPES.Individual.map((docType, idx) => {
+            {(DOCUMENT_TYPES[selectedDebtor?.credit_type] || DOCUMENT_TYPES.Individual).map((docType, idx) => {
               const existingDoc = getDebtorDocuments(selectedDebtor?.id || '').find(d => d.document_type === docType);
               return (
                 <DocumentUploadRow 

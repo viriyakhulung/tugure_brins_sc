@@ -8,13 +8,13 @@ import DebtorReview from './pages/DebtorReview';
 import DocumentEligibility from './pages/DocumentEligibility';
 import Home from './pages/Home';
 import NotificationCenter from './pages/NotificationCenter';
+import NotificationSettings from './pages/NotificationSettings';
 import PaymentIntent from './pages/PaymentIntent';
 import PaymentStatus from './pages/PaymentStatus';
 import Profile from './pages/Profile';
 import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
-import NotificationSettings from './pages/NotificationSettings';
 import __Layout from './Layout.jsx';
 
 
@@ -29,13 +29,13 @@ export const PAGES = {
     "DocumentEligibility": DocumentEligibility,
     "Home": Home,
     "NotificationCenter": NotificationCenter,
+    "NotificationSettings": NotificationSettings,
     "PaymentIntent": PaymentIntent,
     "PaymentStatus": PaymentStatus,
     "Profile": Profile,
     "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
-    "NotificationSettings": NotificationSettings,
 }
 
 export const pagesConfig = {
