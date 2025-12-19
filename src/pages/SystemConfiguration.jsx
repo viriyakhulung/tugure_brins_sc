@@ -92,12 +92,28 @@ export default function SystemConfiguration() {
 
   const createSampleConfigs = async () => {
     const sampleConfigs = [
-      { config_type: 'ELIGIBILITY_RULE', config_key: 'MAX_LOAN_TENURE_MONTHS', config_value: '120', description: 'Maximum loan tenure (months)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
-      { config_type: 'ELIGIBILITY_RULE', config_key: 'MIN_LOAN_AMOUNT_IDR', config_value: '10000000', description: 'Minimum loan amount (IDR)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
-      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'COVERAGE_PERCENTAGE', config_value: '70', description: 'Default coverage percentage', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
-      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'PREMIUM_RATE_INDIVIDUAL', config_value: '0.85', description: 'Premium rate for individual credit (%)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
-      { config_type: 'APPROVAL_MATRIX', config_key: 'DEBTOR_AUTO_APPROVE_LIMIT', config_value: '100000000', description: 'Auto-approve limit (IDR)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
-      { config_type: 'APPROVAL_MATRIX', config_key: 'CLAIM_REVIEW_SLA_DAYS', config_value: '14', description: 'Claim review SLA (days)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' }
+      // Eligibility Rules
+      { config_type: 'ELIGIBILITY_RULE', config_key: 'MAX_LOAN_TENURE_MONTHS', config_value: '120', description: 'Maximum loan tenure allowed for coverage (months)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'ELIGIBILITY_RULE', config_key: 'MIN_LOAN_AMOUNT_IDR', config_value: '10000000', description: 'Minimum loan amount eligible for coverage (IDR)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'ELIGIBILITY_RULE', config_key: 'MAX_DEBTOR_AGE', config_value: '65', description: 'Maximum age of debtor at time of application', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'ELIGIBILITY_RULE', config_key: 'KOLEKTIBILITAS_THRESHOLD', config_value: '2', description: 'Maximum collectibility level allowed (0=Normal, 1=DPK, 2=KL)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'ELIGIBILITY_RULE', config_key: 'REQUIRED_DOCS_INDIVIDUAL', config_value: '4', description: 'Number of required documents for Individual credit type', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'ELIGIBILITY_RULE', config_key: 'REQUIRED_DOCS_CORPORATE', config_value: '6', description: 'Number of required documents for Corporate credit type', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      
+      // Financial Thresholds
+      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'COVERAGE_PERCENTAGE', config_value: '70', description: 'Default coverage percentage for reinsurance', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'PREMIUM_RATE_INDIVIDUAL', config_value: '0.85', description: 'Premium rate for individual credit (as % of exposure)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'PREMIUM_RATE_CORPORATE', config_value: '0.65', description: 'Premium rate for corporate credit (as % of exposure)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'MAX_CLAIM_AMOUNT_IDR', config_value: '5000000000', description: 'Maximum claimable amount per debtor (IDR)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'LATE_PAYMENT_PENALTY_RATE', config_value: '0.5', description: 'Late payment penalty rate per month (%)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'FINANCIAL_THRESHOLD', config_key: 'PAYMENT_GRACE_PERIOD_DAYS', config_value: '30', description: 'Grace period before late payment penalty applies', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      
+      // Approval Matrix
+      { config_type: 'APPROVAL_MATRIX', config_key: 'DEBTOR_AUTO_APPROVE_LIMIT', config_value: '100000000', description: 'Auto-approve debtors with exposure below this amount (IDR)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'APPROVAL_MATRIX', config_key: 'CLAIM_AUTO_APPROVE_LIMIT', config_value: '50000000', description: 'Auto-approve claims below this amount (IDR)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'APPROVAL_MATRIX', config_key: 'REQUIRES_SENIOR_APPROVAL', config_value: '500000000', description: 'Amount requiring senior management approval (IDR)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'APPROVAL_MATRIX', config_key: 'DEBTOR_REVIEW_SLA_HOURS', config_value: '48', description: 'SLA for debtor review and approval (hours)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' },
+      { config_type: 'APPROVAL_MATRIX', config_key: 'CLAIM_REVIEW_SLA_DAYS', config_value: '14', description: 'SLA for claim review and decision (days)', is_active: true, status: 'APPROVED', effective_date: '2025-01-01' }
     ];
 
     for (const config of sampleConfigs) {
@@ -105,6 +121,42 @@ export default function SystemConfiguration() {
         await base44.entities.SystemConfig.create(config);
       } catch (error) {
         console.error('Failed to create sample config:', error);
+      }
+    }
+    
+    // Create sample notifications
+    const sampleNotifications = [
+      {
+        title: 'Email Notification Sent',
+        message: 'Auto email notification has been sent to brins@company.com regarding debtor approval for Batch BATCH-2025-001. The system successfully notified the recipient about the approval of 15 debtors.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'ALL'
+      },
+      {
+        title: 'Debtor Submission Approved',
+        message: 'Batch BATCH-2025-001 with 15 debtors has been approved. Email notification was automatically sent to the submitter.',
+        type: 'DECISION',
+        module: 'DEBTOR',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: 'Payment Received',
+        message: 'Payment of IDR 50,000,000 received for Invoice INV-2025-001. Auto email notification sent to finance team.',
+        type: 'INFO',
+        module: 'PAYMENT',
+        is_read: false,
+        target_role: 'TUGURE'
+      }
+    ];
+    
+    for (const notif of sampleNotifications) {
+      try {
+        await base44.entities.Notification.create(notif);
+      } catch (error) {
+        console.error('Failed to create sample notification:', error);
       }
     }
   };

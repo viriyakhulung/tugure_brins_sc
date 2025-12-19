@@ -231,30 +231,41 @@ export default function BorderoManagement() {
               onClick={() => {
                 let data = [];
                 let headers = [];
+                let sourceData = [];
+                
                 if (activeTab === 'debtors') {
+                  sourceData = selectedItems.length > 0 
+                    ? filteredDebtors.filter(d => selectedItems.includes(d.id))
+                    : filteredDebtors;
                   headers = ['Debtor', 'Batch', 'Plafond', 'Net Premium', 'Underwriting Status', 'Bordero Status'];
-                  data = filteredDebtors.map(d => [d.debtor_name, d.batch_id, d.credit_plafond, d.net_premium, d.underwriting_status, d.bordero_status]);
+                  data = sourceData.map(d => [d.debtor_name, d.batch_id, d.credit_plafond, d.net_premium, d.underwriting_status, d.bordero_status]);
                 } else if (activeTab === 'borderos') {
+                  sourceData = selectedItems.length > 0 
+                    ? borderos.filter(b => selectedItems.includes(b.id))
+                    : borderos;
                   headers = ['Bordero ID', 'Period', 'Total Debtors', 'Total Exposure', 'Total Premium', 'Status'];
-                  data = borderos.map(b => [b.bordero_id, b.period, b.total_debtors, b.total_exposure, b.total_premium, b.status]);
+                  data = sourceData.map(b => [b.bordero_id, b.period, b.total_debtors, b.total_exposure, b.total_premium, b.status]);
                 } else if (activeTab === 'claims') {
+                  sourceData = filteredClaims;
                   headers = ['Claim No', 'Debtor', 'DOL', 'Claim Amount', 'Status'];
-                  data = filteredClaims.map(c => [c.claim_no, c.nama_tertanggung, c.dol, c.nilai_klaim, c.claim_status]);
+                  data = sourceData.map(c => [c.claim_no, c.nama_tertanggung, c.dol, c.nilai_klaim, c.claim_status]);
                 } else if (activeTab === 'subrogation') {
+                  sourceData = filteredSubrogations;
                   headers = ['Subrogation ID', 'Claim ID', 'Recovery Amount', 'Recovery Date', 'Status'];
-                  data = filteredSubrogations.map(s => [s.subrogation_id, s.claim_id, s.recovery_amount, s.recovery_date, s.status]);
+                  data = sourceData.map(s => [s.subrogation_id, s.claim_id, s.recovery_amount, s.recovery_date, s.status]);
                 }
+                
                 const csv = [headers.join(','), ...data.map(row => row.join(','))].join('\n');
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `bordero-${activeTab}.csv`;
+                a.download = `bordero-${activeTab}-${new Date().toISOString().split('T')[0]}.csv`;
                 a.click();
               }}
             >
               <Download className="w-4 h-4 mr-2" />
-              Export
+              Export Excel
             </Button>
           </div>
         }
@@ -264,7 +275,6 @@ export default function BorderoManagement() {
         filters={filters}
         onFilterChange={handleFilterChange}
         onClear={clearFilters}
-        onExport={handleExport}
         contracts={contracts}
       />
 

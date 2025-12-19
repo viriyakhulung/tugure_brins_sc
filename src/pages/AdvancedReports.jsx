@@ -308,21 +308,24 @@ export default function AdvancedReports() {
                 value={`Rp ${(lossRatio.totalPremium / 1000000).toFixed(1)}M`}
                 subtitle="Total premium collected"
                 icon={DollarSign}
-                gradient="from-blue-500 to-indigo-600"
+                gradient
+                className="from-blue-500 to-indigo-600"
               />
               <StatCard
                 title="Total Claim Paid"
                 value={`Rp ${(lossRatio.totalClaimPaid / 1000000).toFixed(1)}M`}
                 subtitle="Total claims settled"
                 icon={FileText}
-                gradient="from-red-500 to-pink-600"
+                gradient
+                className="from-red-500 to-pink-600"
               />
               <StatCard
                 title="Loss Ratio"
                 value={`${lossRatio.lossRatio.toFixed(2)}%`}
                 subtitle={lossRatio.lossRatio < 70 ? 'Healthy' : lossRatio.lossRatio < 85 ? 'Warning' : 'Critical'}
                 icon={lossRatio.lossRatio < 70 ? TrendingDown : TrendingUp}
-                gradient={lossRatio.lossRatio < 70 ? 'from-green-500 to-emerald-600' : lossRatio.lossRatio < 85 ? 'from-yellow-500 to-orange-600' : 'from-red-500 to-red-700'}
+                gradient
+                className={lossRatio.lossRatio < 70 ? 'from-green-500 to-emerald-600' : lossRatio.lossRatio < 85 ? 'from-yellow-500 to-orange-600' : 'from-red-500 to-red-700'}
               />
             </div>
 
@@ -595,21 +598,24 @@ export default function AdvancedReports() {
                 value={`Rp ${(claimPaid.totalPaid / 1000000).toFixed(1)}M`}
                 subtitle={`${claimPaid.count} claims settled`}
                 icon={FileText}
-                gradient="from-green-500 to-emerald-600"
+                gradient
+                className="from-green-500 to-emerald-600"
               />
               <StatCard
                 title="Average Claim"
                 value={`Rp ${(claimPaid.avgClaim / 1000000).toFixed(1)}M`}
                 subtitle="Per claim average"
                 icon={DollarSign}
-                gradient="from-blue-500 to-indigo-600"
+                gradient
+                className="from-blue-500 to-indigo-600"
               />
               <StatCard
                 title="Settlement Count"
                 value={claimPaid.count}
                 subtitle="Total settled claims"
                 icon={FileText}
-                gradient="from-purple-500 to-pink-600"
+                gradient
+                className="from-purple-500 to-pink-600"
               />
             </div>
 
@@ -655,28 +661,32 @@ export default function AdvancedReports() {
                 value={`Rp ${(recovery.totalClaimPaid / 1000000).toFixed(1)}M`}
                 subtitle="Total claims paid"
                 icon={FileText}
-                gradient="from-red-500 to-pink-600"
+                gradient
+                className="from-red-500 to-pink-600"
               />
               <StatCard
                 title="Total Recovered"
                 value={`Rp ${(recovery.totalRecovered / 1000000).toFixed(1)}M`}
                 subtitle="Amount recovered"
                 icon={DollarSign}
-                gradient="from-green-500 to-emerald-600"
+                gradient
+                className="from-green-500 to-emerald-600"
               />
               <StatCard
                 title="Outstanding"
                 value={`Rp ${(recovery.outstanding / 1000000).toFixed(1)}M`}
                 subtitle="Remaining to recover"
                 icon={TrendingUp}
-                gradient="from-orange-500 to-red-600"
+                gradient
+                className="from-orange-500 to-red-600"
               />
               <StatCard
                 title="Recovery Rate"
                 value={`${recovery.recoveryRate.toFixed(1)}%`}
                 subtitle="Success rate"
                 icon={TrendingDown}
-                gradient="from-blue-500 to-indigo-600"
+                gradient
+                className="from-blue-500 to-indigo-600"
               />
             </div>
 
@@ -733,14 +743,16 @@ export default function AdvancedReports() {
                 value={`Rp ${(subrogation.totalRecovery / 1000000).toFixed(1)}M`}
                 subtitle="Successfully recovered"
                 icon={DollarSign}
-                gradient="from-green-500 to-emerald-600"
+                gradient
+                className="from-green-500 to-emerald-600"
               />
               <StatCard
                 title="Success Rate"
                 value={`${subrogation.successRate}%`}
                 subtitle="Recovery success rate"
                 icon={TrendingUp}
-                gradient="from-blue-500 to-indigo-600"
+                gradient
+                className="from-blue-500 to-indigo-600"
               />
             </div>
 
