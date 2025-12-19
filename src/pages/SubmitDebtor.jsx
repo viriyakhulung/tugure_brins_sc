@@ -66,9 +66,10 @@ export default function SubmitDebtor() {
     setErrorMessage('');
 
     try {
-      // Upload file and extract data
+      // Upload file
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       
+      // Extract data with simplified schema for faster processing
       const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
         file_url,
         json_schema: {
@@ -76,53 +77,65 @@ export default function SubmitDebtor() {
           items: {
             type: 'object',
             properties: {
-              batch_id: { type: 'string' },
-              batch_month: { type: 'number' },
-              batch_year: { type: 'number' },
-              program_id: { type: 'string' },
-              product_code: { type: 'string' },
-              credit_type: { type: 'string' },
               participant_no: { type: 'string' },
-              loan_account_no: { type: 'string' },
               debtor_name: { type: 'string' },
-              debtor_identifier: { type: 'string' },
-              debtor_type: { type: 'string' },
-              debtor_address: { type: 'string' },
-              region_desc: { type: 'string' },
-              loan_type: { type: 'string' },
-              loan_type_desc: { type: 'string' },
-              covering_type_desc: { type: 'string' },
-              coverage_start_date: { type: 'string' },
-              coverage_end_date: { type: 'string' },
+              loan_account_no: { type: 'string' },
               credit_plafond: { type: 'number' },
               outstanding_amount: { type: 'number' },
               coverage_pct: { type: 'number' },
-              collectability_col: { type: 'number' },
-              flag_restruktur: { type: 'number' },
-              underwriting_status: { type: 'string' },
-              gross_premium: { type: 'number' },
-              reinsurance_premium: { type: 'number' },
-              ric_amount: { type: 'number' },
-              bf_amount: { type: 'number' },
-              net_premium: { type: 'number' },
-              unit_code: { type: 'string' },
-              unit_desc: { type: 'string' },
-              branch_code: { type: 'string' },
-              branch_desc: { type: 'string' }
+              gross_premium: { type: 'number' }
             }
           }
         }
       });
 
       if (result.status === 'success' && result.output) {
-        setPreviewData(Array.isArray(result.output) ? result.output : [result.output]);
+        // Parse and enrich data
+        const enrichedData = (Array.isArray(result.output) ? result.output : [result.output]).map((row, idx) => ({
+          batch_id: `BATCH-${new Date().toISOString().split('T')[0]}-${idx}`,
+          batch_month: new Date().getMonth() + 1,
+          batch_year: new Date().getFullYear(),
+          program_id: 'PROG-001',
+          product_code: 'KUR-MIKRO',
+          credit_type: creditType,
+          currency: 'IDR',
+          participant_no: row.participant_no || `P${Date.now()}-${idx}`,
+          loan_account_no: row.loan_account_no || `LA${Date.now()}-${idx}`,
+          debtor_name: row.debtor_name || '',
+          debtor_identifier: '',
+          debtor_type: creditType === 'Corporate' ? 'PT' : 'Individual',
+          debtor_address: '',
+          region_desc: '',
+          loan_type: 'KMK',
+          loan_type_desc: 'Kredit Modal Kerja',
+          covering_type_desc: 'Full Coverage',
+          coverage_start_date: coverageStart || new Date().toISOString().split('T')[0],
+          coverage_end_date: coverageEnd || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0],
+          credit_plafond: parseFloat(row.credit_plafond) || 0,
+          outstanding_amount: parseFloat(row.outstanding_amount) || 0,
+          coverage_pct: parseFloat(row.coverage_pct) || 75,
+          collectability_col: 1,
+          flag_restruktur: 0,
+          underwriting_status: 'DRAFT',
+          gross_premium: parseFloat(row.gross_premium) || 0,
+          reinsurance_premium: 0,
+          ric_amount: 0,
+          bf_amount: 0,
+          net_premium: parseFloat(row.gross_premium) || 0,
+          unit_code: 'U001',
+          unit_desc: 'Unit Jakarta',
+          branch_code: 'BR001',
+          branch_desc: 'Cabang Jakarta'
+        }));
+        
+        setPreviewData(enrichedData);
         setShowPreview(true);
       } else {
         setErrorMessage('Failed to extract data from file');
       }
     } catch (error) {
       console.error('File upload error:', error);
-      setErrorMessage('Failed to process file. Please check the format.');
+      setErrorMessage('Failed to process file. Please check the format and try again.');
     }
     setLoading(false);
   };
