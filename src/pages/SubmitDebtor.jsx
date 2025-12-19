@@ -137,7 +137,7 @@ export default function SubmitDebtor() {
     setErrorMessage('');
 
     try {
-      const batchId = d.batch_id || `BATCH-${Date.now()}`;
+      const batchId = previewData[0]?.batch_id || `BATCH-${Date.now()}`;
       const debtorsToCreate = previewData.map(d => ({
         ...d,
         contract_id: selectedContract,
@@ -145,6 +145,11 @@ export default function SubmitDebtor() {
         underwriting_status: 'SUBMITTED',
         batch_status: 'SUBMITTED',
         record_status: 'ACTIVE',
+        bordero_status: 'PENDING',
+        invoice_status: 'NOT_ISSUED',
+        recon_status: 'NOT_STARTED',
+        claim_status: 'NO_CLAIM',
+        subrogation_status: 'NO_SUBROGATION',
         source_system: 'EXCEL-UPLOAD'
       }));
 
@@ -201,11 +206,19 @@ export default function SubmitDebtor() {
         debtor_type: 'PT',
         credit_plafond: parseFloat(d.plafon) || 0,
         outstanding_amount: parseFloat(d.outstanding) || 0,
+        coverage_pct: 75,
+        collectability_col: 1,
+        flag_restruktur: 0,
         coverage_start_date: d.coverage_start || coverageStart,
         coverage_end_date: d.coverage_end || coverageEnd,
         underwriting_status: 'SUBMITTED',
         batch_status: 'SUBMITTED',
         record_status: 'ACTIVE',
+        bordero_status: 'PENDING',
+        invoice_status: 'NOT_ISSUED',
+        recon_status: 'NOT_STARTED',
+        claim_status: 'NO_CLAIM',
+        subrogation_status: 'NO_SUBROGATION',
         source_system: 'MANUAL-INPUT'
       }));
 

@@ -125,9 +125,24 @@ export default function ClaimReview() {
 
       await base44.entities.Claim.update(selectedClaim.id, updateData);
 
+      // Send email notifications
+      const notifSettings = await base44.entities.NotificationSetting.list();
+      const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled);
+      
+      for (const setting of brinsSettings) {
+        if ((setting.notify_on_approval && actionType === 'approve') || 
+            (setting.notify_on_rejection && actionType === 'reject')) {
+          await base44.integrations.Core.SendEmail({
+            to: setting.notification_email,
+            subject: `Claim ${newStatus} - ${selectedClaim.nama_tertanggung}`,
+            body: `Claim ${selectedClaim.claim_no} has been ${newStatus?.toLowerCase() || 'updated'}.\n\nDebtor: ${selectedClaim.nama_tertanggung}\nClaim Amount: Rp ${(selectedClaim.nilai_klaim || 0).toLocaleString('id-ID')}\nApproved Amount: Rp ${(parseFloat(approvedAmount) || 0).toLocaleString('id-ID')}\nRemarks: ${remarks}\n\nReviewed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
+          });
+        }
+      }
+
       await base44.entities.Notification.create({
         title: `Claim ${newStatus || 'Updated'}`,
-        message: `Claim ${selectedClaim.claim_id} has been ${newStatus?.toLowerCase() || 'updated'}`,
+        message: `Claim ${selectedClaim.claim_no} has been ${newStatus?.toLowerCase() || 'updated'}`,
         type: actionType === 'reject' ? 'WARNING' : 'DECISION',
         module: 'CLAIM',
         reference_id: selectedClaim.id,
@@ -170,7 +185,8 @@ export default function ClaimReview() {
   const approvedValue = approvedClaims.reduce((sum, c) => sum + (c.approved_amount || 0), 0);
 
   const claimColumns = [
-    { header: 'Claim ID', accessorKey: 'claim_id' },
+    { header: 'Claim No', accessorKey: 'claim_no' },
+    { header: 'Policy No', accessorKey: 'policy_no' },
     {
       header: 'Debtor',
       cell: (row) => (
@@ -180,8 +196,8 @@ export default function ClaimReview() {
       )
     },
     { header: 'DOL', accessorKey: 'dol' },
-    { header: 'Claim Amount', cell: (row) => `IDR ${(row.nilai_klaim || 0).toLocaleString()}` },
-    { header: 'Share Tugure', cell: (row) => `IDR ${(row.share_tugure || 0).toLocaleString()}` },
+    { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
+    { header: 'Share Tugure', cell: (row) => `${row.share_tugure_pct}% (Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')})` },
     { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> },
     { header: 'Eligibility', cell: (row) => <StatusBadge status={row.eligibility_status} /> },
     {
@@ -300,11 +316,13 @@ export default function ClaimReview() {
               className="bg-green-600 hover:bg-green-700 text-white"
               onClick={() => {
                 const exportData = claims.map(c => ({
-                  claim_id: c.claim_id,
+                  claim_no: c.claim_no,
+                  policy_no: c.policy_no,
                   debtor: c.nama_tertanggung,
                   dol: c.dol,
                   claim_amount: c.nilai_klaim,
-                  share_tugure: c.share_tugure,
+                  share_tugure_pct: c.share_tugure_pct,
+                  share_tugure_amount: c.share_tugure_amount,
                   status: c.claim_status,
                   eligibility: c.eligibility_status
                 }));
@@ -353,14 +371,14 @@ export default function ClaimReview() {
         />
         <StatCard
           title="Total Claim Value"
-          value={`IDR ${(totalClaimValue / 1000000).toFixed(1)}M`}
+          value={`Rp ${(totalClaimValue / 1000000).toFixed(1)}M`}
           icon={DollarSign}
           gradient
           className="from-purple-500 to-purple-600"
         />
         <StatCard
           title="Approved Value"
-          value={`IDR ${(approvedValue / 1000000).toFixed(1)}M`}
+          value={`Rp ${(approvedValue / 1000000).toFixed(1)}M`}
           icon={CheckCircle2}
           gradient
           className="from-green-500 to-green-600"
@@ -487,7 +505,7 @@ export default function ClaimReview() {
               {actionType === 'clarify' && 'Request Clarification'}
             </DialogTitle>
             <DialogDescription>
-              Claim: {selectedClaim?.claim_id}
+              Claim: {selectedClaim?.claim_no}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -499,7 +517,7 @@ export default function ClaimReview() {
                 </div>
                 <div>
                   <span className="text-gray-500">Claim Amount:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedClaim?.nilai_klaim || 0).toLocaleString()}</span>
+                  <span className="ml-2 font-medium">Rp {(selectedClaim?.nilai_klaim || 0).toLocaleString('id-ID')}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">DOL:</span>
@@ -507,7 +525,7 @@ export default function ClaimReview() {
                 </div>
                 <div>
                   <span className="text-gray-500">Share Tugure:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedClaim?.share_tugure || 0).toLocaleString()}</span>
+                  <span className="ml-2 font-medium">{selectedClaim?.share_tugure_pct}% (Rp {(selectedClaim?.share_tugure_amount || 0).toLocaleString('id-ID')})</span>
                 </div>
               </div>
             </div>

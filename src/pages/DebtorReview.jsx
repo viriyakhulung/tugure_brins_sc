@@ -101,6 +101,26 @@ export default function DebtorReview() {
         batch_status: newStatus === 'APPROVED' ? 'COMPLETED' : 'REJECTED'
       });
 
+      // Send email notification
+      const notifSettings = await base44.entities.NotificationSetting.list();
+      const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled);
+      
+      for (const setting of brinsSettings) {
+        if (setting.notify_on_approval && newStatus === 'APPROVED') {
+          await base44.integrations.Core.SendEmail({
+            to: setting.notification_email,
+            subject: `Debtor Approved - ${selectedDebtor.debtor_name}`,
+            body: `Debtor ${selectedDebtor.debtor_name} (${selectedDebtor.participant_no}) has been APPROVED.\n\nPlafond: Rp ${(selectedDebtor.credit_plafond || 0).toLocaleString('id-ID')}\nBranch: ${selectedDebtor.branch_desc}\n\nApproved by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
+          });
+        } else if (setting.notify_on_rejection && newStatus === 'REJECTED') {
+          await base44.integrations.Core.SendEmail({
+            to: setting.notification_email,
+            subject: `Debtor Rejected - ${selectedDebtor.debtor_name}`,
+            body: `Debtor ${selectedDebtor.debtor_name} (${selectedDebtor.participant_no}) has been REJECTED.\n\nReason: ${approvalRemarks}\n\nRejected by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
+          });
+        }
+      }
+
       await base44.entities.Notification.create({
         title: `Debtor ${newStatus}`,
         message: `${selectedDebtor.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`,

@@ -162,6 +162,18 @@ export default function ClaimSubmit() {
         eligibility_status: 'ELIGIBLE'
       });
 
+      // Send email notifications
+      const notifSettings = await base44.entities.NotificationSetting.list();
+      const tugureSettings = notifSettings.filter(s => s.user_role === 'TUGURE' && s.email_enabled && s.notify_on_claim);
+      
+      for (const setting of tugureSettings) {
+        await base44.integrations.Core.SendEmail({
+          to: setting.notification_email,
+          subject: `New Claim Submitted - ${debtor?.debtor_name}`,
+          body: `New claim has been submitted for review.\n\nClaim No: ${claimId}\nDebtor: ${debtor?.debtor_name}\nPlafond: Rp ${(debtor?.credit_plafond || 0).toLocaleString('id-ID')}\nClaim Amount: Rp ${parseFloat(claimAmount).toLocaleString('id-ID')}\nShare TUGURE: ${debtor?.coverage_pct}% (Rp ${shareTugure.toLocaleString('id-ID')})\nDOL: ${lossDate}\n\nPlease review and take action.`
+        });
+      }
+
       await base44.entities.Notification.create({
         title: 'New Claim Submitted',
         message: `Claim ${claimId} for ${debtor?.debtor_name} submitted for review`,

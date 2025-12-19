@@ -98,9 +98,21 @@ export default function PaymentIntent() {
         status: 'SUBMITTED'
       });
 
+      // Send email notifications
+      const notifSettings = await base44.entities.NotificationSetting.list();
+      const tugureSettings = notifSettings.filter(s => s.user_role === 'TUGURE' && s.email_enabled && s.notify_on_payment);
+      
+      for (const setting of tugureSettings) {
+        await base44.integrations.Core.SendEmail({
+          to: setting.notification_email,
+          subject: `Payment Intent Submitted - ${selectedInvoice.invoice_number}`,
+          body: `Payment intent has been submitted.\n\nInvoice: ${selectedInvoice.invoice_number}\nPayment Type: ${paymentType}\nPlanned Amount: Rp ${parseFloat(plannedAmount).toLocaleString('id-ID')}\nPlanned Date: ${plannedDate}\nRemarks: ${remarks}\n\nPlease review.`
+        });
+      }
+
       await base44.entities.Notification.create({
         title: 'Payment Intent Submitted',
-        message: `Payment intent of IDR ${parseFloat(plannedAmount).toLocaleString()} submitted for invoice ${selectedInvoice.invoice_number}`,
+        message: `Payment intent of Rp ${parseFloat(plannedAmount).toLocaleString('id-ID')} submitted for invoice ${selectedInvoice.invoice_number}`,
         type: 'INFO',
         module: 'PAYMENT',
         reference_id: selectedInvoice.id,
