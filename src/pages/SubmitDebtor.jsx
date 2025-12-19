@@ -323,19 +323,7 @@ export default function SubmitDebtor() {
       )}
 
       {/* Debtor Input */}
-      <Tabs defaultValue="upload" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="upload">
-            <Upload className="w-4 h-4 mr-2" />
-            Upload Excel
-          </TabsTrigger>
-          <TabsTrigger value="manual">
-            <Users className="w-4 h-4 mr-2" />
-            Manual Input
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="upload">
+      <Card>
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -400,111 +388,6 @@ export default function SubmitDebtor() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="manual">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Corporate Debtor Input</CardTitle>
-                <Button variant="outline" onClick={addCorporateDebtor}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Debtor
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {corporateDebtors.map((debtor, index) => (
-                  <div key={index} className="p-4 border rounded-lg bg-gray-50">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="font-medium">Debtor #{index + 1}</span>
-                      {corporateDebtors.length > 1 && (
-                        <Button variant="ghost" size="sm" onClick={() => removeCorporateDebtor(index)}>
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <Label>Debtor Name</Label>
-                        <Input
-                          value={debtor.nama_peserta}
-                          onChange={(e) => updateCorporateDebtor(index, 'nama_peserta', e.target.value)}
-                          placeholder="Enter debtor name"
-                        />
-                      </div>
-                      <div>
-                        <Label>Credit Limit (Plafon)</Label>
-                        <Input
-                          type="number"
-                          value={debtor.plafon}
-                          onChange={(e) => updateCorporateDebtor(index, 'plafon', e.target.value)}
-                          placeholder="Enter amount"
-                        />
-                      </div>
-                      <div>
-                        <Label>Outstanding</Label>
-                        <Input
-                          type="number"
-                          value={debtor.outstanding}
-                          onChange={(e) => updateCorporateDebtor(index, 'outstanding', e.target.value)}
-                          placeholder="Enter amount"
-                        />
-                      </div>
-                      <div>
-                        <Label>Tenor (months)</Label>
-                        <Input
-                          type="number"
-                          value={debtor.tenor}
-                          onChange={(e) => updateCorporateDebtor(index, 'tenor', e.target.value)}
-                          placeholder="Enter tenor"
-                        />
-                      </div>
-                      <div>
-                        <Label>Coverage Start</Label>
-                        <Input
-                          type="date"
-                          value={debtor.coverage_start}
-                          onChange={(e) => updateCorporateDebtor(index, 'coverage_start', e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label>Coverage End</Label>
-                        <Input
-                          type="date"
-                          value={debtor.coverage_end}
-                          onChange={(e) => updateCorporateDebtor(index, 'coverage_end', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex justify-end">
-                <Button 
-                  onClick={handleCorporateSubmit}
-                  disabled={submitting}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4 mr-2" />
-                      Submit to Tugure
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }

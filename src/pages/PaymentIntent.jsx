@@ -83,14 +83,17 @@ export default function PaymentIntent() {
   };
 
   const handleCreateIntent = async () => {
-    if (!selectedInvoice || !plannedAmount || !plannedDate) return;
+    if (selectedDebtors.length === 0 || !plannedAmount || !plannedDate) return;
 
     setProcessing(true);
     try {
+      const intentId = `PI-${Date.now()}`;
+      const selectedDebtorsList = approvedDebtors.filter(d => selectedDebtors.includes(d.id));
+      
       await base44.entities.PaymentIntent.create({
-        intent_id: `PI-${Date.now()}`,
-        invoice_id: selectedInvoice.id,
-        contract_id: selectedInvoice.contract_id,
+        intent_id: intentId,
+        invoice_id: selectedDebtorsList[0]?.invoice_no || intentId,
+        contract_id: selectedDebtorsList[0]?.contract_id || 'contract_1',
         payment_type: paymentType,
         planned_amount: parseFloat(plannedAmount),
         planned_date: plannedDate,
@@ -105,22 +108,23 @@ export default function PaymentIntent() {
       for (const setting of tugureSettings) {
         await base44.integrations.Core.SendEmail({
           to: setting.notification_email,
-          subject: `Payment Intent Submitted - ${selectedInvoice.invoice_number}`,
-          body: `Payment intent has been submitted.\n\nInvoice: ${selectedInvoice.invoice_number}\nPayment Type: ${paymentType}\nPlanned Amount: Rp ${parseFloat(plannedAmount).toLocaleString('id-ID')}\nPlanned Date: ${plannedDate}\nRemarks: ${remarks}\n\nPlease review.`
+          subject: `Payment Intent Submitted - ${intentId}`,
+          body: `Payment intent has been submitted.\n\nIntent ID: ${intentId}\nPayment Type: ${paymentType}\nPlanned Amount: Rp ${parseFloat(plannedAmount).toLocaleString('id-ID')}\nPlanned Date: ${plannedDate}\nSelected Debtors: ${selectedDebtors.length}\nRemarks: ${remarks}\n\nPlease review.`
         });
       }
 
       await base44.entities.Notification.create({
         title: 'Payment Intent Submitted',
-        message: `Payment intent of Rp ${parseFloat(plannedAmount).toLocaleString('id-ID')} submitted for invoice ${selectedInvoice.invoice_number}`,
+        message: `Payment intent of Rp ${parseFloat(plannedAmount).toLocaleString('id-ID')} submitted for ${selectedDebtors.length} debtors`,
         type: 'INFO',
         module: 'PAYMENT',
-        reference_id: selectedInvoice.id,
+        reference_id: intentId,
         target_role: 'TUGURE'
       });
 
       setSuccessMessage('Payment intent created successfully');
       setShowCreateDialog(false);
+      setSelectedDebtors([]);
       resetForm();
       loadData();
     } catch (error) {
@@ -130,7 +134,6 @@ export default function PaymentIntent() {
   };
 
   const resetForm = () => {
-    setSelectedInvoice(null);
     setPaymentType('FULL');
     setPlannedAmount('');
     setPlannedDate('');
@@ -157,11 +160,23 @@ export default function PaymentIntent() {
 
   const debtorColumns = [
     {
-      header: '',
+      header: (
+        <Checkbox
+          checked={selectedDebtors.length === approvedDebtors.filter(d => d.recon_status !== 'CLOSED').length && approvedDebtors.filter(d => d.recon_status !== 'CLOSED').length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedDebtors(approvedDebtors.filter(d => d.recon_status !== 'CLOSED').map(d => d.id));
+            } else {
+              setSelectedDebtors([]);
+            }
+          }}
+        />
+      ),
       cell: (row) => (
         <Checkbox
           checked={selectedDebtors.includes(row.id)}
           onCheckedChange={() => toggleDebtorSelection(row.id)}
+          disabled={row.recon_status === 'CLOSED'}
         />
       ),
       width: '40px'
@@ -332,27 +347,6 @@ export default function PaymentIntent() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label>Invoice Reference</Label>
-              <Select 
-                value={selectedInvoice?.id || ''} 
-                onValueChange={(v) => setSelectedInvoice(invoices.find(i => i.id === v))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select invoice" />
-                </SelectTrigger>
-                <SelectContent>
-                  {invoices.map(inv => (
-                    <SelectItem key={inv.id} value={inv.id}>
-                      {inv.invoice_number} - IDR {(inv.total_amount || 0).toLocaleString()}
-                    </SelectItem>
-                  ))}
-                  {invoices.length === 0 && (
-                    <SelectItem value="new" disabled>No invoices available</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label>Payment Type</Label>
               <Select value={paymentType} onValueChange={setPaymentType}>
                 <SelectTrigger>
@@ -397,7 +391,7 @@ export default function PaymentIntent() {
             </Button>
             <Button
               onClick={handleCreateIntent}
-              disabled={processing || !plannedAmount || !plannedDate}
+              disabled={processing || !plannedAmount || !plannedDate || selectedDebtors.length === 0}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {processing ? (

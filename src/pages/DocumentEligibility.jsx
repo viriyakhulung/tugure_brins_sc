@@ -74,6 +74,13 @@ function DocumentUploadRow({ docType, debtorId, existingDoc, onUploadComplete })
         )}
       </div>
       <div className="flex items-center gap-2">
+        {existingDoc && (
+          <Button variant="ghost" size="sm" asChild>
+            <a href={existingDoc.file_url} download={existingDoc.document_name}>
+              <Download className="w-4 h-4" />
+            </a>
+          </Button>
+        )}
         <Input
           type="file"
           onChange={(e) => setFile(e.target.files[0])}
@@ -451,6 +458,11 @@ export default function DocumentEligibility() {
                         <Button variant="ghost" size="sm" asChild>
                           <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
                             <Eye className="w-4 h-4" />
+                          </a>
+                        </Button>
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={doc.file_url} download={doc.document_name}>
+                            <Download className="w-4 h-4" />
                           </a>
                         </Button>
                       </div>

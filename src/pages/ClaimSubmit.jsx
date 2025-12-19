@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   FileText, Upload, Send, CheckCircle2, AlertCircle, 
   Download, RefreshCw, Loader2, Eye, Plus
@@ -17,9 +18,17 @@ import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 
-function ClaimDocumentUploadRow({ docType }) {
+function ClaimDocumentUploadRow({ docType, existingDoc }) {
   const [file, setFile] = useState(null);
-  const [uploaded, setUploaded] = useState(false);
+  const [uploaded, setUploaded] = useState(!!existingDoc);
+  const [fileUrl, setFileUrl] = useState(existingDoc?.file_url || null);
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploaded(true);
+    // Simulate upload - in real scenario would upload via base44.integrations.Core.UploadFile
+    setFileUrl(URL.createObjectURL(file));
+  };
 
   return (
     <div className="flex items-center gap-3 p-3 border rounded-lg">
@@ -32,9 +41,16 @@ function ClaimDocumentUploadRow({ docType }) {
           )}
           <span className="font-medium text-sm">{docType}</span>
         </div>
-        {file && <p className="text-xs text-gray-500 mt-1">{file.name}</p>}
+        {(file || existingDoc) && <p className="text-xs text-gray-500 mt-1">{file?.name || existingDoc?.document_name}</p>}
       </div>
       <div className="flex items-center gap-2">
+        {(uploaded && fileUrl) && (
+          <Button variant="ghost" size="sm" asChild>
+            <a href={fileUrl} download={file?.name || existingDoc?.document_name}>
+              <Download className="w-4 h-4" />
+            </a>
+          </Button>
+        )}
         <Input
           type="file"
           onChange={(e) => {
@@ -48,7 +64,7 @@ function ClaimDocumentUploadRow({ docType }) {
           size="sm"
           variant="outline"
           disabled={!file}
-          onClick={() => setUploaded(true)}
+          onClick={handleUpload}
         >
           {uploaded ? 'Re-upload' : 'Upload'}
         </Button>
@@ -69,6 +85,7 @@ export default function ClaimSubmit() {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [activeTab, setActiveTab] = useState('claims');
+  const [selectedClaims, setSelectedClaims] = useState([]);
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
@@ -233,7 +250,36 @@ export default function ClaimSubmit() {
     'Other Supporting Documents'
   ];
 
+  const toggleClaimSelection = (claimId) => {
+    if (selectedClaims.includes(claimId)) {
+      setSelectedClaims(selectedClaims.filter(id => id !== claimId));
+    } else {
+      setSelectedClaims([...selectedClaims, claimId]);
+    }
+  };
+
   const claimColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedClaims.length === claims.length && claims.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedClaims(claims.map(c => c.id));
+            } else {
+              setSelectedClaims([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedClaims.includes(row.id)}
+          onCheckedChange={() => toggleClaimSelection(row.id)}
+        />
+      ),
+      width: '40px'
+    },
     { header: 'Claim No', accessorKey: 'claim_no' },
     { header: 'Policy No', accessorKey: 'policy_no' },
     {

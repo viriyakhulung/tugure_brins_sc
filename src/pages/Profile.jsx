@@ -30,15 +30,23 @@ export default function Profile() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
+      // Load demo user from localStorage
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        const demoUser = JSON.parse(demoUserStr);
+        setUser(demoUser);
+      } else {
+        // Fallback to base44 user if no demo user
+        const currentUser = await base44.auth.me();
+        setUser(currentUser);
+      }
     } catch (error) {
       console.error('Failed to load user:', error);
     }
   };
 
   const logout = async () => {
-    await base44.auth.logout();
+    localStorage.removeItem('demo_user');
     window.location.href = createPageUrl('Home');
   };
 
@@ -77,6 +85,8 @@ export default function Profile() {
 
   const roleInfo = {
     admin: { label: 'Administrator', color: 'bg-purple-100 text-purple-700 border-purple-200', access: 'Full Access' },
+    BRINS: { label: 'BRINS User', color: 'bg-blue-100 text-blue-700 border-blue-200', access: 'BRINS Operations' },
+    TUGURE: { label: 'TUGURE User', color: 'bg-green-100 text-green-700 border-green-200', access: 'TUGURE Review' },
     user: { label: 'User', color: 'bg-blue-100 text-blue-700 border-blue-200', access: 'Standard Access' }
   };
 
