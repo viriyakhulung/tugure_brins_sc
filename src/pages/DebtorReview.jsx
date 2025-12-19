@@ -11,6 +11,7 @@ import {
   FileText, CheckCircle2, XCircle, Clock, Eye, Download, 
   RefreshCw, Check, X, Loader2, Search, AlertCircle
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
@@ -30,6 +31,7 @@ export default function DebtorReview() {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDebtor, setSelectedDebtor] = useState(null);
+  const [selectedDebtors, setSelectedDebtors] = useState([]);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [approvalAction, setApprovalAction] = useState('');
@@ -182,7 +184,36 @@ export default function DebtorReview() {
     return true;
   });
 
+  const toggleDebtorSelection = (debtorId) => {
+    if (selectedDebtors.includes(debtorId)) {
+      setSelectedDebtors(selectedDebtors.filter(id => id !== debtorId));
+    } else {
+      setSelectedDebtors([...selectedDebtors, debtorId]);
+    }
+  };
+
   const columns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedDebtors.length === filteredDebtors.length && filteredDebtors.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedDebtors(filteredDebtors.map(d => d.id));
+            } else {
+              setSelectedDebtors([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedDebtors.includes(row.id)}
+          onCheckedChange={() => toggleDebtorSelection(row.id)}
+        />
+      ),
+      width: '40px'
+    },
     {
       header: 'Debtor',
       cell: (row) => (

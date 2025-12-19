@@ -9,6 +9,7 @@ import {
   FileText, CheckCircle2, Clock, Eye, Download, 
   Filter, RefreshCw, Check, X, AlertCircle, Loader2
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
@@ -25,6 +26,7 @@ export default function BorderoManagement() {
   const [subrogations, setSubrogations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedItems, setSelectedItems] = useState([]);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [filters, setFilters] = useState({
     contract: 'all',
@@ -113,7 +115,36 @@ export default function BorderoManagement() {
     return true;
   });
 
+  const toggleItemSelection = (itemId) => {
+    if (selectedItems.includes(itemId)) {
+      setSelectedItems(selectedItems.filter(id => id !== itemId));
+    } else {
+      setSelectedItems([...selectedItems, itemId]);
+    }
+  };
+
   const debtorColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedItems.length === filteredDebtors.length && filteredDebtors.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedItems(filteredDebtors.map(d => d.id));
+            } else {
+              setSelectedItems([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedItems.includes(row.id)}
+          onCheckedChange={() => toggleItemSelection(row.id)}
+        />
+      ),
+      width: '40px'
+    },
     {
       header: 'Debtor',
       cell: (row) => (
@@ -141,6 +172,27 @@ export default function BorderoManagement() {
   ];
 
   const borderoColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedItems.length === borderos.length && borderos.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedItems(borderos.map(b => b.id));
+            } else {
+              setSelectedItems([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedItems.includes(row.id)}
+          onCheckedChange={() => toggleItemSelection(row.id)}
+        />
+      ),
+      width: '40px'
+    },
     { header: 'Bordero ID', accessorKey: 'bordero_id' },
     { header: 'Period', accessorKey: 'period' },
     { header: 'Total Debtors', accessorKey: 'total_debtors' },

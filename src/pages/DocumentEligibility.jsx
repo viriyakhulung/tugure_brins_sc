@@ -10,6 +10,7 @@ import {
   FileText, Upload, CheckCircle2, XCircle, AlertCircle, 
   Clock, Eye, Trash2, RefreshCw, Loader2, Search, Download
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
@@ -110,6 +111,7 @@ export default function DocumentEligibility() {
   const [debtors, setDebtors] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [selectedDebtor, setSelectedDebtor] = useState(null);
+  const [selectedDebtors, setSelectedDebtors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -222,7 +224,36 @@ export default function DocumentEligibility() {
     return matchesSearch && matchesStatus;
   });
 
+  const toggleDebtorSelection = (debtorId) => {
+    if (selectedDebtors.includes(debtorId)) {
+      setSelectedDebtors(selectedDebtors.filter(id => id !== debtorId));
+    } else {
+      setSelectedDebtors([...selectedDebtors, debtorId]);
+    }
+  };
+
   const columns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedDebtors.length === filteredDebtors.length && filteredDebtors.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedDebtors(filteredDebtors.map(d => d.id));
+            } else {
+              setSelectedDebtors([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedDebtors.includes(row.id)}
+          onCheckedChange={() => toggleDebtorSelection(row.id)}
+        />
+      ),
+      width: '40px'
+    },
     { 
       header: 'Debtor Name', 
       cell: (row) => (
@@ -272,20 +303,19 @@ export default function DocumentEligibility() {
               setShowDetailDialog(true);
             }}
           >
-            <Eye className="w-4 h-4 mr-1" />
-            View
+            <Eye className="w-4 h-4" />
           </Button>
           <Button 
             variant="outline" 
             size="sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={(e) => {
               e.stopPropagation();
               setSelectedDebtor(row);
               setShowUploadDialog(true);
             }}
           >
-            <Upload className="w-4 h-4 mr-1" />
-            Upload
+            <Upload className="w-4 h-4" />
           </Button>
         </div>
       )
