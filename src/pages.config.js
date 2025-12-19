@@ -7,8 +7,6 @@ import Dashboard from './pages/Dashboard';
 import DebtorReview from './pages/DebtorReview';
 import DocumentEligibility from './pages/DocumentEligibility';
 import Home from './pages/Home';
-import NotificationCenter from './pages/NotificationCenter';
-import NotificationSettings from './pages/NotificationSettings';
 import PaymentIntent from './pages/PaymentIntent';
 import PaymentStatus from './pages/PaymentStatus';
 import Profile from './pages/Profile';
@@ -28,8 +26,6 @@ export const PAGES = {
     "DebtorReview": DebtorReview,
     "DocumentEligibility": DocumentEligibility,
     "Home": Home,
-    "NotificationCenter": NotificationCenter,
-    "NotificationSettings": NotificationSettings,
     "PaymentIntent": PaymentIntent,
     "PaymentStatus": PaymentStatus,
     "Profile": Profile,
