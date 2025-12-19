@@ -88,7 +88,12 @@ export default function PaymentIntent() {
     setProcessing(true);
     try {
       const intentId = `PI-${Date.now()}`;
-      const selectedDebtorsList = approvedDebtors.filter(d => selectedDebtors.includes(d.id));
+      const selectedDebtorsList = approvedDebtors.filter(d => d && selectedDebtors.includes(d.id));
+      
+      if (selectedDebtorsList.length === 0) {
+        setProcessing(false);
+        return;
+      }
       
       await base44.entities.PaymentIntent.create({
         intent_id: intentId,

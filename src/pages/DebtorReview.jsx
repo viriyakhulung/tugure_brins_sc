@@ -96,6 +96,11 @@ export default function DebtorReview() {
     try {
       const newStatus = approvalAction === 'approve' ? 'APPROVED' : 'REJECTED';
       
+      if (!selectedDebtor || !selectedDebtor.id) {
+        setProcessing(false);
+        return;
+      }
+      
       await base44.entities.Debtor.update(selectedDebtor.id, {
         underwriting_status: newStatus,
         batch_status: newStatus === 'APPROVED' ? 'COMPLETED' : 'REJECTED'
