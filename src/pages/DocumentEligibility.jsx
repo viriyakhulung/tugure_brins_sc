@@ -368,8 +368,39 @@ export default function DocumentEligibility() {
         emptyMessage="No debtors found"
       />
 
+      {/* Upload Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Upload Documents</DialogTitle>
+            <DialogDescription>
+              Upload all required documents for {selectedDebtor?.debtor_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[500px] overflow-y-auto">
+            {(DOCUMENT_TYPES[selectedDebtor?.credit_type] || DOCUMENT_TYPES.Individual).map((docType, idx) => {
+              const existingDoc = getDebtorDocuments(selectedDebtor?.id || '').find(d => d.document_type === docType);
+              return (
+                <DocumentUploadRow 
+                  key={idx}
+                  docType={docType}
+                  debtorId={selectedDebtor?.id}
+                  existingDoc={existingDoc}
+                  onUploadComplete={loadData}
+                />
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowUploadDialog(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Debtor Detail Panel */}
-      {selectedDebtor && !showUploadDialog && (
+      {selectedDebtor && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -477,37 +508,6 @@ export default function DocumentEligibility() {
           </CardContent>
         </Card>
       )}
-
-      {/* Upload Dialog */}
-      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Upload Documents</DialogTitle>
-            <DialogDescription>
-              Upload all required documents for {selectedDebtor?.debtor_name}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[500px] overflow-y-auto">
-            {(DOCUMENT_TYPES[selectedDebtor?.credit_type] || DOCUMENT_TYPES.Individual).map((docType, idx) => {
-              const existingDoc = getDebtorDocuments(selectedDebtor?.id || '').find(d => d.document_type === docType);
-              return (
-                <DocumentUploadRow 
-                  key={idx}
-                  docType={docType}
-                  debtorId={selectedDebtor?.id}
-                  existingDoc={existingDoc}
-                  onUploadComplete={loadData}
-                />
-              );
-            })}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowUploadDialog(false)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

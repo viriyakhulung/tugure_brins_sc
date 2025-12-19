@@ -81,9 +81,16 @@ export default function ClaimSubmit() {
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showSubrogationDialog, setShowSubrogationDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  
+  // Subrogation form state
+  const [selectedClaim, setSelectedClaim] = useState('');
+  const [recoveryAmount, setRecoveryAmount] = useState('');
+  const [recoveryDate, setRecoveryDate] = useState('');
+  const [subrogationRemarks, setSubrogationRemarks] = useState('');
   const [activeTab, setActiveTab] = useState('claims');
   const [selectedClaims, setSelectedClaims] = useState([]);
   const [filters, setFilters] = useState({
@@ -437,10 +444,7 @@ export default function ClaimSubmit() {
             </p>
             <Button 
               className="bg-green-600 hover:bg-green-700"
-              onClick={() => {
-                // Create subrogation dialog
-                console.log('Create subrogation');
-              }}
+              onClick={() => setShowSubrogationDialog(true)}
             >
               <Plus className="w-4 h-4 mr-2" />
               New Subrogation
@@ -572,6 +576,133 @@ export default function ClaimSubmit() {
                 <>
                   <Send className="w-4 h-4 mr-2" />
                   Submit Claim
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Subrogation Dialog */}
+      <Dialog open={showSubrogationDialog} onOpenChange={setShowSubrogationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Subrogation</DialogTitle>
+            <DialogDescription>
+              Record subrogation recovery for a settled claim
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Select Claim *</Label>
+              <Select value={selectedClaim} onValueChange={setSelectedClaim}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select settled claim" />
+                </SelectTrigger>
+                <SelectContent>
+                  {claims.filter(c => c.claim_status === 'SETTLED').map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.claim_no} - {c.nama_tertanggung} (Rp {(c.nilai_klaim || 0).toLocaleString('id-ID')})
+                    </SelectItem>
+                  ))}
+                  {claims.filter(c => c.claim_status === 'SETTLED').length === 0 && (
+                    <SelectItem value="none" disabled>No settled claims available</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Recovery Amount (IDR) *</Label>
+              <Input
+                type="number"
+                value={recoveryAmount}
+                onChange={(e) => setRecoveryAmount(e.target.value)}
+                placeholder="Enter recovery amount"
+              />
+            </div>
+            <div>
+              <Label>Recovery Date *</Label>
+              <Input
+                type="date"
+                value={recoveryDate}
+                onChange={(e) => setRecoveryDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Remarks</Label>
+              <Input
+                value={subrogationRemarks}
+                onChange={(e) => setSubrogationRemarks(e.target.value)}
+                placeholder="Enter remarks"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowSubrogationDialog(false);
+              setSelectedClaim('');
+              setRecoveryAmount('');
+              setRecoveryDate('');
+              setSubrogationRemarks('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!selectedClaim || !recoveryAmount || !recoveryDate) {
+                  setErrorMessage('Please fill all required fields');
+                  return;
+                }
+                
+                setProcessing(true);
+                try {
+                  const claim = claims.find(c => c.id === selectedClaim);
+                  const subrogationId = `SUB-${Date.now()}`;
+                  
+                  await base44.entities.Subrogation.create({
+                    subrogation_id: subrogationId,
+                    claim_id: claim.claim_no,
+                    debtor_id: claim.debtor_id,
+                    recovery_amount: parseFloat(recoveryAmount),
+                    recovery_date: recoveryDate,
+                    status: 'PENDING',
+                    remarks: subrogationRemarks
+                  });
+                  
+                  await base44.entities.Notification.create({
+                    title: 'New Subrogation Created',
+                    message: `Subrogation ${subrogationId} for claim ${claim.claim_no} created`,
+                    type: 'INFO',
+                    module: 'CLAIM',
+                    reference_id: subrogationId,
+                    target_role: 'ALL'
+                  });
+                  
+                  setSuccessMessage('Subrogation created successfully');
+                  setShowSubrogationDialog(false);
+                  setSelectedClaim('');
+                  setRecoveryAmount('');
+                  setRecoveryDate('');
+                  setSubrogationRemarks('');
+                  loadData();
+                } catch (error) {
+                  console.error('Create error:', error);
+                  setErrorMessage('Failed to create subrogation');
+                }
+                setProcessing(false);
+              }}
+              disabled={processing || !selectedClaim || !recoveryAmount || !recoveryDate}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Subrogation
                 </>
               )}
             </Button>
