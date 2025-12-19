@@ -113,6 +113,7 @@ export default function DocumentEligibility() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -264,6 +265,7 @@ export default function DocumentEligibility() {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedDebtor(row);
+              setShowDetailDialog(true);
             }}
           >
             <Eye className="w-4 h-4 mr-1" />
@@ -399,31 +401,44 @@ export default function DocumentEligibility() {
         </DialogContent>
       </Dialog>
 
-      {/* Debtor Detail Panel */}
-      {selectedDebtor && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
+      {/* Debtor Detail Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedDebtor?.debtor_name}</DialogTitle>
+            <DialogDescription>
+              {selectedDebtor?.participant_no} | Batch: {selectedDebtor?.batch_id}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b">
               <div>
-                <CardTitle>{selectedDebtor.debtor_name}</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">
-                  {selectedDebtor.participant_no} | Batch: {selectedDebtor.batch_id}
-                </p>
+                <p className="text-sm text-gray-500 mb-2">Document Completeness</p>
+                <div className="flex items-center gap-4">
+                  <div className="w-48">
+                    <Progress value={calculateCompleteness(selectedDebtor?.id)} className="h-3" />
+                  </div>
+                  <span className="font-semibold text-lg">{calculateCompleteness(selectedDebtor?.id)}%</span>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button 
                   variant="outline"
                   onClick={() => {
+                    setShowDetailDialog(false);
                     setShowUploadDialog(true);
                   }}
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Upload Document
                 </Button>
-                {calculateCompleteness(selectedDebtor) === 100 && selectedDebtor.batch_status !== 'VALIDATED' && (
+                {calculateCompleteness(selectedDebtor) === 100 && selectedDebtor?.batch_status !== 'VALIDATED' && (
                   <Button 
                     className="bg-green-600 hover:bg-green-700"
-                    onClick={() => handleSubmitCompletion(selectedDebtor)}
+                    onClick={() => {
+                      handleSubmitCompletion(selectedDebtor);
+                      setShowDetailDialog(false);
+                    }}
                   >
                     <CheckCircle2 className="w-4 h-4 mr-2" />
                     Submit Completion
@@ -431,15 +446,14 @@ export default function DocumentEligibility() {
                 )}
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Required Documents Checklist */}
               <div>
                 <h4 className="font-semibold mb-4">Required Documents</h4>
                 <div className="space-y-3">
-                  {(DOCUMENT_TYPES[selectedDebtor.credit_type] || DOCUMENT_TYPES.Individual).map((docType, index) => {
-                    const doc = getDebtorDocuments(selectedDebtor.id)
+                  {(DOCUMENT_TYPES[selectedDebtor?.credit_type] || DOCUMENT_TYPES.Individual).map((docType, index) => {
+                    const doc = getDebtorDocuments(selectedDebtor?.id || '')
                       .find(d => d.document_type === docType);
                     
                     return (
@@ -472,7 +486,7 @@ export default function DocumentEligibility() {
               <div>
                 <h4 className="font-semibold mb-4">Uploaded Documents</h4>
                 <div className="space-y-3">
-                  {getDebtorDocuments(selectedDebtor.id).map((doc, index) => (
+                  {getDebtorDocuments(selectedDebtor?.id || '').map((doc, index) => (
                     <div 
                       key={index}
                       className="flex items-center justify-between p-3 border rounded-lg"
@@ -499,15 +513,20 @@ export default function DocumentEligibility() {
                       </div>
                     </div>
                   ))}
-                  {getDebtorDocuments(selectedDebtor.id).length === 0 && (
+                  {getDebtorDocuments(selectedDebtor?.id || '').length === 0 && (
                     <p className="text-center text-gray-500 py-8">No documents uploaded yet</p>
                   )}
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowDetailDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
