@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import { 
   FileText, Upload, CheckCircle2, XCircle, AlertCircle, 
   Clock, Eye, Trash2, RefreshCw, Loader2, Search, Download
@@ -440,7 +441,6 @@ export default function DocumentEligibility() {
         columns={columns}
         data={filteredDebtors}
         isLoading={loading}
-        onRowClick={setSelectedDebtor}
         emptyMessage="No debtors found"
       />
 
