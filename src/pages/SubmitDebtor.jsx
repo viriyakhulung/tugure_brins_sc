@@ -76,18 +76,39 @@ export default function SubmitDebtor() {
           items: {
             type: 'object',
             properties: {
-              cover_id: { type: 'string' },
+              batch_id: { type: 'string' },
+              batch_month: { type: 'number' },
+              batch_year: { type: 'number' },
               program_id: { type: 'string' },
-              nomor_rekening_pinjaman: { type: 'string' },
-              nomor_peserta: { type: 'string' },
+              product_code: { type: 'string' },
+              credit_type: { type: 'string' },
+              participant_no: { type: 'string' },
+              loan_account_no: { type: 'string' },
+              debtor_name: { type: 'string' },
+              debtor_identifier: { type: 'string' },
+              debtor_type: { type: 'string' },
+              debtor_address: { type: 'string' },
+              region_desc: { type: 'string' },
               loan_type: { type: 'string' },
               loan_type_desc: { type: 'string' },
-              nama_peserta: { type: 'string' },
-              plafon: { type: 'number' },
-              nominal_premi: { type: 'number' },
-              net_premi: { type: 'number' },
-              tanggal_mulai_covering: { type: 'string' },
-              tanggal_akhir_covering: { type: 'string' }
+              covering_type_desc: { type: 'string' },
+              coverage_start_date: { type: 'string' },
+              coverage_end_date: { type: 'string' },
+              credit_plafond: { type: 'number' },
+              outstanding_amount: { type: 'number' },
+              coverage_pct: { type: 'number' },
+              collectability_col: { type: 'number' },
+              flag_restruktur: { type: 'number' },
+              underwriting_status: { type: 'string' },
+              gross_premium: { type: 'number' },
+              reinsurance_premium: { type: 'number' },
+              ric_amount: { type: 'number' },
+              bf_amount: { type: 'number' },
+              net_premium: { type: 'number' },
+              unit_code: { type: 'string' },
+              unit_desc: { type: 'string' },
+              branch_code: { type: 'string' },
+              branch_desc: { type: 'string' }
             }
           }
         }
@@ -116,25 +137,15 @@ export default function SubmitDebtor() {
     setErrorMessage('');
 
     try {
-      const batchId = `BATCH-${Date.now()}`;
+      const batchId = d.batch_id || `BATCH-${Date.now()}`;
       const debtorsToCreate = previewData.map(d => ({
+        ...d,
         contract_id: selectedContract,
         batch_id: batchId,
-        cover_id: d.cover_id || '',
-        program_id: d.program_id || '194',
-        nomor_peserta: d.nomor_peserta || '',
-        nama_peserta: d.nama_peserta || '',
-        nomor_rekening_pinjaman: d.nomor_rekening_pinjaman || '',
-        loan_type: d.loan_type || '',
-        loan_type_desc: d.loan_type_desc || '',
-        plafon: d.plafon || 0,
-        nominal_premi: d.nominal_premi || 0,
-        net_premi: d.net_premi || 0,
-        coverage_start: d.tanggal_mulai_covering || coverageStart,
-        coverage_end: d.tanggal_akhir_covering || coverageEnd,
-        submit_status: 'SUBMITTED',
-        admin_status: 'INCOMPLETE',
-        exposure_status: 'PENDING'
+        underwriting_status: 'SUBMITTED',
+        batch_status: 'SUBMITTED',
+        record_status: 'ACTIVE',
+        source_system: 'EXCEL-UPLOAD'
       }));
 
       await base44.entities.Debtor.bulkCreate(debtorsToCreate);
@@ -177,17 +188,25 @@ export default function SubmitDebtor() {
 
     try {
       const batchId = `BATCH-CORP-${Date.now()}`;
-      const debtorsToCreate = validDebtors.map(d => ({
+      const debtorsToCreate = validDebtors.map((d, idx) => ({
         contract_id: selectedContract,
         batch_id: batchId,
-        nama_peserta: d.nama_peserta,
-        plafon: parseFloat(d.plafon) || 0,
-        outstanding: parseFloat(d.outstanding) || 0,
-        coverage_start: d.coverage_start || coverageStart,
-        coverage_end: d.coverage_end || coverageEnd,
-        submit_status: 'SUBMITTED',
-        admin_status: 'INCOMPLETE',
-        exposure_status: 'PENDING'
+        batch_month: new Date().getMonth() + 1,
+        batch_year: new Date().getFullYear(),
+        credit_type: 'Corporate',
+        currency: 'IDR',
+        participant_no: `P${Date.now()}-${idx}`,
+        loan_account_no: `LA${Date.now()}-${idx}`,
+        debtor_name: d.nama_peserta,
+        debtor_type: 'PT',
+        credit_plafond: parseFloat(d.plafon) || 0,
+        outstanding_amount: parseFloat(d.outstanding) || 0,
+        coverage_start_date: d.coverage_start || coverageStart,
+        coverage_end_date: d.coverage_end || coverageEnd,
+        underwriting_status: 'SUBMITTED',
+        batch_status: 'SUBMITTED',
+        record_status: 'ACTIVE',
+        source_system: 'MANUAL-INPUT'
       }));
 
       await base44.entities.Debtor.bulkCreate(debtorsToCreate);
@@ -232,20 +251,28 @@ export default function SubmitDebtor() {
   };
 
   const previewColumns = [
-    { header: 'Nama Peserta', accessorKey: 'nama_peserta' },
-    { header: 'No. Rekening', accessorKey: 'nomor_rekening_pinjaman' },
-    { header: 'Plafon', cell: (row) => `IDR ${(row.plafon || 0).toLocaleString()}` },
-    { header: 'Net Premi', cell: (row) => `IDR ${(row.net_premi || 0).toLocaleString()}` },
-    { header: 'Coverage Start', accessorKey: 'tanggal_mulai_covering' },
-    { header: 'Coverage End', accessorKey: 'tanggal_akhir_covering' }
+    { header: 'Participant No', accessorKey: 'participant_no' },
+    { header: 'Debtor Name', accessorKey: 'debtor_name' },
+    { header: 'Type', accessorKey: 'debtor_type' },
+    { header: 'Loan Account', accessorKey: 'loan_account_no' },
+    { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
+    { header: 'Premium', cell: (row) => `Rp ${(row.gross_premium || 0).toLocaleString('id-ID')}` },
+    { header: 'Branch', accessorKey: 'branch_desc' }
   ];
 
   const downloadTemplate = () => {
     const templateData = [
-      ['COVER_ID', 'PROGRAM_ID', 'NOMOR_REKENING_PINJAMAN', 'NOMOR_PESERTA', 'LOAN_TYPE', 'LOAN_TYPE_DESC', 
-       'NAMA_PESERTA', 'PLAFON', 'NOMINAL_PREMI', 'NET_PREMI', 'TANGGAL_MULAI_COVERING', 'TANGGAL_AKHIR_COVERING'],
-      ['992536', '194', '01234', '0000M.00039.2025.03.00001.1.1', 'DL', 'KMK RC RITEL', 
-       'DEBITUR A', '500000000', '10125000', '2797031.25', '28/02/2025', '28/02/2028']
+      ['batch_id', 'batch_month', 'batch_year', 'program_id', 'product_code', 'credit_type', 'currency', 
+       'participant_no', 'loan_account_no', 'debtor_name', 'debtor_identifier', 'debtor_type', 'debtor_address',
+       'region_desc', 'loan_type', 'loan_type_desc', 'covering_type_desc', 'coverage_start_date', 'coverage_end_date',
+       'credit_plafond', 'outstanding_amount', 'coverage_pct', 'collectability_col', 'flag_restruktur',
+       'underwriting_status', 'gross_premium', 'reinsurance_premium', 'ric_amount', 'bf_amount', 'net_premium',
+       'unit_code', 'unit_desc', 'branch_code', 'branch_desc'],
+      ['BATCH-2024-001', '12', '2024', 'PROG-KUR-001', 'KUR-MIKRO', 'Corporate', 'IDR',
+       'P2024001', '1234567890', 'PT Example Corp', '01.234.567.8-901.000', 'PT', 'Jl. Example No. 123, Jakarta',
+       'DKI Jakarta', 'KMK', 'Kredit Modal Kerja', 'Full Coverage', '2024-01-15', '2025-01-14',
+       '500000000', '450000000', '80', '1', '0', 'DRAFT', '5000000', '4000000', '1300000', '100000', '2600000',
+       'U001', 'Unit Jakarta', 'BR001', 'Cabang Jakarta Pusat']
     ];
     
     const csvContent = templateData.map(row => row.join(',')).join('\n');

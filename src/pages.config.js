@@ -1,3 +1,4 @@
+import AdvancedReports from './pages/AdvancedReports';
 import AuditLog from './pages/AuditLog';
 import BorderoManagement from './pages/BorderoManagement';
 import ClaimReview from './pages/ClaimReview';
@@ -13,11 +14,11 @@ import Profile from './pages/Profile';
 import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
-import AdvancedReports from './pages/AdvancedReports';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "AdvancedReports": AdvancedReports,
     "AuditLog": AuditLog,
     "BorderoManagement": BorderoManagement,
     "ClaimReview": ClaimReview,
@@ -33,7 +34,6 @@ export const PAGES = {
     "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
-    "AdvancedReports": AdvancedReports,
 }
 
 export const pagesConfig = {
