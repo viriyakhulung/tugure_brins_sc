@@ -130,30 +130,41 @@ export default function ClaimSubmit() {
       const debtor = debtors.find(d => d.id === selectedDebtor);
       
       // Check eligibility
-      if (debtor?.admin_status !== 'COMPLETE') {
+      if (debtor?.batch_status !== 'VALIDATED' && debtor?.batch_status !== 'COMPLETED') {
         setErrorMessage('Cannot submit claim: Document eligibility is not complete');
         setProcessing(false);
         return;
       }
 
       const claimId = `CLM-${Date.now()}`;
+      const maxCoverage = (debtor?.credit_plafond || 0) * (debtor?.coverage_pct || 75) / 100;
+      const shareTugure = parseFloat(claimAmount) * (debtor?.coverage_pct || 75) / 100;
+      
       await base44.entities.Claim.create({
-        claim_id: claimId,
+        claim_no: claimId,
+        policy_no: `POL/2024/${debtor?.product_code || 'KUR'}/${Date.now()}`,
+        certificate_no: `CERT-2024-${debtor?.participant_no || Date.now()}`,
         debtor_id: selectedDebtor,
         contract_id: debtor?.contract_id,
-        nama_tertanggung: debtor?.nama_peserta,
+        nama_tertanggung: debtor?.debtor_name,
+        no_ktp_npwp: debtor?.debtor_identifier,
+        no_fasilitas_kredit: debtor?.loan_account_no,
+        bdo_premi: debtor?.batch_id,
+        tanggal_realisasi_kredit: debtor?.coverage_start_date,
+        plafond: debtor?.credit_plafond,
+        max_coverage: maxCoverage,
+        kol_debitur: debtor?.collectability_col?.toString() || '1',
         dol: lossDate,
         nilai_klaim: parseFloat(claimAmount),
-        share_tugure: parseFloat(claimAmount) * 0.44,
-        plafon: debtor?.plafon,
-        max_coverage: (debtor?.plafon || 0) * 0.75,
+        share_tugure_pct: debtor?.coverage_pct || 75,
+        share_tugure_amount: shareTugure,
         claim_status: 'SUBMITTED',
         eligibility_status: 'ELIGIBLE'
       });
 
       await base44.entities.Notification.create({
         title: 'New Claim Submitted',
-        message: `Claim ${claimId} for ${debtor?.nama_peserta} submitted for review`,
+        message: `Claim ${claimId} for ${debtor?.debtor_name} submitted for review`,
         type: 'ACTION_REQUIRED',
         module: 'CLAIM',
         reference_id: claimId,
@@ -181,9 +192,11 @@ export default function ClaimSubmit() {
   const downloadTemplate = () => {
     const templateData = [
       ['NAMA_TERTANGGUNG', 'NO_KTP_NPWP', 'NO_FASILITAS_KREDIT', 'BDO_PREMI', 'TANGGAL_REALISASI_KREDIT', 
-       'PLAFOND', 'MAX_COVERAGE', 'KOL_DEBITUR', 'DOL', 'NILAI_KLAIM', 'SHARE_TUGURE'],
-      ['Nama Debitur A', '17101500875158', 'Juni 2023', '27-Jun-23', '200000000', 
-       '150000000', 'Kol 4', '22-Sep-24', '114685298', '50461531', '44%']
+       'PLAFOND', 'MAX_COVERAGE', 'KOL_DEBITUR', 'DOL', 'NILAI_KLAIM', 'CLAIMNO', 'POLICYNO', 
+       'NOMOR_SERTIFIKAT', 'SHARE_TUGURE_PCT', 'SHARE_TUGURE_AMOUNT'],
+      ['PT Sejahtera Manufacturing', '03.456.789.0-123.000', '7001234567894', 'BDO/2024/10/0025', '2024-10-10', 
+       '1200000000', '1020000000', '3', '2024-12-01', '150000000', 'CLM/2024/12/001', 'POL/2024/KUR/001',
+       'CERT-2024-100025', '85', '127500000']
     ];
     
     const csvContent = templateData.map(row => row.join(',')).join('\n');
@@ -195,7 +208,7 @@ export default function ClaimSubmit() {
     a.click();
   };
 
-  const approvedDebtors = debtors.filter(d => d.submit_status === 'APPROVED');
+  const approvedDebtors = debtors.filter(d => d.underwriting_status === 'APPROVED');
 
   const [selectedClaimForDocs, setSelectedClaimForDocs] = useState(null);
   const [showDocUploadDialog, setShowDocUploadDialog] = useState(false);
@@ -209,7 +222,8 @@ export default function ClaimSubmit() {
   ];
 
   const claimColumns = [
-    { header: 'Claim ID', accessorKey: 'claim_id' },
+    { header: 'Claim No', accessorKey: 'claim_no' },
+    { header: 'Policy No', accessorKey: 'policy_no' },
     {
       header: 'Debtor',
       cell: (row) => (
@@ -220,8 +234,8 @@ export default function ClaimSubmit() {
       )
     },
     { header: 'DOL', accessorKey: 'dol' },
-    { header: 'Claim Amount', cell: (row) => `IDR ${(row.nilai_klaim || 0).toLocaleString()}` },
-    { header: 'Share Tugure', cell: (row) => `IDR ${(row.share_tugure || 0).toLocaleString()}` },
+    { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
+    { header: 'Share Tugure', cell: (row) => `${row.share_tugure_pct}% (Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')})` },
     { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> },
     { header: 'Eligibility', cell: (row) => <StatusBadge status={row.eligibility_status} /> },
     {
@@ -296,9 +310,9 @@ export default function ClaimSubmit() {
                   return true;
                 });
                 const csv = [
-                  ['Claim ID', 'Debtor', 'DOL', 'Claim Amount', 'Share Tugure', 'Status'].join(','),
+                  ['Claim No', 'Debtor', 'DOL', 'Claim Amount', 'Share Tugure %', 'Share Tugure Amount', 'Status'].join(','),
                   ...filteredData.map(c => [
-                    c.claim_id, c.nama_tertanggung, c.dol, c.nilai_klaim, c.share_tugure, c.claim_status
+                    c.claim_no, c.nama_tertanggung, c.dol, c.nilai_klaim, c.share_tugure_pct, c.share_tugure_amount, c.claim_status
                   ].join(','))
                 ].join('\n');
                 const blob = new Blob([csv], { type: 'text/csv' });
@@ -389,7 +403,7 @@ export default function ClaimSubmit() {
           <DialogHeader>
             <DialogTitle>Upload Claim Documents</DialogTitle>
             <DialogDescription>
-              Upload required documents for claim: {selectedClaimForDocs?.claim_id || 'N/A'}
+              Upload required documents for claim: {selectedClaimForDocs?.claim_no || 'N/A'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
@@ -427,7 +441,7 @@ export default function ClaimSubmit() {
                 <SelectContent>
                   {approvedDebtors.map(d => (
                     <SelectItem key={d.id} value={d.id}>
-                      {d.nama_peserta} - IDR {(d.plafon || 0).toLocaleString()}
+                      {d.debtor_name} - Rp {(d.credit_plafond || 0).toLocaleString('id-ID')}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -438,15 +452,15 @@ export default function ClaimSubmit() {
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-500">Plafon:</span>
+                    <span className="text-gray-500">Plafond:</span>
                     <span className="ml-2 font-medium">
-                      IDR {(debtors.find(d => d.id === selectedDebtor)?.plafon || 0).toLocaleString()}
+                      Rp {(debtors.find(d => d.id === selectedDebtor)?.credit_plafond || 0).toLocaleString('id-ID')}
                     </span>
                   </div>
                   <div>
                     <span className="text-gray-500">Max Coverage:</span>
                     <span className="ml-2 font-medium">
-                      IDR {((debtors.find(d => d.id === selectedDebtor)?.plafon || 0) * 0.75).toLocaleString()}
+                      Rp {((debtors.find(d => d.id === selectedDebtor)?.credit_plafond || 0) * (debtors.find(d => d.id === selectedDebtor)?.coverage_pct || 75) / 100).toLocaleString('id-ID')}
                     </span>
                   </div>
                 </div>
