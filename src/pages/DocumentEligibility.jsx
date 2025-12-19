@@ -147,10 +147,12 @@ export default function DocumentEligibility() {
   };
 
   const calculateCompleteness = (debtor) => {
-    const debtorId = debtor.id || debtor;
-    const creditType = debtor.credit_type || 'Individual';
+    if (!debtor) return 0;
+    const debtorId = typeof debtor === 'object' ? debtor.id : debtor;
+    if (!debtorId) return 0;
+    const creditType = (typeof debtor === 'object' ? debtor.credit_type : null) || 'Individual';
     const requiredDocs = DOCUMENT_TYPES[creditType] || DOCUMENT_TYPES.Individual;
-    const debtorDocs = getDebtorDocuments(typeof debtorId === 'string' ? debtorId : debtorId.id);
+    const debtorDocs = getDebtorDocuments(debtorId);
     const completedDocs = requiredDocs.filter(type => 
       debtorDocs.some(d => d.document_type === type && d.status === 'VERIFIED')
     );
@@ -185,7 +187,9 @@ export default function DocumentEligibility() {
   };
 
   const handleSubmitCompletion = async (debtor) => {
-    const completeness = calculateCompleteness(debtor.id);
+    if (!debtor || !debtor.id) return;
+    
+    const completeness = calculateCompleteness(debtor);
     if (completeness < 100) {
       return;
     }
@@ -240,7 +244,7 @@ export default function DocumentEligibility() {
     { 
       header: 'Document Completeness',
       cell: (row) => {
-        const completeness = calculateCompleteness(row.id);
+        const completeness = calculateCompleteness(row);
         return (
           <div className="w-32">
             <div className="flex items-center justify-between mb-1">
@@ -416,9 +420,9 @@ export default function DocumentEligibility() {
                 <p className="text-sm text-gray-500 mb-2">Document Completeness</p>
                 <div className="flex items-center gap-4">
                   <div className="w-48">
-                    <Progress value={calculateCompleteness(selectedDebtor?.id)} className="h-3" />
+                    <Progress value={calculateCompleteness(selectedDebtor)} className="h-3" />
                   </div>
-                  <span className="font-semibold text-lg">{calculateCompleteness(selectedDebtor?.id)}%</span>
+                  <span className="font-semibold text-lg">{calculateCompleteness(selectedDebtor)}%</span>
                 </div>
               </div>
               <div className="flex gap-2">
