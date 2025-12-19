@@ -322,72 +322,71 @@ export default function SubmitDebtor() {
         </Alert>
       )}
 
-      {/* Debtor Input */}
+      {/* Debtor Upload */}
       <Card>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Upload Debtor Data</CardTitle>
-                <Button variant="outline" onClick={downloadTemplate}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Template
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  {loading ? (
-                    <Loader2 className="w-12 h-12 mx-auto text-blue-500 animate-spin" />
-                  ) : (
-                    <FileSpreadsheet className="w-12 h-12 mx-auto text-gray-400" />
-                  )}
-                  <p className="mt-4 text-gray-600">
-                    {uploadedFile ? uploadedFile.name : 'Click to upload or drag and drop'}
-                  </p>
-                  <p className="text-sm text-gray-400">Excel or CSV files</p>
-                </label>
-              </div>
-
-              {showPreview && previewData.length > 0 && (
-                <div className="mt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold">Preview ({previewData.length} records)</h3>
-                    <div className="flex gap-2">
-                      <Button variant="outline" onClick={() => setShowPreview(false)}>
-                        Cancel
-                      </Button>
-                      <Button 
-                        onClick={handleSubmitToTugure}
-                        disabled={submitting}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        {submitting ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Submitting...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4 mr-2" />
-                            Submit to Tugure
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <DataTable columns={previewColumns} data={previewData} />
-                </div>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Upload Debtor Data</CardTitle>
+            <Button variant="outline" onClick={downloadTemplate}>
+              <Download className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="file-upload"
+            />
+            <label htmlFor="file-upload" className="cursor-pointer">
+              {loading ? (
+                <Loader2 className="w-12 h-12 mx-auto text-blue-500 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-12 h-12 mx-auto text-gray-400" />
               )}
-            </CardContent>
-          </Card>
+              <p className="mt-4 text-gray-600">
+                {uploadedFile ? uploadedFile.name : 'Click to upload or drag and drop'}
+              </p>
+              <p className="text-sm text-gray-400">Excel or CSV files</p>
+            </label>
+          </div>
+
+          {showPreview && previewData.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Preview ({previewData.length} records)</h3>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowPreview(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSubmitToTugure}
+                    disabled={submitting}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Submit to Tugure
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <DataTable columns={previewColumns} data={previewData} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
