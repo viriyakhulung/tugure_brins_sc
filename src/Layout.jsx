@@ -91,6 +91,7 @@ export default function Layout({ children, currentPageName }) {
     ],
     shared: [
       { name: 'Bordero Management', icon: BarChart3, path: 'BorderoManagement', roles: [] }, // all users
+      { name: 'Advanced Reports', icon: BarChart3, path: 'AdvancedReports', roles: [] }, // all users
       { name: 'Notifications', icon: Bell, path: 'NotificationCenter', badge: unreadNotifications, roles: [] }, // all users
       { name: 'Audit Log', icon: Activity, path: 'AuditLog', roles: [] }, // all users
       { name: 'System Config', icon: Settings, path: 'SystemConfiguration', roles: [] }, // all users

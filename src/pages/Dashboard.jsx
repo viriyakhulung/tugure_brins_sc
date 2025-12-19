@@ -73,12 +73,12 @@ export default function Dashboard() {
       setBorderos(borderoData || []);
 
       // Calculate stats
-      const approved = debtorData.filter(d => d.submit_status === 'APPROVED').length;
-      const pending = debtorData.filter(d => d.submit_status === 'SUBMITTED').length;
-      const rejected = debtorData.filter(d => d.submit_status === 'REJECTED').length;
+      const approved = debtorData.filter(d => d.underwriting_status === 'APPROVED').length;
+      const pending = debtorData.filter(d => d.underwriting_status === 'SUBMITTED').length;
+      const rejected = debtorData.filter(d => d.underwriting_status === 'REJECTED').length;
       
-      const totalExposure = debtorData.reduce((sum, d) => sum + (d.exposure_amount || 0), 0);
-      const totalPremium = debtorData.reduce((sum, d) => sum + (d.net_premi || 0), 0);
+      const totalExposure = debtorData.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0);
+      const totalPremium = debtorData.reduce((sum, d) => sum + (d.net_premium || 0), 0);
       const totalClaimValue = claimData.reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
       const claimsPaid = claimData.filter(c => c.claim_status === 'SETTLED').reduce((sum, c) => sum + (c.approved_amount || 0), 0);
       
@@ -151,7 +151,7 @@ export default function Dashboard() {
   const getFilteredData = () => {
     return debtors.filter(d => {
       if (filters.batch !== 'all' && d.batch_id !== filters.batch) return false;
-      if (filters.submitStatus !== 'all' && d.submit_status !== filters.submitStatus) return false;
+      if (filters.submitStatus !== 'all' && d.underwriting_status !== filters.submitStatus) return false;
       return true;
     });
   };
@@ -192,8 +192,8 @@ export default function Dashboard() {
             onClick={() => {
               const data = getFilteredData();
               const csv = [
-                ['Debtor', 'Batch', 'Plafon', 'Submit Status'].join(','),
-                ...data.map(d => [d.nama_peserta, d.batch_id, d.plafon, d.submit_status].join(','))
+                ['Debtor', 'Batch', 'Plafond', 'Underwriting Status'].join(','),
+                ...data.map(d => [d.debtor_name, d.batch_id, d.credit_plafond, d.underwriting_status].join(','))
               ].join('\n');
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);

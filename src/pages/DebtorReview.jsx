@@ -97,17 +97,13 @@ export default function DebtorReview() {
       const newStatus = approvalAction === 'approve' ? 'APPROVED' : 'REJECTED';
       
       await base44.entities.Debtor.update(selectedDebtor.id, {
-        submit_status: newStatus,
-        approval_remarks: approvalRemarks,
-        approval_date: new Date().toISOString().split('T')[0],
-        approved_by: user?.email,
-        exposure_status: newStatus === 'APPROVED' ? 'ACTIVE' : 'TERMINATED',
-        exposure_amount: newStatus === 'APPROVED' ? selectedDebtor.plafon * 0.75 : 0
+        underwriting_status: newStatus,
+        batch_status: newStatus === 'APPROVED' ? 'COMPLETED' : 'REJECTED'
       });
 
       await base44.entities.Notification.create({
         title: `Debtor ${newStatus}`,
-        message: `${selectedDebtor.nama_peserta} has been ${newStatus.toLowerCase()} by ${user?.email}`,
+        message: `${selectedDebtor.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`,
         type: newStatus === 'APPROVED' ? 'INFO' : 'WARNING',
         module: 'DEBTOR',
         reference_id: selectedDebtor.id,
@@ -119,7 +115,7 @@ export default function DebtorReview() {
         module: 'DEBTOR',
         entity_type: 'Debtor',
         entity_id: selectedDebtor.id,
-        old_value: JSON.stringify({ status: selectedDebtor.submit_status }),
+        old_value: JSON.stringify({ status: selectedDebtor.underwriting_status }),
         new_value: JSON.stringify({ status: newStatus, remarks: approvalRemarks }),
         user_email: user?.email,
         user_role: user?.role,
@@ -155,7 +151,7 @@ export default function DebtorReview() {
   const filteredDebtors = debtors.filter(d => {
     if (filters.contract !== 'all' && d.contract_id !== filters.contract) return false;
     if (filters.batch && !d.batch_id?.includes(filters.batch)) return false;
-    if (filters.submitStatus !== 'all' && d.submit_status !== filters.submitStatus) return false;
+    if (filters.submitStatus !== 'all' && d.underwriting_status !== filters.submitStatus) return false;
     if (filters.startDate && d.created_date < filters.startDate) return false;
     if (filters.endDate && d.created_date > filters.endDate) return false;
     return true;
@@ -166,14 +162,14 @@ export default function DebtorReview() {
       header: 'Debtor',
       cell: (row) => (
         <div>
-          <p className="font-medium">{row.nama_peserta}</p>
-          <p className="text-sm text-gray-500">{row.nomor_peserta}</p>
+          <p className="font-medium">{row.debtor_name}</p>
+          <p className="text-sm text-gray-500">{row.participant_no}</p>
         </div>
       )
     },
     { header: 'Batch', accessorKey: 'batch_id', cell: (row) => <span className="font-mono text-sm">{row.batch_id?.slice(0, 15)}</span> },
-    { header: 'Plafon', cell: (row) => `IDR ${(row.plafon || 0).toLocaleString()}` },
-    { header: 'Premium', cell: (row) => `IDR ${(row.nominal_premi || 0).toLocaleString()}` },
+    { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
+    { header: 'Premium', cell: (row) => `Rp ${(row.gross_premium || 0).toLocaleString('id-ID')}` },
     {
       header: 'Document Progress',
       cell: (row) => {
@@ -189,8 +185,8 @@ export default function DebtorReview() {
         );
       }
     },
-    { header: 'Submit Status', cell: (row) => <StatusBadge status={row.submit_status} /> },
-    { header: 'Admin Status', cell: (row) => <StatusBadge status={row.admin_status} /> },
+    { header: 'Underwriting', cell: (row) => <StatusBadge status={row.underwriting_status} /> },
+    { header: 'Batch Status', cell: (row) => <StatusBadge status={row.batch_status} /> },
     {
       header: 'Actions',
       cell: (row) => (
@@ -205,7 +201,7 @@ export default function DebtorReview() {
           >
             <Eye className="w-4 h-4" />
           </Button>
-          {row.submit_status === 'SUBMITTED' && (
+          {row.underwriting_status === 'SUBMITTED' && (
             <>
               <Button 
                 size="sm" 
@@ -332,25 +328,25 @@ export default function DebtorReview() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Debtor Details</DialogTitle>
-            <DialogDescription>{selectedDebtor?.nama_peserta}</DialogDescription>
+            <DialogDescription>{selectedDebtor?.debtor_name}</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-gray-500">Nomor Peserta:</span>
-                <p className="font-medium">{selectedDebtor?.nomor_peserta}</p>
+                <span className="text-gray-500">Participant No:</span>
+                <p className="font-medium">{selectedDebtor?.participant_no}</p>
               </div>
               <div>
                 <span className="text-gray-500">Batch ID:</span>
                 <p className="font-medium">{selectedDebtor?.batch_id}</p>
               </div>
               <div>
-                <span className="text-gray-500">Plafon:</span>
-                <p className="font-medium">IDR {(selectedDebtor?.plafon || 0).toLocaleString()}</p>
+                <span className="text-gray-500">Plafond:</span>
+                <p className="font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</p>
               </div>
               <div>
                 <span className="text-gray-500">Premium:</span>
-                <p className="font-medium">IDR {(selectedDebtor?.nominal_premi || 0).toLocaleString()}</p>
+                <p className="font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</p>
               </div>
             </div>
 
@@ -392,27 +388,27 @@ export default function DebtorReview() {
               {approvalAction === 'approve' ? 'Approve Debtor' : 'Reject Debtor'}
             </DialogTitle>
             <DialogDescription>
-              {selectedDebtor?.nama_peserta}
+              {selectedDebtor?.debtor_name}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="p-4 bg-gray-50 rounded-lg">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500">Plafon:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedDebtor?.plafon || 0).toLocaleString()}</span>
+                  <span className="text-gray-500">Plafond:</span>
+                  <span className="ml-2 font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">Premium:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedDebtor?.nominal_premi || 0).toLocaleString()}</span>
+                  <span className="ml-2 font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">Doc Progress:</span>
                   <span className="ml-2 font-medium">{calculateDocProgress(selectedDebtor?.id || '').percentage}%</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">Admin Status:</span>
-                  <span className="ml-2"><StatusBadge status={selectedDebtor?.admin_status} /></span>
+                  <span className="text-gray-500">Batch Status:</span>
+                  <span className="ml-2"><StatusBadge status={selectedDebtor?.batch_status} /></span>
                 </div>
               </div>
             </div>

@@ -92,7 +92,7 @@ export default function BorderoManagement() {
   const filteredDebtors = debtors.filter(d => {
     if (filters.contract !== 'all' && d.contract_id !== filters.contract) return false;
     if (filters.batch && !d.batch_id?.includes(filters.batch)) return false;
-    if (filters.submitStatus !== 'all' && d.submit_status !== filters.submitStatus) return false;
+    if (filters.submitStatus !== 'all' && d.underwriting_status !== filters.submitStatus) return false;
     if (filters.reconStatus !== 'all' && d.recon_status !== filters.reconStatus) return false;
     if (filters.startDate && d.created_date < filters.startDate) return false;
     if (filters.endDate && d.created_date > filters.endDate) return false;
@@ -118,17 +118,17 @@ export default function BorderoManagement() {
       header: 'Debtor',
       cell: (row) => (
         <div>
-          <p className="font-medium">{row.nama_peserta}</p>
-          <p className="text-sm text-gray-500">{row.nomor_peserta}</p>
+          <p className="font-medium">{row.debtor_name}</p>
+          <p className="text-sm text-gray-500">{row.participant_no}</p>
         </div>
       )
     },
-    { header: 'Batch', accessorKey: 'batch_id', cell: (row) => <span className="font-mono text-sm">{row.batch_id?.slice(0, 15)}</span> },
-    { header: 'Plafon', cell: (row) => `IDR ${(row.plafon || 0).toLocaleString()}` },
-    { header: 'Net Premi', cell: (row) => `IDR ${(row.net_premi || 0).toLocaleString()}` },
-    { header: 'Submit Status', cell: (row) => <StatusBadge status={row.submit_status} /> },
-    { header: 'Admin Status', cell: (row) => <StatusBadge status={row.admin_status} /> },
-    { header: 'Exposure Status', cell: (row) => <StatusBadge status={row.exposure_status} /> },
+    { header: 'Batch', accessorKey: 'batch_id', cell: (row) => <span className="font-mono text-sm">{row.batch_id}</span> },
+    { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
+    { header: 'Net Premium', cell: (row) => `Rp ${(row.net_premium || 0).toLocaleString('id-ID')}` },
+    { header: 'Underwriting', cell: (row) => <StatusBadge status={row.underwriting_status} /> },
+    { header: 'Bordero Status', cell: (row) => <StatusBadge status={row.bordero_status} /> },
+    { header: 'Invoice Status', cell: (row) => <StatusBadge status={row.invoice_status} /> },
     {
       header: 'Actions',
       cell: (row) => (
@@ -180,8 +180,8 @@ export default function BorderoManagement() {
                 let data = [];
                 let headers = [];
                 if (activeTab === 'debtors') {
-                  headers = ['Debtor', 'Batch', 'Plafon', 'Net Premi', 'Submit Status', 'Exposure Status'];
-                  data = filteredDebtors.map(d => [d.nama_peserta, d.batch_id, d.plafon, d.net_premi, d.submit_status, d.exposure_status]);
+                  headers = ['Debtor', 'Batch', 'Plafond', 'Net Premium', 'Underwriting Status', 'Bordero Status'];
+                  data = filteredDebtors.map(d => [d.debtor_name, d.batch_id, d.credit_plafond, d.net_premium, d.underwriting_status, d.bordero_status]);
                 } else if (activeTab === 'borderos') {
                   headers = ['Bordero ID', 'Period', 'Total Debtors', 'Total Exposure', 'Total Premium', 'Status'];
                   data = borderos.map(b => [b.bordero_id, b.period, b.total_debtors, b.total_exposure, b.total_premium, b.status]);
@@ -252,14 +252,14 @@ export default function BorderoManagement() {
         <TabsContent value="exposure" className="mt-4">
           <DataTable
             columns={[
-              { header: 'Debtor', cell: (row) => row.nama_peserta },
-              { header: 'Coverage %', cell: () => '75%' },
-              { header: 'Approved Limit', cell: (row) => `IDR ${(row.plafon || 0).toLocaleString()}` },
-              { header: 'Exposure Amount', cell: (row) => `IDR ${(row.exposure_amount || 0).toLocaleString()}` },
-              { header: 'Exposure Status', cell: (row) => <StatusBadge status={row.exposure_status} /> },
-              { header: 'Admin Status', cell: (row) => <StatusBadge status={row.admin_status} /> }
+              { header: 'Debtor', cell: (row) => row.debtor_name },
+              { header: 'Coverage %', cell: (row) => `${row.coverage_pct}%` },
+              { header: 'Credit Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
+              { header: 'Outstanding', cell: (row) => `Rp ${(row.outstanding_amount || 0).toLocaleString('id-ID')}` },
+              { header: 'Underwriting', cell: (row) => <StatusBadge status={row.underwriting_status} /> },
+              { header: 'Bordero Status', cell: (row) => <StatusBadge status={row.bordero_status} /> }
             ]}
-            data={filteredDebtors.filter(d => d.submit_status === 'APPROVED')}
+            data={filteredDebtors.filter(d => d.underwriting_status === 'APPROVED')}
             isLoading={loading}
             emptyMessage="No exposure data"
           />
@@ -324,14 +324,14 @@ export default function BorderoManagement() {
             <div className="space-y-4">
               {activeTab === 'debtors' && (
                 <div className="grid grid-cols-2 gap-4">
-                  <div><Label className="text-gray-500">Nama Peserta</Label><p className="font-medium">{selectedItem.nama_peserta}</p></div>
+                  <div><Label className="text-gray-500">Debtor Name</Label><p className="font-medium">{selectedItem.debtor_name}</p></div>
                   <div><Label className="text-gray-500">Batch ID</Label><p className="font-medium">{selectedItem.batch_id}</p></div>
-                  <div><Label className="text-gray-500">Plafon</Label><p className="font-medium">IDR {(selectedItem.plafon || 0).toLocaleString()}</p></div>
-                  <div><Label className="text-gray-500">Outstanding</Label><p className="font-medium">IDR {(selectedItem.outstanding || 0).toLocaleString()}</p></div>
-                  <div><Label className="text-gray-500">Net Premi</Label><p className="font-medium">IDR {(selectedItem.net_premi || 0).toLocaleString()}</p></div>
-                  <div><Label className="text-gray-500">Exposure Amount</Label><p className="font-medium">IDR {(selectedItem.exposure_amount || 0).toLocaleString()}</p></div>
-                  <div><Label className="text-gray-500">Submit Status</Label><StatusBadge status={selectedItem.submit_status} /></div>
-                  <div><Label className="text-gray-500">Exposure Status</Label><StatusBadge status={selectedItem.exposure_status} /></div>
+                  <div><Label className="text-gray-500">Credit Plafond</Label><p className="font-medium">Rp {(selectedItem.credit_plafond || 0).toLocaleString('id-ID')}</p></div>
+                  <div><Label className="text-gray-500">Outstanding</Label><p className="font-medium">Rp {(selectedItem.outstanding_amount || 0).toLocaleString('id-ID')}</p></div>
+                  <div><Label className="text-gray-500">Net Premium</Label><p className="font-medium">Rp {(selectedItem.net_premium || 0).toLocaleString('id-ID')}</p></div>
+                  <div><Label className="text-gray-500">Gross Premium</Label><p className="font-medium">Rp {(selectedItem.gross_premium || 0).toLocaleString('id-ID')}</p></div>
+                  <div><Label className="text-gray-500">Underwriting Status</Label><StatusBadge status={selectedItem.underwriting_status} /></div>
+                  <div><Label className="text-gray-500">Bordero Status</Label><StatusBadge status={selectedItem.bordero_status} /></div>
                 </div>
               )}
               {activeTab === 'borderos' && (
