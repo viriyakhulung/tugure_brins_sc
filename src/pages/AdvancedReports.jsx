@@ -334,27 +334,99 @@ export default function AdvancedReports() {
                 {loading ? (
                   <Skeleton className="h-80 w-full" />
                 ) : (
-                  <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={lossRatio.trend}>
+                  <ResponsiveContainer width="100%" height={450}>
+                    <LineChart data={lossRatio.trend} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                       <defs>
                         <linearGradient id="colorPremium" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05}/>
                         </linearGradient>
+                        <linearGradient id="colorClaim" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05}/>
+                        </linearGradient>
+                        <filter id="shadow">
+                          <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.3"/>
+                        </filter>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
-                      <XAxis dataKey="month" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <YAxis yAxisId="left" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                      <CartesianGrid strokeDasharray="5 5" stroke="#94A3B8" strokeWidth={2} opacity={0.3} />
+                      <XAxis 
+                        dataKey="month" 
+                        tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
+                        stroke="#1E293B" 
+                        strokeWidth={3}
+                        height={60}
+                        angle={-15}
+                        textAnchor="end"
+                      />
+                      <YAxis 
+                        yAxisId="left" 
+                        tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
+                        stroke="#1E293B" 
+                        strokeWidth={3}
+                        label={{ value: 'Amount (Million Rp)', angle: -90, position: 'insideLeft', style: { fill: '#000000', fontWeight: 800 } }}
+                      />
+                      <YAxis 
+                        yAxisId="right" 
+                        orientation="right" 
+                        tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
+                        stroke="#1E293B" 
+                        strokeWidth={3}
+                        label={{ value: 'Loss Ratio (%)', angle: 90, position: 'insideRight', style: { fill: '#000000', fontWeight: 800 } }}
+                      />
                       <Tooltip 
                         formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #3B82F6', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
-                        labelStyle={{ color: '#000000', fontWeight: 700 }}
+                        contentStyle={{ 
+                          backgroundColor: '#ffffff', 
+                          border: '4px solid #3B82F6', 
+                          borderRadius: '16px', 
+                          color: '#000000', 
+                          fontWeight: 800, 
+                          boxShadow: '0 15px 40px rgba(0,0,0,0.3)',
+                          padding: '12px'
+                        }}
+                        labelStyle={{ color: '#000000', fontWeight: 800, fontSize: '14px' }}
                       />
-                      <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
-                      <Line yAxisId="left" type="monotone" dataKey="premium" stroke="#3b82f6" strokeWidth={4} name="Premium" dot={{ fill: '#3b82f6', r: 6, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
-                      <Line yAxisId="left" type="monotone" dataKey="claim" stroke="#ef4444" strokeWidth={4} name="Claim" dot={{ fill: '#ef4444', r: 6, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
-                      <Line yAxisId="right" type="monotone" dataKey="lossRatio" stroke="#10b981" strokeWidth={4} name="Loss Ratio %" dot={{ fill: '#10b981', r: 6, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                      <Legend 
+                        wrapperStyle={{ 
+                          color: '#000000', 
+                          fontWeight: 800, 
+                          fontSize: '15px',
+                          paddingTop: '20px'
+                        }} 
+                        iconSize={16}
+                      />
+                      <Line 
+                        yAxisId="left" 
+                        type="monotone" 
+                        dataKey="premium" 
+                        stroke="#3b82f6" 
+                        strokeWidth={5} 
+                        name="💵 Premium" 
+                        dot={{ fill: '#3b82f6', r: 7, strokeWidth: 3, stroke: '#fff', filter: 'url(#shadow)' }} 
+                        activeDot={{ r: 10, strokeWidth: 3, stroke: '#fff' }}
+                      />
+                      <Line 
+                        yAxisId="left" 
+                        type="monotone" 
+                        dataKey="claim" 
+                        stroke="#ef4444" 
+                        strokeWidth={5} 
+                        name="💸 Claim" 
+                        dot={{ fill: '#ef4444', r: 7, strokeWidth: 3, stroke: '#fff', filter: 'url(#shadow)' }} 
+                        activeDot={{ r: 10, strokeWidth: 3, stroke: '#fff' }}
+                      />
+                      <Line 
+                        yAxisId="right" 
+                        type="monotone" 
+                        dataKey="lossRatio" 
+                        stroke="#10b981" 
+                        strokeWidth={5} 
+                        name="📊 Loss Ratio %" 
+                        dot={{ fill: '#10b981', r: 7, strokeWidth: 3, stroke: '#fff', filter: 'url(#shadow)' }} 
+                        activeDot={{ r: 10, strokeWidth: 3, stroke: '#fff' }}
+                        strokeDasharray="8 4"
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -384,26 +456,47 @@ export default function AdvancedReports() {
                   {loading ? (
                     <Skeleton className="h-80 w-full" />
                   ) : (
-                    <ResponsiveContainer width="100%" height={300}>
+                    <ResponsiveContainer width="100%" height={350}>
                       <PieChart>
+                        <defs>
+                          <filter id="pieShadow">
+                            <feDropShadow dx="0" dy="4" stdDeviation="4" floodOpacity="0.4"/>
+                          </filter>
+                        </defs>
                         <Pie
                           data={premiumStatus}
                           dataKey="amount"
                           nameKey="status"
                           cx="50%"
                           cy="50%"
-                          outerRadius={100}
-                          label={(entry) => `${entry.status} (${entry.percentage}%)`}
-                          labelStyle={{ fill: '#000000', fontSize: '14px', fontWeight: '900' }}
+                          outerRadius={110}
+                          innerRadius={45}
+                          paddingAngle={3}
+                          label={(entry) => `${entry.status}\n${entry.percentage}%`}
+                          labelStyle={{ fill: '#000000', fontSize: '13px', fontWeight: '900' }}
+                          filter="url(#pieShadow)"
                         >
                           {premiumStatus.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={COLORS[index % COLORS.length]} 
+                              strokeWidth={3}
+                              stroke="#fff"
+                            />
                           ))}
                         </Pie>
                         <Tooltip 
                           formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                          contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #A855F7', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
-                          labelStyle={{ color: '#000000', fontWeight: 700 }}
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff', 
+                            border: '4px solid #A855F7', 
+                            borderRadius: '16px', 
+                            color: '#000000', 
+                            fontWeight: 800, 
+                            boxShadow: '0 15px 40px rgba(0,0,0,0.3)',
+                            padding: '12px'
+                          }}
+                          labelStyle={{ color: '#000000', fontWeight: 800, fontSize: '14px' }}
                         />
                       </PieChart>
                     </ResponsiveContainer>
@@ -419,18 +512,62 @@ export default function AdvancedReports() {
                   {loading ? (
                     <Skeleton className="h-80 w-full" />
                   ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={premiumStatus}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
-                        <XAxis dataKey="status" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                        <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
+                    <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={premiumStatus} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                        <defs>
+                          <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#6366f1" stopOpacity={1}/>
+                            <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                          </linearGradient>
+                          <filter id="barShadow">
+                            <feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity="0.4"/>
+                          </filter>
+                        </defs>
+                        <CartesianGrid strokeDasharray="5 5" stroke="#94A3B8" strokeWidth={2} opacity={0.3} />
+                        <XAxis 
+                          dataKey="status" 
+                          tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
+                          stroke="#1E293B" 
+                          strokeWidth={3}
+                          angle={-15}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis 
+                          tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
+                          stroke="#1E293B" 
+                          strokeWidth={3}
+                          label={{ value: 'Premium Amount (Million Rp)', angle: -90, position: 'insideLeft', style: { fill: '#000000', fontWeight: 800 } }}
+                        />
                         <Tooltip 
                           formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                          contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #6366F1', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
-                          labelStyle={{ color: '#000000', fontWeight: 700 }}
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff', 
+                            border: '4px solid #6366F1', 
+                            borderRadius: '16px', 
+                            color: '#000000', 
+                            fontWeight: 800, 
+                            boxShadow: '0 15px 40px rgba(0,0,0,0.3)',
+                            padding: '12px'
+                          }}
+                          labelStyle={{ color: '#000000', fontWeight: 800, fontSize: '14px' }}
                         />
-                        <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
-                        <Bar dataKey="amount" fill="#6366f1" name="Premium Amount" radius={[10, 10, 0, 0]} />
+                        <Legend 
+                          wrapperStyle={{ 
+                            color: '#000000', 
+                            fontWeight: 800, 
+                            fontSize: '15px',
+                            paddingTop: '20px'
+                          }}
+                          iconSize={16}
+                        />
+                        <Bar 
+                          dataKey="amount" 
+                          fill="url(#barGradient)" 
+                          name="💰 Premium Amount" 
+                          radius={[12, 12, 0, 0]}
+                          filter="url(#barShadow)"
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
