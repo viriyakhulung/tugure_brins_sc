@@ -10,6 +10,7 @@ import {
   Scale, CheckCircle2, AlertTriangle, Clock, Eye, 
   RefreshCw, Check, X, Loader2, FileText, Link, Split, Download
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
@@ -27,6 +28,8 @@ export default function Reconciliation() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('payments');
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [selectedPayments, setSelectedPayments] = useState([]);
+  const [selectedReconciliations, setSelectedReconciliations] = useState([]);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -174,7 +177,44 @@ export default function Reconciliation() {
   const matchedAmount = payments.filter(p => p.match_status === 'MATCHED').reduce((sum, p) => sum + (p.amount || 0), 0);
   const unmatchedPayments = payments.filter(p => p.match_status === 'UNMATCHED' || p.match_status === 'RECEIVED');
 
+  const togglePaymentSelection = (paymentId) => {
+    if (selectedPayments.includes(paymentId)) {
+      setSelectedPayments(selectedPayments.filter(id => id !== paymentId));
+    } else {
+      setSelectedPayments([...selectedPayments, paymentId]);
+    }
+  };
+
+  const toggleReconciliationSelection = (reconId) => {
+    if (selectedReconciliations.includes(reconId)) {
+      setSelectedReconciliations(selectedReconciliations.filter(id => id !== reconId));
+    } else {
+      setSelectedReconciliations([...selectedReconciliations, reconId]);
+    }
+  };
+
   const paymentColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedPayments.length === payments.length && payments.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedPayments(payments.map(p => p.id));
+            } else {
+              setSelectedPayments([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedPayments.includes(row.id)}
+          onCheckedChange={() => togglePaymentSelection(row.id)}
+        />
+      ),
+      width: '50px'
+    },
     { header: 'Payment Ref', accessorKey: 'payment_ref' },
     { header: 'Payment Date', accessorKey: 'payment_date' },
     { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
@@ -211,6 +251,27 @@ export default function Reconciliation() {
   ];
 
   const reconColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedReconciliations.length === reconciliations.length && reconciliations.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedReconciliations(reconciliations.map(r => r.id));
+            } else {
+              setSelectedReconciliations([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedReconciliations.includes(row.id)}
+          onCheckedChange={() => toggleReconciliationSelection(row.id)}
+        />
+      ),
+      width: '50px'
+    },
     { header: 'Recon ID', accessorKey: 'recon_id' },
     { header: 'Period', accessorKey: 'period' },
     { header: 'Total Invoiced', cell: (row) => `IDR ${(row.total_invoiced || 0).toLocaleString()}` },

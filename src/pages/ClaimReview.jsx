@@ -11,6 +11,7 @@ import {
   FileText, CheckCircle2, Eye, RefreshCw, Check, X, 
   Loader2, AlertTriangle, MessageSquare, DollarSign, Download
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import FilterPanel from "@/components/common/FilterPanel";
@@ -26,6 +27,8 @@ export default function ClaimReview() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('review');
   const [selectedClaim, setSelectedClaim] = useState(null);
+  const [selectedClaims, setSelectedClaims] = useState([]);
+  const [selectedSubrogations, setSelectedSubrogations] = useState([]);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [actionType, setActionType] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -184,7 +187,44 @@ export default function ClaimReview() {
   const totalClaimValue = claims.reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
   const approvedValue = approvedClaims.reduce((sum, c) => sum + (c.approved_amount || 0), 0);
 
+  const toggleClaimSelection = (claimId) => {
+    if (selectedClaims.includes(claimId)) {
+      setSelectedClaims(selectedClaims.filter(id => id !== claimId));
+    } else {
+      setSelectedClaims([...selectedClaims, claimId]);
+    }
+  };
+
+  const toggleSubrogationSelection = (subrogationId) => {
+    if (selectedSubrogations.includes(subrogationId)) {
+      setSelectedSubrogations(selectedSubrogations.filter(id => id !== subrogationId));
+    } else {
+      setSelectedSubrogations([...selectedSubrogations, subrogationId]);
+    }
+  };
+
   const claimColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedClaims.length === claims.length && claims.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedClaims(claims.map(c => c.id));
+            } else {
+              setSelectedClaims([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedClaims.includes(row.id)}
+          onCheckedChange={() => toggleClaimSelection(row.id)}
+        />
+      ),
+      width: '50px'
+    },
     { header: 'Claim No', accessorKey: 'claim_no' },
     { header: 'Policy No', accessorKey: 'policy_no' },
     {
@@ -255,6 +295,27 @@ export default function ClaimReview() {
   ];
 
   const subrogationColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedSubrogations.length === subrogations.length && subrogations.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedSubrogations(subrogations.map(s => s.id));
+            } else {
+              setSelectedSubrogations([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedSubrogations.includes(row.id)}
+          onCheckedChange={() => toggleSubrogationSelection(row.id)}
+        />
+      ),
+      width: '50px'
+    },
     { header: 'Subrogation ID', accessorKey: 'subrogation_id' },
     { header: 'Claim ID', accessorKey: 'claim_id' },
     { header: 'Recovery Amount', cell: (row) => `IDR ${(row.recovery_amount || 0).toLocaleString()}` },
