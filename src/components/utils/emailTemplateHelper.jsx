@@ -87,13 +87,14 @@ export async function getNotificationRecipients(targetRole, notificationType) {
 /**
  * Send email using template
  * @param {string} objectType - Type of object (Batch, Record, Nota, Claim, Subrogation)
+ * @param {string} statusFrom - Current status (optional)
  * @param {string} statusTo - Target status
  * @param {string} recipientRole - Recipient role (BRINS, TUGURE, ALL)
  * @param {string} notificationType - Notification preference field name
  * @param {object} variables - Variables for template replacement
  * @returns {Promise<void>}
  */
-export async function sendTemplatedEmail(objectType, statusTo, recipientRole, notificationType, variables) {
+export async function sendTemplatedEmail(objectType, statusFrom, statusTo, recipientRole, notificationType, variables) {
   try {
     // Get email template
     const template = await getEmailTemplate(objectType, statusTo, recipientRole);

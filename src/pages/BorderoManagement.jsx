@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   FileText, CheckCircle2, Clock, Eye, Download, 
-  Filter, RefreshCw, Check, X, AlertCircle, Loader2
+  Filter, RefreshCw, Check, X, AlertCircle, Loader2, ArrowRight
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
@@ -18,6 +18,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import { Label } from "@/components/ui/label";
 
 export default function BorderoManagement() {
+  const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('debtors');
   const [debtors, setDebtors] = useState([]);
   const [borderos, setBorderos] = useState([]);
@@ -28,6 +29,10 @@ export default function BorderoManagement() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showActionDialog, setShowActionDialog] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [actionType, setActionType] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
@@ -40,8 +45,20 @@ export default function BorderoManagement() {
   });
 
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = () => {
+    try {
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        setUser(JSON.parse(demoUserStr));
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -84,6 +101,53 @@ export default function BorderoManagement() {
   const openDetailDialog = (item) => {
     setSelectedItem(item);
     setShowDetailDialog(true);
+  };
+
+  const getNextBorderoStatus = (currentStatus) => {
+    const workflow = ['GENERATED', 'UNDER_REVIEW', 'FINAL'];
+    const idx = workflow.indexOf(currentStatus);
+    return idx >= 0 && idx < workflow.length - 1 ? workflow[idx + 1] : null;
+  };
+
+  const handleBorderoAction = async () => {
+    if (!selectedItem) return;
+    
+    setProcessing(true);
+    try {
+      const nextStatus = getNextBorderoStatus(selectedItem.status);
+      if (!nextStatus) {
+        setProcessing(false);
+        return;
+      }
+
+      const updateData = {
+        status: nextStatus,
+        [nextStatus === 'UNDER_REVIEW' ? 'reviewed_by' : 'finalized_by']: user?.email,
+        [nextStatus === 'UNDER_REVIEW' ? 'reviewed_date' : 'finalized_date']: new Date().toISOString().split('T')[0]
+      };
+
+      await base44.entities.Bordero.update(selectedItem.id, updateData);
+
+      // Update all debtors in this bordero
+      const borderoDebtors = await base44.entities.Debtor.filter({ 
+        contract_id: selectedItem.contract_id,
+        batch_id: selectedItem.batch_id
+      });
+      
+      for (const debtor of borderoDebtors) {
+        await base44.entities.Debtor.update(debtor.id, {
+          bordero_status: nextStatus
+        });
+      }
+
+      setSuccessMessage(`Bordero ${selectedItem.bordero_id} moved to ${nextStatus}`);
+      setShowActionDialog(false);
+      setSelectedItem(null);
+      loadData();
+    } catch (error) {
+      console.error('Bordero action error:', error);
+    }
+    setProcessing(false);
   };
 
   const handleExport = (format) => {
@@ -196,16 +260,32 @@ export default function BorderoManagement() {
     { header: 'Bordero ID', accessorKey: 'bordero_id' },
     { header: 'Period', accessorKey: 'period' },
     { header: 'Total Debtors', accessorKey: 'total_debtors' },
-    { header: 'Total Exposure', cell: (row) => `IDR ${(row.total_exposure || 0).toLocaleString()}` },
-    { header: 'Total Premium', cell: (row) => `IDR ${(row.total_premium || 0).toLocaleString()}` },
+    { header: 'Total Exposure', cell: (row) => `Rp ${(row.total_exposure || 0).toLocaleString('id-ID')}` },
+    { header: 'Total Premium', cell: (row) => `Rp ${(row.total_premium || 0).toLocaleString('id-ID')}` },
     { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     {
       header: 'Actions',
       cell: (row) => (
-        <Button variant="outline" size="sm" onClick={() => openDetailDialog(row)}>
-          <Eye className="w-4 h-4 mr-1" />
-          View
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => openDetailDialog(row)}>
+            <Eye className="w-4 h-4 mr-1" />
+            View
+          </Button>
+          {row.status !== 'FINAL' && getNextBorderoStatus(row.status) && (
+            <Button 
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => {
+                setSelectedItem(row);
+                setActionType(getNextBorderoStatus(row.status));
+                setShowActionDialog(true);
+              }}
+            >
+              <ArrowRight className="w-4 h-4 mr-1" />
+              {getNextBorderoStatus(row.status)}
+            </Button>
+          )}
+        </div>
       )
     }
   ];
