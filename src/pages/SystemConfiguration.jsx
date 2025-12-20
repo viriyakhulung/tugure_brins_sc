@@ -651,6 +651,7 @@ export default function SystemConfiguration() {
 
     setResetting(true);
     setResetMessage('');
+    setSuccessMessage('');
     
     try {
       let deletedCount = 0;

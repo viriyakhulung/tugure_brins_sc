@@ -63,6 +63,7 @@ export default function Layout({ children, currentPageName }) {
       setUnreadNotifications(unread);
     } catch (error) {
       console.error('Failed to load notifications:', error);
+      setUnreadNotifications(0);
     }
   };
 
