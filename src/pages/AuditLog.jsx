@@ -34,7 +34,16 @@ export default function AuditLog() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await base44.entities.AuditLog.list();
+      let data = await base44.entities.AuditLog.list();
+      
+      // Filter out any logs with sibernetik email
+      if (data && data.length > 0) {
+        data = data.filter(log => 
+          !log.user_email?.includes('sibernetik') && 
+          !log.user_email?.includes('@base44')
+        );
+      }
+      
       setLogs(data || []);
     } catch (error) {
       console.error('Failed to load audit logs:', error);
@@ -57,7 +66,25 @@ export default function AuditLog() {
   };
 
   const handleExport = () => {
-    console.log('Exporting audit logs...');
+    const csv = [
+      ['Timestamp', 'User', 'Role', 'Module', 'Action', 'Entity Type', 'Entity ID'].join(','),
+      ...filteredLogs.map(log => [
+        new Date(log.created_date).toLocaleString('id-ID'),
+        log.user_email,
+        log.user_role,
+        log.module,
+        log.action,
+        log.entity_type,
+        log.entity_id
+      ].join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-log-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
   };
 
   const filteredLogs = logs.filter(log => {

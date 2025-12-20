@@ -16,6 +16,7 @@ import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 const DOCUMENT_TYPES = [
   'Perjanjian Kredit',
@@ -123,42 +124,45 @@ export default function DebtorReview() {
         });
       }
 
-      // 3. Send email notification
+      // 3. Send templated email based on user preferences
+      // Note: No specific email template for debtor approval, using direct notification
       const notifSettings = await base44.entities.NotificationSetting.list();
-      const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled);
+      const brinsSettings = notifSettings.filter(s => 
+        s.user_role === 'BRINS' && 
+        s.email_enabled && 
+        s.notify_approval_required
+      );
       
       for (const setting of brinsSettings) {
-        if (setting.notify_approval_required) {
-          await base44.integrations.Core.SendEmail({
-            to: setting.notification_email,
-            subject: `Debtor ${newStatus} - ${selectedDebtor.debtor_name}`,
-            body: `Debtor ${selectedDebtor.debtor_name} (${selectedDebtor.participant_no}) has been ${newStatus}.\n\nPlafond: Rp ${(selectedDebtor.credit_plafond || 0).toLocaleString('id-ID')}\nBranch: ${selectedDebtor.branch_desc}\nRemarks: ${approvalRemarks}\n\nProcessed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
-          });
-        }
+        await base44.integrations.Core.SendEmail({
+          to: setting.notification_email,
+          subject: `Debtor ${newStatus} - ${selectedDebtor.debtor_name}`,
+          body: `Dear BRINS Team,\n\nDebtor ${selectedDebtor.debtor_name} (${selectedDebtor.participant_no}) has been ${newStatus}.\n\nDebtor Details:\n- Plafond: Rp ${(selectedDebtor.credit_plafond || 0).toLocaleString('id-ID')}\n- Premium: Rp ${(selectedDebtor.gross_premium || 0).toLocaleString('id-ID')}\n- Branch: ${selectedDebtor.branch_desc}\n- Batch: ${selectedDebtor.batch_id}\n\nRemarks: ${approvalRemarks}\n\nProcessed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}\n\nBest regards,\nTUGURE Reinsurance System`
+        });
       }
 
       // 4. Create notification
-      await base44.entities.Notification.create({
-        title: `Debtor ${newStatus}`,
-        message: `${selectedDebtor.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`,
-        type: newStatus === 'APPROVED' ? 'INFO' : 'WARNING',
-        module: 'DEBTOR',
-        reference_id: selectedDebtor.id,
-        target_role: 'BRINS'
-      });
+      await createNotification(
+        `Debtor ${newStatus}`,
+        `${selectedDebtor.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`,
+        newStatus === 'APPROVED' ? 'INFO' : 'WARNING',
+        'DEBTOR',
+        selectedDebtor.id,
+        'BRINS'
+      );
 
-      // 5. Audit log
-      await base44.entities.AuditLog.create({
-        action: `DEBTOR_${newStatus}`,
-        module: 'DEBTOR',
-        entity_type: 'Debtor',
-        entity_id: selectedDebtor.id,
-        old_value: JSON.stringify({ status: selectedDebtor.underwriting_status }),
-        new_value: JSON.stringify({ status: newStatus, remarks: approvalRemarks }),
-        user_email: user?.email,
-        user_role: user?.role,
-        reason: approvalRemarks
-      });
+      // 5. Create audit log
+      await createAuditLog(
+        `DEBTOR_${newStatus}`,
+        'DEBTOR',
+        'Debtor',
+        selectedDebtor.id,
+        { status: selectedDebtor.underwriting_status },
+        { status: newStatus, remarks: approvalRemarks },
+        user?.email,
+        user?.role,
+        approvalRemarks
+      );
 
       setSuccessMessage(`Debtor ${approvalAction === 'approve' ? 'approved' : 'rejected'} successfully`);
       setShowApprovalDialog(false);
