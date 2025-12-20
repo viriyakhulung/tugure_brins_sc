@@ -794,8 +794,7 @@ export default function SystemConfiguration() {
       header: 'User',
       cell: (row) => (
         <div>
-          <p className="font-medium">{row.full_name || row.user_email}</p>
-          <p className="text-xs text-gray-500">{row.user_email}</p>
+          <p className="font-medium">{row.full_name || 'No Name'}</p>
           <StatusBadge status={row.user_role} className="mt-1" />
         </div>
       )
@@ -838,6 +837,7 @@ export default function SystemConfiguration() {
       cell: (row) => (
         <Button variant="ghost" size="sm" onClick={() => {
           setCurrentSetting(row);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }}>
           <Edit className="w-4 h-4" />
         </Button>
