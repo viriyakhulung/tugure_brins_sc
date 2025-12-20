@@ -28,6 +28,9 @@ export default function SystemConfiguration() {
   const [selectedSettings, setSelectedSettings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('notifications');
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [showSettingDialog, setShowSettingDialog] = useState(false);
   const [editingConfig, setEditingConfig] = useState(null);
@@ -127,28 +130,76 @@ export default function SystemConfiguration() {
     // Create sample notifications
     const sampleNotifications = [
       {
-        title: 'Email Notification Sent',
-        message: 'Auto email notification has been sent to brins@company.com regarding debtor approval for Batch BATCH-2025-001. The system successfully notified the recipient about the approval of 15 debtors.',
+        title: '[Batch] Status Updated: Uploaded → Validated',
+        message: 'Batch BATCH-2025-001 has been validated by tugure@company.com. Email notification sent to brins@company.com with validation details.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: '[Batch] Status Updated: Validated → Matched',
+        message: 'Batch BATCH-2025-001 has been matched by system. 45 records matched successfully. Email notification sent to both parties.',
         type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
         target_role: 'ALL'
       },
       {
-        title: 'Debtor Submission Approved',
-        message: 'Batch BATCH-2025-001 with 15 debtors has been approved. Email notification was automatically sent to the submitter.',
+        title: '[Batch] Status Updated: Matched → Approved',
+        message: 'Batch BATCH-2025-001 with total premium IDR 125,000,000 has been approved by tugure@company.com. Auto email sent to BRINS.',
         type: 'DECISION',
-        module: 'DEBTOR',
+        module: 'SYSTEM',
         is_read: false,
         target_role: 'BRINS'
       },
       {
-        title: 'Payment Received',
-        message: 'Payment of IDR 50,000,000 received for Invoice INV-2025-001. Auto email notification sent to finance team.',
+        title: '[Nota] Status Updated: Draft → Issued',
+        message: 'Nota NOTA-2025-001 for Batch BATCH-2025-001 has been issued. Total amount: IDR 125,000,000. Email sent to brins@company.com.',
+        type: 'ACTION_REQUIRED',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: '[Nota] Status Updated: Issued → Confirmed',
+        message: 'Nota NOTA-2025-001 has been confirmed by Branch. Email notification sent to tugure@company.com for payment processing.',
         type: 'INFO',
-        module: 'PAYMENT',
+        module: 'SYSTEM',
         is_read: false,
         target_role: 'TUGURE'
+      },
+      {
+        title: '[Claim] Status Updated: Draft → Checked',
+        message: 'Claim CLM-2025-001 for debtor PT ABC has been checked and approved. Email notification sent to brins@company.com.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: '[Claim] Status Updated: Checked → Doc Verified',
+        message: 'Claim CLM-2025-001 documents verified successfully. Next step: invoicing. Email sent to finance team.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'TUGURE'
+      },
+      {
+        title: '[Record] Status Updated: Accepted → Revised',
+        message: 'Record REC-2025-001 in Batch BATCH-2025-002 marked as Revised. Reason: Incomplete documentation. Email sent to brins@company.com.',
+        type: 'WARNING',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: '[Subrogation] Status Updated: Draft → Invoiced',
+        message: 'Subrogation SUB-2025-001 for Claim CLM-2025-001 has been invoiced. Recovery amount: IDR 25,000,000. Email sent to BRINS.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
       }
     ];
     
@@ -157,6 +208,90 @@ export default function SystemConfiguration() {
         await base44.entities.Notification.create(notif);
       } catch (error) {
         console.error('Failed to create sample notification:', error);
+      }
+    }
+    
+    // Create sample email templates
+    const sampleTemplates = [
+      {
+        object_type: 'Batch',
+        status_from: 'Uploaded',
+        status_to: 'Validated',
+        recipient_role: 'BRINS',
+        email_subject: 'Batch {batch_id} - Validated Successfully',
+        email_body: 'Dear BRINS Team,\n\nYour batch {batch_id} has been validated successfully by {user_name} on {date}.\n\nTotal Records: {total_records}\nTotal Premium: {total_premium}\n\nNext Step: Matching process\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'Batch',
+        status_from: 'Matched',
+        status_to: 'Approved',
+        recipient_role: 'BRINS',
+        email_subject: 'Batch {batch_id} - Approved',
+        email_body: 'Dear BRINS Team,\n\nBatch {batch_id} has been approved by {user_name}.\n\nApproval Date: {date}\nTotal Exposure: {total_exposure}\nTotal Premium: {total_premium}\n\nNota will be issued shortly.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'Nota',
+        status_from: 'Draft',
+        status_to: 'Issued',
+        recipient_role: 'BRINS',
+        email_subject: 'Nota {nota_number} - Issued',
+        email_body: 'Dear BRINS Team,\n\nNota {nota_number} has been issued for {nota_type} {reference_id}.\n\nAmount: {amount}\nIssued Date: {date}\n\nPlease confirm receipt at your branch.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'Nota',
+        status_from: 'Issued',
+        status_to: 'Confirmed',
+        recipient_role: 'TUGURE',
+        email_subject: 'Nota {nota_number} - Branch Confirmed',
+        email_body: 'Dear TUGURE Team,\n\nNota {nota_number} has been confirmed by Branch on {date}.\n\nConfirmed by: {user_name}\nAmount: {amount}\n\nPlease proceed with payment processing.\n\nBest regards,\nBRINS System',
+        is_active: true
+      },
+      {
+        object_type: 'Claim',
+        status_from: 'Draft',
+        status_to: 'Checked',
+        recipient_role: 'BRINS',
+        email_subject: 'Claim {claim_no} - Checked',
+        email_body: 'Dear BRINS Team,\n\nClaim {claim_no} for debtor {debtor_name} has been checked.\n\nClaim Amount: {claim_amount}\nChecked Date: {date}\n\nNext Step: Document verification\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'Claim',
+        status_from: 'Doc Verified',
+        status_to: 'Invoiced',
+        recipient_role: 'BRINS',
+        email_subject: 'Claim {claim_no} - Invoiced',
+        email_body: 'Dear BRINS Team,\n\nClaim {claim_no} has been invoiced.\n\nInvoice Amount: {claim_amount}\nInvoiced Date: {date}\n\nPayment will be processed shortly.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'Record',
+        status_from: 'Accepted',
+        status_to: 'Revised',
+        recipient_role: 'BRINS',
+        email_subject: 'Record {record_id} - Revision Required',
+        email_body: 'Dear BRINS Team,\n\nRecord {record_id} in Batch {batch_id} requires revision.\n\nReason: {revision_reason}\nRevised Date: {date}\n\nPlease submit corrected information.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'Subrogation',
+        status_from: 'Draft',
+        status_to: 'Invoiced',
+        recipient_role: 'BRINS',
+        email_subject: 'Subrogation {subrogation_id} - Invoiced',
+        email_body: 'Dear BRINS Team,\n\nSubrogation {subrogation_id} for Claim {claim_id} has been invoiced.\n\nRecovery Amount: {recovery_amount}\nInvoiced Date: {date}\n\nBest regards,\nTUGURE System',
+        is_active: true
+      }
+    ];
+    
+    for (const template of sampleTemplates) {
+      try {
+        await base44.entities.EmailTemplate.create(template);
+      } catch (error) {
+        console.error('Failed to create sample template:', error);
       }
     }
   };
