@@ -341,37 +341,78 @@ export default function SubmitDebtor() {
   ];
 
   const downloadTemplate = () => {
-    const templateData = [
-      // Header matching user requirements
-      ['cover_id', 'program_id', 'batch_month', 'batch_year', 'nomor_peserta', 'nomor_rekening_pinjaman', 
-       'nomor_perjanjian_kredit', 'nama_peserta', 'alamat_usaha', 'loan_type', 'loan_type_desc', 
-       'jenis_pengajuan_desc', 'jenis_covering_desc', 'tanggal_mulai_covering', 'tanggal_akhir_covering', 
-       'plafon', 'nominal_premi', 'premium_reinsurance', 'ric_amount', 'bf_amount', 'net_premi', 
-       'unit_code', 'unit_desc', 'branch_desc', 'region_desc', 'status_aktif', 'flag_restruktur', 
-       'kolektabilitas', 'remark_premi'],
-      // Example Individual
-      ['1001', 'PROG-KUR-001', '1', '2025', 'P2024001', '1001234567', 'PKS/2024/001', 
-       'Budi Santoso', 'Jl. Merdeka No. 45, Jakarta Pusat', 'KMK', 'Kredit Modal Kerja', 
-       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14', 
-       '50000000', '500000', '400000', '130000', '10000', '360000', 
-       'U001', 'Unit Jakarta', 'Cabang Jakarta Pusat', 'DKI Jakarta', '1', '0', 
+    // Proper CSV formatting with quoted fields to handle commas in addresses
+    const escapeCSV = (field) => {
+      if (field === null || field === undefined) return '';
+      const str = String(field);
+      // If field contains comma, quote, or newline, wrap in quotes and escape quotes
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const headers = [
+      'cover_id', 'program_id', 'batch_month', 'batch_year', 'nomor_peserta', 'nomor_rekening_pinjaman',
+      'nomor_perjanjian_kredit', 'nama_peserta', 'alamat_usaha', 'loan_type', 'loan_type_desc',
+      'jenis_pengajuan_desc', 'jenis_covering_desc', 'tanggal_mulai_covering', 'tanggal_akhir_covering',
+      'plafon', 'nominal_premi', 'premium_reinsurance', 'ric_amount', 'bf_amount', 'net_premi',
+      'unit_code', 'unit_desc', 'branch_desc', 'region_desc', 'status_aktif', 'flag_restruktur',
+      'kolektabilitas', 'remark_premi'
+    ];
+
+    const sampleData = [
+      // Individual Example 1
+      ['1001', 'PROG-KUR-001', '1', '2025', 'P2025001', '1001234567', 'PKS-2025-001',
+       'Budi Santoso', 'Jl. Merdeka No. 45 Jakarta Pusat', 'KMK', 'Kredit Modal Kerja',
+       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
+       '50000000', '500000', '100000', '30000', '10000', '360000',
+       'U001', 'Unit Jakarta', 'Cabang Jakarta Pusat', 'DKI Jakarta', '1', '0',
        '1', 'Premi individual KUR'],
-      // Example Corporate
-      ['1002', 'PROG-KUR-002', '1', '2025', 'P2024002', '1001234568', 'PKS/2024/002', 
-       'PT Sejahtera Abadi', 'Jl. Sudirman No. 100, Jakarta Selatan', 'KI', 'Kredit Investasi', 
-       'Pengajuan Baru', 'Proportional Coverage', '2025-01-15', '2026-01-14', 
-       '500000000', '5000000', '4000000', '1300000', '100000', '3600000', 
-       'U002', 'Unit Jakarta Selatan', 'Cabang Jakarta Selatan', 'DKI Jakarta', '1', '0', 
+      // Individual Example 2
+      ['1002', 'PROG-KUR-001', '1', '2025', 'P2025002', '1001234568', 'PKS-2025-002',
+       'Siti Nurhaliza', 'Jl. Gatot Subroto No. 123 Jakarta Selatan', 'KMK', 'Kredit Modal Kerja',
+       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
+       '75000000', '750000', '150000', '45000', '15000', '540000',
+       'U002', 'Unit Jakarta Selatan', 'Cabang Jakarta Selatan', 'DKI Jakarta', '1', '0',
+       '1', 'Premi individual KMK'],
+      // Individual Example 3
+      ['1003', 'PROG-KUR-001', '1', '2025', 'P2025003', '1001234569', 'PKS-2025-003',
+       'Ahmad Hidayat', 'Jl. Thamrin No. 88 Jakarta Pusat', 'KUR', 'Kredit Usaha Rakyat',
+       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
+       '100000000', '1000000', '200000', '60000', '20000', '720000',
+       'U001', 'Unit Jakarta', 'Cabang Jakarta Pusat', 'DKI Jakarta', '1', '0',
+       '1', 'Premi KUR Mikro'],
+      // Corporate Example 1
+      ['2001', 'PROG-CORP-001', '1', '2025', 'C2025001', '2001234567', 'PKS-CORP-2025-001',
+       'PT Maju Jaya Sentosa', 'Jl. Sudirman Kav 52-53 Jakarta Selatan', 'KI', 'Kredit Investasi',
+       'Pengajuan Baru', 'Proportional Coverage', '2025-01-15', '2026-01-14',
+       '500000000', '5000000', '1000000', '300000', '100000', '3600000',
+       'U002', 'Unit Jakarta Selatan', 'Cabang Jakarta Selatan', 'DKI Jakarta', '1', '0',
+       '1', 'Premi corporate investasi'],
+      // Corporate Example 2
+      ['2002', 'PROG-CORP-001', '1', '2025', 'C2025002', '2001234568', 'PKS-CORP-2025-002',
+       'PT Sejahtera Mandiri', 'Jl. HR Rasuna Said Kav C-22 Jakarta Selatan', 'KI', 'Kredit Investasi',
+       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
+       '1000000000', '10000000', '2000000', '600000', '200000', '7200000',
+       'U002', 'Unit Jakarta Selatan', 'Cabang Jakarta Selatan', 'DKI Jakarta', '1', '0',
        '1', 'Premi corporate full coverage']
     ];
-    
-    const csvContent = templateData.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+
+    // Build CSV with proper escaping
+    const csvRows = [
+      headers.map(escapeCSV).join(','),
+      ...sampleData.map(row => row.map(escapeCSV).join(','))
+    ];
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'batch_premi_template.csv';
     a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
