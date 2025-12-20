@@ -74,12 +74,18 @@ export default function SystemConfiguration() {
         base44.entities.EmailTemplate.list()
       ]);
       
+      // Always load system configs
+      setSystemConfigs(configData || []);
+      
+      // Create sample data if empty
       if (!configData || configData.length === 0) {
         await createSampleConfigs();
         const newConfigData = await base44.entities.SystemConfig.list();
+        const newNotifData = await base44.entities.Notification.list();
+        const newTemplateData = await base44.entities.EmailTemplate.list();
         setSystemConfigs(newConfigData || []);
-      } else {
-        setSystemConfigs(configData || []);
+        setNotifications(newNotifData || []);
+        setEmailTemplates(newTemplateData || []);
       }
       
       setNotifications(notifData || []);
