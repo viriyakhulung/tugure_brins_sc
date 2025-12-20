@@ -684,112 +684,73 @@ export default function AdvancedReports() {
               </CardContent>
             </Card>
 
+            {/* Claim Status Trend */}
             <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-blue-50">
               <CardHeader className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-b-4 border-indigo-700">
-                <CardTitle className="text-white font-bold text-xl">📊 Loss Ratio Trend</CardTitle>
+                <CardTitle className="text-white font-bold text-xl">📊 Claim Movement by Status Over Time</CardTitle>
               </CardHeader>
               <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-blue-50">
                 {loading ? (
                   <Skeleton className="h-80 w-full" />
                 ) : (
-                  <ResponsiveContainer width="100%" height={450}>
-                    <LineChart data={lossRatio.trend} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                      <defs>
-                        <linearGradient id="colorPremium" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05}/>
-                        </linearGradient>
-                        <linearGradient id="colorClaim" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05}/>
-                        </linearGradient>
-                        <filter id="shadow">
-                          <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.3"/>
-                        </filter>
-                      </defs>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <AreaChart data={lossRatio.trend}>
                       <CartesianGrid strokeDasharray="5 5" stroke="#94A3B8" strokeWidth={2} opacity={0.3} />
-                      <XAxis 
-                        dataKey="month" 
-                        tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
-                        stroke="#1E293B" 
-                        strokeWidth={3}
-                        height={60}
-                        angle={-15}
-                        textAnchor="end"
-                      />
-                      <YAxis 
-                        yAxisId="left" 
-                        tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
-                        stroke="#1E293B" 
-                        strokeWidth={3}
-                        label={{ value: 'Amount (Million Rp)', angle: -90, position: 'insideLeft', style: { fill: '#000000', fontWeight: 800 } }}
-                      />
-                      <YAxis 
-                        yAxisId="right" 
-                        orientation="right" 
-                        tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
-                        stroke="#1E293B" 
-                        strokeWidth={3}
-                        label={{ value: 'Loss Ratio (%)', angle: 90, position: 'insideRight', style: { fill: '#000000', fontWeight: 800 } }}
-                      />
-                      <Tooltip 
-                        formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                        contentStyle={{ 
-                          backgroundColor: '#ffffff', 
-                          border: '4px solid #3B82F6', 
-                          borderRadius: '16px', 
-                          color: '#000000', 
-                          fontWeight: 800, 
-                          boxShadow: '0 15px 40px rgba(0,0,0,0.3)',
-                          padding: '12px'
-                        }}
-                        labelStyle={{ color: '#000000', fontWeight: 800, fontSize: '14px' }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ 
-                          color: '#000000', 
-                          fontWeight: 800, 
-                          fontSize: '15px',
-                          paddingTop: '20px'
-                        }} 
-                        iconSize={16}
-                      />
-                      <Line 
-                        yAxisId="left" 
-                        type="monotone" 
-                        dataKey="premium" 
-                        stroke="#3b82f6" 
-                        strokeWidth={5} 
-                        name="💵 Premium" 
-                        dot={{ fill: '#3b82f6', r: 7, strokeWidth: 3, stroke: '#fff', filter: 'url(#shadow)' }} 
-                        activeDot={{ r: 10, strokeWidth: 3, stroke: '#fff' }}
-                      />
-                      <Line 
-                        yAxisId="left" 
-                        type="monotone" 
-                        dataKey="claim" 
-                        stroke="#ef4444" 
-                        strokeWidth={5} 
-                        name="💸 Claim" 
-                        dot={{ fill: '#ef4444', r: 7, strokeWidth: 3, stroke: '#fff', filter: 'url(#shadow)' }} 
-                        activeDot={{ r: 10, strokeWidth: 3, stroke: '#fff' }}
-                      />
-                      <Line 
-                        yAxisId="right" 
-                        type="monotone" 
-                        dataKey="lossRatio" 
-                        stroke="#10b981" 
-                        strokeWidth={5} 
-                        name="📊 Loss Ratio %" 
-                        dot={{ fill: '#10b981', r: 7, strokeWidth: 3, stroke: '#fff', filter: 'url(#shadow)' }} 
-                        activeDot={{ r: 10, strokeWidth: 3, stroke: '#fff' }}
-                        strokeDasharray="8 4"
-                      />
-                    </LineChart>
+                      <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#000000', fontWeight: 700 }} stroke="#1E293B" strokeWidth={2} angle={-15} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 12, fill: '#000000', fontWeight: 700 }} stroke="#1E293B" strokeWidth={2} />
+                      <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #3B82F6', borderRadius: '12px', fontWeight: 700 }} />
+                      <Legend wrapperStyle={{ fontWeight: 700 }} />
+                      <Area type="monotone" dataKey="Draft" stackId="1" stroke="#94a3b8" fill="#94a3b8" name="Draft" />
+                      <Area type="monotone" dataKey="Checked" stackId="1" stroke="#60a5fa" fill="#60a5fa" name="Checked" />
+                      <Area type="monotone" dataKey="Doc Verified" stackId="1" stroke="#a78bfa" fill="#a78bfa" name="Doc Verified" />
+                      <Area type="monotone" dataKey="Invoiced" stackId="1" stroke="#fbbf24" fill="#fbbf24" name="Invoiced" />
+                      <Area type="monotone" dataKey="Paid" stackId="1" stroke="#10b981" fill="#10b981" name="Paid" />
+                    </AreaChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>
             </Card>
+
+            {/* Distribution Charts */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-green-50">
+                <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-b-4 border-emerald-700">
+                  <CardTitle className="text-white font-bold text-xl">📈 Loss Ratio by Credit Type</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-64 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={lossRatio.creditTypeData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" />
+                        <XAxis dataKey="type" tick={{ fontSize: 12, fontWeight: 700 }} />
+                        <YAxis tick={{ fontSize: 12, fontWeight: 700 }} />
+                        <Tooltip formatter={(value) => `${value}%`} />
+                        <Bar dataKey="lossRatio" fill="#10b981" name="Loss Ratio %" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-orange-50">
+                <CardHeader className="bg-gradient-to-r from-orange-500 to-red-600 text-white border-b-4 border-red-700">
+                  <CardTitle className="text-white font-bold text-xl">🏢 Top 10 Loss Ratio by Branch</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-64 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={lossRatio.branchData} layout="horizontal">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" />
+                        <XAxis type="number" tick={{ fontSize: 11, fontWeight: 700 }} />
+                        <YAxis type="category" dataKey="branch" tick={{ fontSize: 10, fontWeight: 700 }} width={100} />
+                        <Tooltip formatter={(value) => `${value}%`} />
+                        <Bar dataKey="lossRatio" fill="#f59e0b" name="Loss Ratio %" radius={[0, 8, 8, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Premium by Status Tab */}
@@ -799,133 +760,124 @@ export default function AdvancedReports() {
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportToExcel(premiumStatus, 'premium-status')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
+              <Button variant="outline" size="sm" onClick={() => exportToExcel(premiumStatus.byStatus, 'premium-status')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 Excel
               </Button>
             </div>
 
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <StatCard
+                title="Total Gross Premium"
+                value={`Rp ${(premiumStatus.totalGrossPremium / 1000000).toFixed(1)}M`}
+                subtitle="All batches"
+                icon={DollarSign}
+                gradient
+                className="from-blue-500 to-indigo-600"
+              />
+              <StatCard
+                title="Net Premium"
+                value={`Rp ${(premiumStatus.netPremium / 1000000).toFixed(1)}M`}
+                subtitle="After reinsurance"
+                icon={DollarSign}
+                gradient
+                className="from-purple-500 to-purple-600"
+              />
+              <StatCard
+                title="Paid Premium"
+                value={`${premiumStatus.paidPercentage.toFixed(1)}%`}
+                subtitle={`Rp ${(premiumStatus.paidPremium / 1000000).toFixed(1)}M`}
+                icon={TrendingUp}
+                gradient
+                className="from-green-500 to-emerald-600"
+              />
+              <StatCard
+                title="Outstanding Premium"
+                value={`${premiumStatus.outstandingPercentage.toFixed(1)}%`}
+                subtitle={`Rp ${(premiumStatus.outstandingPremium / 1000000).toFixed(1)}M`}
+                icon={TrendingDown}
+                gradient
+                className="from-orange-500 to-red-600"
+              />
+            </div>
+
+            {/* Process Health Summary */}
+            <Card className="shadow-lg border-2 bg-gradient-to-br from-white to-slate-50">
+              <CardHeader className="bg-gradient-to-r from-slate-600 to-slate-700 text-white border-b-2">
+                <CardTitle className="text-white font-bold">⚠️ Bottleneck Analysis</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="p-4 bg-orange-50 rounded-lg border-2 border-orange-200">
+                  <p className="text-sm text-gray-600 mb-2">Largest Outstanding Status:</p>
+                  <p className="text-2xl font-bold text-orange-700">{premiumStatus.bottleneck.status || 'N/A'}</p>
+                  <p className="text-lg font-semibold text-orange-600">Rp {((premiumStatus.bottleneck.amount || 0) / 1000000).toFixed(1)}M</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Trend Analysis */}
+            <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-purple-50">
+              <CardHeader className="bg-gradient-to-r from-purple-500 to-pink-600 text-white border-b-4 border-pink-700">
+                <CardTitle className="text-white font-bold text-xl">📈 Premium by Batch Status Over Time</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {loading ? <Skeleton className="h-80 w-full" /> : (
+                  <ResponsiveContainer width="100%" height={350}>
+                    <AreaChart data={premiumStatus.trend}>
+                      <CartesianGrid strokeDasharray="5 5" stroke="#94A3B8" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12, fontWeight: 700 }} angle={-15} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 12, fontWeight: 700 }} />
+                      <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                      <Legend wrapperStyle={{ fontWeight: 700 }} />
+                      <Area type="monotone" dataKey="Uploaded" stackId="1" stroke="#94a3b8" fill="#94a3b8" name="Uploaded" />
+                      <Area type="monotone" dataKey="Validated" stackId="1" stroke="#60a5fa" fill="#60a5fa" name="Validated" />
+                      <Area type="monotone" dataKey="Matched" stackId="1" stroke="#818cf8" fill="#818cf8" name="Matched" />
+                      <Area type="monotone" dataKey="Approved" stackId="1" stroke="#a78bfa" fill="#a78bfa" name="Approved" />
+                      <Area type="monotone" dataKey="Nota Issued" stackId="1" stroke="#fbbf24" fill="#fbbf24" name="Nota Issued" />
+                      <Area type="monotone" dataKey="Branch Confirmed" stackId="1" stroke="#34d399" fill="#34d399" name="Branch Confirmed" />
+                      <Area type="monotone" dataKey="Paid" stackId="1" stroke="#10b981" fill="#10b981" name="Paid" />
+                      <Area type="monotone" dataKey="Closed" stackId="1" stroke="#059669" fill="#059669" name="Closed" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-purple-50">
-                <CardHeader className="bg-gradient-to-r from-purple-500 to-pink-600 text-white border-b-4 border-pink-700">
-                  <CardTitle className="text-white font-bold text-xl">🎨 Premium Distribution by Status</CardTitle>
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-indigo-50">
+                <CardHeader className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-b-4 border-blue-700">
+                  <CardTitle className="text-white font-bold text-xl">📊 Premium by Status</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-purple-50">
-                  {loading ? (
-                    <Skeleton className="h-80 w-full" />
-                  ) : (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <PieChart>
-                        <defs>
-                          <filter id="pieShadow">
-                            <feDropShadow dx="0" dy="4" stdDeviation="4" floodOpacity="0.4"/>
-                          </filter>
-                        </defs>
-                        <Pie
-                          data={premiumStatus}
-                          dataKey="amount"
-                          nameKey="status"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={110}
-                          innerRadius={45}
-                          paddingAngle={3}
-                          label={(entry) => `${entry.status}\n${entry.percentage}%`}
-                          labelStyle={{ fill: '#000000', fontSize: '13px', fontWeight: '900' }}
-                          filter="url(#pieShadow)"
-                        >
-                          {premiumStatus.map((entry, index) => (
-                            <Cell 
-                              key={`cell-${index}`} 
-                              fill={COLORS[index % COLORS.length]} 
-                              strokeWidth={3}
-                              stroke="#fff"
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                          contentStyle={{ 
-                            backgroundColor: '#ffffff', 
-                            border: '4px solid #A855F7', 
-                            borderRadius: '16px', 
-                            color: '#000000', 
-                            fontWeight: 800, 
-                            boxShadow: '0 15px 40px rgba(0,0,0,0.3)',
-                            padding: '12px'
-                          }}
-                          labelStyle={{ color: '#000000', fontWeight: 800, fontSize: '14px' }}
-                        />
-                      </PieChart>
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-80 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={premiumStatus.byStatus} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" tick={{ fontSize: 11, fontWeight: 700 }} />
+                        <YAxis type="category" dataKey="status" tick={{ fontSize: 11, fontWeight: 700 }} width={120} />
+                        <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                        <Bar dataKey="amount" fill="#6366f1" radius={[0, 8, 8, 0]} />
+                      </BarChart>
                     </ResponsiveContainer>
                   )}
                 </CardContent>
               </Card>
 
-              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-indigo-50">
-                <CardHeader className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white border-b-4 border-blue-700">
-                  <CardTitle className="text-white font-bold text-xl">📈 Premium by Status Breakdown</CardTitle>
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-green-50">
+                <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-b-4 border-emerald-700">
+                  <CardTitle className="text-white font-bold text-xl">🏢 Top 10 Premium by Branch</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-indigo-50">
-                  {loading ? (
-                    <Skeleton className="h-80 w-full" />
-                  ) : (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={premiumStatus} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                        <defs>
-                          <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#6366f1" stopOpacity={1}/>
-                            <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                          </linearGradient>
-                          <filter id="barShadow">
-                            <feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity="0.4"/>
-                          </filter>
-                        </defs>
-                        <CartesianGrid strokeDasharray="5 5" stroke="#94A3B8" strokeWidth={2} opacity={0.3} />
-                        <XAxis 
-                          dataKey="status" 
-                          tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
-                          stroke="#1E293B" 
-                          strokeWidth={3}
-                          angle={-15}
-                          textAnchor="end"
-                          height={80}
-                        />
-                        <YAxis 
-                          tick={{ fontSize: 13, fill: '#000000', fontWeight: 800 }} 
-                          stroke="#1E293B" 
-                          strokeWidth={3}
-                          label={{ value: 'Premium Amount (Million Rp)', angle: -90, position: 'insideLeft', style: { fill: '#000000', fontWeight: 800 } }}
-                        />
-                        <Tooltip 
-                          formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                          contentStyle={{ 
-                            backgroundColor: '#ffffff', 
-                            border: '4px solid #6366F1', 
-                            borderRadius: '16px', 
-                            color: '#000000', 
-                            fontWeight: 800, 
-                            boxShadow: '0 15px 40px rgba(0,0,0,0.3)',
-                            padding: '12px'
-                          }}
-                          labelStyle={{ color: '#000000', fontWeight: 800, fontSize: '14px' }}
-                        />
-                        <Legend 
-                          wrapperStyle={{ 
-                            color: '#000000', 
-                            fontWeight: 800, 
-                            fontSize: '15px',
-                            paddingTop: '20px'
-                          }}
-                          iconSize={16}
-                        />
-                        <Bar 
-                          dataKey="amount" 
-                          fill="url(#barGradient)" 
-                          name="💰 Premium Amount" 
-                          radius={[12, 12, 0, 0]}
-                          filter="url(#barShadow)"
-                        />
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-80 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={premiumStatus.branchData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" tick={{ fontSize: 11, fontWeight: 700 }} />
+                        <YAxis type="category" dataKey="branch" tick={{ fontSize: 10, fontWeight: 700 }} width={100} />
+                        <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                        <Bar dataKey="paid" fill="#10b981" name="Paid" stackId="a" />
+                        <Bar dataKey="outstanding" fill="#f59e0b" name="Outstanding" stackId="a" />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -941,64 +893,111 @@ export default function AdvancedReports() {
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportToExcel(claimPaid.byRange, 'claim-paid')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
+              <Button variant="outline" size="sm" onClick={() => exportToExcel(claimPaid.statusData, 'claim-paid')} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold border-2">
                 <Download className="w-4 h-4 mr-2" />
                 Excel
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <StatCard
                 title="Total Claim Paid"
                 value={`Rp ${(claimPaid.totalPaid / 1000000).toFixed(1)}M`}
-                subtitle={`${claimPaid.count} claims settled`}
+                subtitle={`${claimPaid.count} claims`}
                 icon={FileText}
                 gradient
                 className="from-green-500 to-emerald-600"
               />
               <StatCard
-                title="Average Claim"
-                value={`Rp ${(claimPaid.avgClaim / 1000000).toFixed(1)}M`}
-                subtitle="Per claim average"
-                icon={DollarSign}
+                title="Claims In Progress"
+                value={claimPaid.inProgress}
+                subtitle="Draft + Checked + Doc Verified"
+                icon={Clock}
+                gradient
+                className="from-orange-500 to-orange-600"
+              />
+              <StatCard
+                title="Invoiced Not Paid"
+                value={claimPaid.invoicedNotPaid}
+                subtitle="Awaiting payment"
+                icon={TrendingUp}
+                gradient
+                className="from-yellow-500 to-yellow-600"
+              />
+              <StatCard
+                title="Avg Settlement Time"
+                value={`${claimPaid.avgSettlementDays} days`}
+                subtitle="Draft → Paid"
+                icon={TrendingDown}
                 gradient
                 className="from-blue-500 to-indigo-600"
               />
-              <StatCard
-                title="Settlement Count"
-                value={claimPaid.count}
-                subtitle="Total settled claims"
-                icon={FileText}
-                gradient
-                className="from-purple-500 to-pink-600"
-              />
             </div>
 
+            {/* Lifecycle Trend */}
             <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-green-50">
               <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-b-4 border-emerald-700">
-                <CardTitle className="text-white font-bold text-xl">💰 Claims by Plafon Range</CardTitle>
+                <CardTitle className="text-white font-bold text-xl">🔄 Claim Lifecycle Movement by Status</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-green-50">
-                {loading ? (
-                  <Skeleton className="h-80 w-full" />
-                ) : (
+              <CardContent className="pt-6">
+                {loading ? <Skeleton className="h-80 w-full" /> : (
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={claimPaid.byRange}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
-                      <XAxis dataKey="range" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <Tooltip 
-                        formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #10B981', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
-                        labelStyle={{ color: '#000000', fontWeight: 700 }}
-                      />
-                      <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
-                      <Bar dataKey="amount" fill="#10b981" name="Claim Amount" radius={[10, 10, 0, 0]} />
-                    </BarChart>
+                    <LineChart data={claimPaid.trend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12, fontWeight: 700 }} angle={-15} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 12, fontWeight: 700 }} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontWeight: 700 }} />
+                      <Line type="monotone" dataKey="Draft" stroke="#94a3b8" strokeWidth={3} name="Draft" />
+                      <Line type="monotone" dataKey="Checked" stroke="#60a5fa" strokeWidth={3} name="Checked" />
+                      <Line type="monotone" dataKey="Doc Verified" stroke="#a78bfa" strokeWidth={3} name="Doc Verified" />
+                      <Line type="monotone" dataKey="Invoiced" stroke="#fbbf24" strokeWidth={3} name="Invoiced" />
+                      <Line type="monotone" dataKey="Paid" stroke="#10b981" strokeWidth={3} name="Paid" />
+                    </LineChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>
             </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-blue-50">
+                <CardHeader className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-b-4 border-indigo-700">
+                  <CardTitle className="text-white font-bold text-xl">📊 Claim Amount by Status</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-64 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={claimPaid.statusData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="status" tick={{ fontSize: 11, fontWeight: 700 }} angle={-15} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
+                        <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                        <Bar dataKey="amount" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-green-50">
+                <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-b-4 border-emerald-700">
+                  <CardTitle className="text-white font-bold text-xl">💰 Claim Paid by Product</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-64 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={claimPaid.productData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="product" tick={{ fontSize: 12, fontWeight: 700 }} />
+                        <YAxis tick={{ fontSize: 12, fontWeight: 700 }} />
+                        <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                        <Bar dataKey="amount" fill="#10b981" name="Claim Amount" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Outstanding Recovery Tab */}
