@@ -38,8 +38,11 @@ export default function BatchProcessing() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        const demoUser = JSON.parse(demoUserStr);
+        setUser(demoUser);
+      }
     } catch (error) {
       console.error('Failed to load user:', error);
     }
@@ -130,27 +133,41 @@ export default function BatchProcessing() {
       const targetRole = nextStatus === 'Nota Issued' || nextStatus === 'Paid' || nextStatus === 'Closed' ? 'BRINS' : 
                         nextStatus === 'Branch Confirmed' ? 'TUGURE' : 'ALL';
       
-      await sendTemplatedEmail(
-        'Batch',
-        nextStatus,
-        targetRole,
-        'notify_batch_status',
-        {
-          batch_id: selectedBatch.batch_id,
-          user_name: user?.email || 'System',
-          date: new Date().toLocaleDateString('id-ID'),
-          total_records: selectedBatch.total_records || 0,
-          total_exposure: `Rp ${(selectedBatch.total_exposure || 0).toLocaleString('id-ID')}`,
-          total_premium: `Rp ${(selectedBatch.total_premium || 0).toLocaleString('id-ID')}`,
-          nota_number: nextStatus === 'Nota Issued' ? `NOTA-${selectedBatch.batch_id}` : '',
-          payment_reference: remarks || ''
-        }
-      );
+      try {
+        await sendTemplatedEmail(
+          'Batch',
+          selectedBatch.status,
+          nextStatus,
+          targetRole,
+          'notify_batch_status',
+          {
+            batch_id: selectedBatch.batch_id,
+            user_name: user?.full_name || user?.email || 'System',
+            date: new Date().toLocaleDateString('id-ID'),
+            total_records: selectedBatch.total_records || 0,
+            total_exposure: `Rp ${(selectedBatch.total_exposure || 0).toLocaleString('id-ID')}`,
+            total_premium: `Rp ${(selectedBatch.total_premium || 0).toLocaleString('id-ID')}`,
+            nota_number: nextStatus === 'Nota Issued' ? `NOTA-${selectedBatch.batch_id}-${Date.now()}` : '',
+            payment_reference: remarks || '',
+            contract_id: selectedBatch.contract_id
+          }
+        );
+      } catch (emailError) {
+        console.error('Email notification failed:', emailError);
+      }
+
+      // Update all debtors in this batch
+      const batchDebtors = await base44.entities.Debtor.filter({ batch_id: selectedBatch.batch_id });
+      for (const debtor of batchDebtors) {
+        await base44.entities.Debtor.update(debtor.id, {
+          batch_status: nextStatus
+        });
+      }
 
       // Create system notification
       await createNotification(
         `Batch ${nextStatus}`,
-        `Batch ${selectedBatch.batch_id} moved to ${nextStatus} by ${user?.email}`,
+        `Batch ${selectedBatch.batch_id} moved to ${nextStatus} by ${user?.full_name || user?.email}`,
         nextStatus === 'Nota Issued' ? 'ACTION_REQUIRED' : 'INFO',
         'DEBTOR',
         selectedBatch.id,
@@ -164,9 +181,9 @@ export default function BatchProcessing() {
         'Batch',
         selectedBatch.id,
         { status: selectedBatch.status },
-        { status: nextStatus },
-        user?.email,
-        user?.role,
+        { status: nextStatus, remarks: remarks },
+        user?.email || 'system',
+        user?.role || 'admin',
         remarks
       );
 
