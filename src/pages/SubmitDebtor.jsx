@@ -69,43 +69,48 @@ export default function SubmitDebtor() {
       // Upload file
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       
-      // Extract data with updated schema matching template
+      // Extract data - use flexible schema that accepts either format
       const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
         file_url,
         json_schema: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              cover_id: { type: 'number' },
-              program_id: { type: 'string' },
-              batch_month: { type: 'number' },
-              batch_year: { type: 'number' },
-              nomor_peserta: { type: 'string' },
-              nomor_rekening_pinjaman: { type: 'string' },
-              nomor_perjanjian_kredit: { type: 'string' },
-              nama_peserta: { type: 'string' },
-              alamat_usaha: { type: 'string' },
-              loan_type: { type: 'string' },
-              loan_type_desc: { type: 'string' },
-              jenis_pengajuan_desc: { type: 'string' },
-              jenis_covering_desc: { type: 'string' },
-              tanggal_mulai_covering: { type: 'string' },
-              tanggal_akhir_covering: { type: 'string' },
-              plafon: { type: 'number' },
-              nominal_premi: { type: 'number' },
-              premium_reinsurance: { type: 'number' },
-              ric_amount: { type: 'number' },
-              bf_amount: { type: 'number' },
-              net_premi: { type: 'number' },
-              unit_code: { type: 'string' },
-              unit_desc: { type: 'string' },
-              branch_desc: { type: 'string' },
-              region_desc: { type: 'string' },
-              status_aktif: { type: 'number' },
-              flag_restruktur: { type: 'number' },
-              kolektabilitas: { type: 'number' },
-              remark_premi: { type: 'string' }
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  cover_id: { type: ['number', 'string'] },
+                  program_id: { type: 'string' },
+                  batch_month: { type: ['number', 'string'] },
+                  batch_year: { type: ['number', 'string'] },
+                  nomor_peserta: { type: 'string' },
+                  nomor_rekening_pinjaman: { type: 'string' },
+                  nomor_perjanjian_kredit: { type: 'string' },
+                  nama_peserta: { type: 'string' },
+                  alamat_usaha: { type: 'string' },
+                  loan_type: { type: 'string' },
+                  loan_type_desc: { type: 'string' },
+                  jenis_pengajuan_desc: { type: 'string' },
+                  jenis_covering_desc: { type: 'string' },
+                  tanggal_mulai_covering: { type: 'string' },
+                  tanggal_akhir_covering: { type: 'string' },
+                  plafon: { type: ['number', 'string'] },
+                  nominal_premi: { type: ['number', 'string'] },
+                  premium_reinsurance: { type: ['number', 'string'] },
+                  ric_amount: { type: ['number', 'string'] },
+                  bf_amount: { type: ['number', 'string'] },
+                  net_premi: { type: ['number', 'string'] },
+                  unit_code: { type: 'string' },
+                  unit_desc: { type: 'string' },
+                  branch_desc: { type: 'string' },
+                  region_desc: { type: 'string' },
+                  status_aktif: { type: ['number', 'string'] },
+                  flag_restruktur: { type: ['number', 'string'] },
+                  kolektabilitas: { type: ['number', 'string'] },
+                  remark_premi: { type: 'string' }
+                }
+              }
             }
           }
         }
@@ -113,7 +118,9 @@ export default function SubmitDebtor() {
 
       if (result.status === 'success' && result.output) {
         // Parse and map data from template to Debtor entity
-        const enrichedData = (Array.isArray(result.output) ? result.output : [result.output]).map((row, idx) => {
+        const rawData = result.output.data || result.output;
+        const dataArray = Array.isArray(rawData) ? rawData : [rawData];
+        const enrichedData = dataArray.map((row, idx) => {
           const batchId = `BATCH-${row.batch_year || new Date().getFullYear()}-${String(row.batch_month || new Date().getMonth() + 1).padStart(2, '0')}-${Date.now()}`;
           
           return {
