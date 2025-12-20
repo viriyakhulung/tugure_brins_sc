@@ -13,6 +13,8 @@ import Profile from './pages/Profile';
 import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
+import BatchProcessing from './pages/BatchProcessing';
+import NotaManagement from './pages/NotaManagement';
 import __Layout from './Layout.jsx';
 
 
@@ -32,6 +34,8 @@ export const PAGES = {
     "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
+    "BatchProcessing": BatchProcessing,
+    "NotaManagement": NotaManagement,
 }
 
 export const pagesConfig = {

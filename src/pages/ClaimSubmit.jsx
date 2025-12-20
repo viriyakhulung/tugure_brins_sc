@@ -182,13 +182,13 @@ export default function ClaimSubmit() {
         nilai_klaim: parseFloat(claimAmount),
         share_tugure_pct: debtor?.coverage_pct || 75,
         share_tugure_amount: shareTugure,
-        claim_status: 'SUBMITTED',
+        claim_status: 'Draft',
         eligibility_status: 'ELIGIBLE'
       });
 
       // Send email notifications
       const notifSettings = await base44.entities.NotificationSetting.list();
-      const tugureSettings = notifSettings.filter(s => s.user_role === 'TUGURE' && s.email_enabled && s.notify_on_claim);
+      const tugureSettings = notifSettings.filter(s => s.user_role === 'TUGURE' && s.email_enabled && s.notify_claim_status);
       
       for (const setting of tugureSettings) {
         await base44.integrations.Core.SendEmail({
@@ -600,12 +600,12 @@ export default function ClaimSubmit() {
                   <SelectValue placeholder="Select settled claim" />
                 </SelectTrigger>
                 <SelectContent>
-                  {claims.filter(c => c.claim_status === 'SETTLED').map(c => (
+                  {claims.filter(c => c.claim_status === 'Paid').map(c => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.claim_no} - {c.nama_tertanggung} (Rp {(c.nilai_klaim || 0).toLocaleString('id-ID')})
                     </SelectItem>
                   ))}
-                  {claims.filter(c => c.claim_status === 'SETTLED').length === 0 && (
+                  {claims.filter(c => c.claim_status === 'Paid').length === 0 && (
                     <SelectItem value="none" disabled>No settled claims available</SelectItem>
                   )}
                 </SelectContent>
@@ -671,7 +671,7 @@ export default function ClaimSubmit() {
                     debtor_id: claim.debtor_id,
                     recovery_amount: parseFloat(recoveryAmount),
                     recovery_date: recoveryDate,
-                    status: 'PENDING',
+                    status: 'Draft',
                     remarks: subrogationRemarks
                   });
                   

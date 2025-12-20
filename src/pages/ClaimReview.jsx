@@ -106,23 +106,29 @@ export default function ClaimReview() {
       };
 
       switch (actionType) {
-        case 'approve':
-          newStatus = 'APPROVED';
-          updateData.claim_status = 'APPROVED';
-          updateData.approved_amount = parseFloat(approvedAmount) || selectedClaim.nilai_klaim;
+        case 'check':
+          newStatus = 'Checked';
+          updateData.claim_status = 'Checked';
+          updateData.checked_by = user?.email;
+          updateData.checked_date = new Date().toISOString().split('T')[0];
           break;
-        case 'partial':
-          newStatus = 'PARTIALLY_APPROVED';
-          updateData.claim_status = 'PARTIALLY_APPROVED';
-          updateData.approved_amount = parseFloat(approvedAmount);
+        case 'verify':
+          newStatus = 'Doc Verified';
+          updateData.claim_status = 'Doc Verified';
+          updateData.doc_verified_by = user?.email;
+          updateData.doc_verified_date = new Date().toISOString().split('T')[0];
           break;
-        case 'reject':
-          newStatus = 'REJECTED';
-          updateData.claim_status = 'REJECTED';
-          updateData.rejection_reason = remarks;
+        case 'invoice':
+          newStatus = 'Invoiced';
+          updateData.claim_status = 'Invoiced';
+          updateData.invoiced_by = user?.email;
+          updateData.invoiced_date = new Date().toISOString().split('T')[0];
           break;
-        case 'clarify':
-          updateData.claim_status = 'ON_HOLD';
+        case 'pay':
+          newStatus = 'Paid';
+          updateData.claim_status = 'Paid';
+          updateData.paid_by = user?.email;
+          updateData.paid_date = new Date().toISOString().split('T')[0];
           break;
       }
 
@@ -133,20 +139,19 @@ export default function ClaimReview() {
       const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled);
       
       for (const setting of brinsSettings) {
-        if ((setting.notify_on_approval && actionType === 'approve') || 
-            (setting.notify_on_rejection && actionType === 'reject')) {
+        if (setting.notify_claim_status) {
           await base44.integrations.Core.SendEmail({
             to: setting.notification_email,
             subject: `Claim ${newStatus} - ${selectedClaim.nama_tertanggung}`,
-            body: `Claim ${selectedClaim.claim_no} has been ${newStatus?.toLowerCase() || 'updated'}.\n\nDebtor: ${selectedClaim.nama_tertanggung}\nClaim Amount: Rp ${(selectedClaim.nilai_klaim || 0).toLocaleString('id-ID')}\nApproved Amount: Rp ${(parseFloat(approvedAmount) || 0).toLocaleString('id-ID')}\nRemarks: ${remarks}\n\nReviewed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
+            body: `Claim ${selectedClaim.claim_no} status changed to ${newStatus}.\n\nDebtor: ${selectedClaim.nama_tertanggung}\nClaim Amount: Rp ${(selectedClaim.nilai_klaim || 0).toLocaleString('id-ID')}\nRemarks: ${remarks}\n\nProcessed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
           });
         }
       }
 
       await base44.entities.Notification.create({
-        title: `Claim ${newStatus || 'Updated'}`,
-        message: `Claim ${selectedClaim.claim_no} has been ${newStatus?.toLowerCase() || 'updated'}`,
-        type: actionType === 'reject' ? 'WARNING' : 'DECISION',
+        title: `Claim ${newStatus}`,
+        message: `Claim ${selectedClaim.claim_no} moved to ${newStatus}`,
+        type: 'INFO',
         module: 'CLAIM',
         reference_id: selectedClaim.id,
         target_role: 'BRINS'
@@ -182,10 +187,10 @@ export default function ClaimReview() {
   };
 
   // Stats
-  const pendingClaims = claims.filter(c => c.claim_status === 'SUBMITTED' || c.claim_status === 'UNDER_REVIEW');
-  const approvedClaims = claims.filter(c => c.claim_status === 'APPROVED' || c.claim_status === 'PARTIALLY_APPROVED');
+  const pendingClaims = claims.filter(c => c.claim_status === 'Draft' || c.claim_status === 'Checked');
+  const processedClaims = claims.filter(c => c.claim_status === 'Invoiced' || c.claim_status === 'Paid');
   const totalClaimValue = claims.reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
-  const approvedValue = approvedClaims.reduce((sum, c) => sum + (c.approved_amount || 0), 0);
+  const paidValue = claims.filter(c => c.claim_status === 'Paid').reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
 
   const toggleClaimSelection = (claimId) => {
     if (selectedClaims.includes(claimId)) {
@@ -251,43 +256,57 @@ export default function ClaimReview() {
           >
             <Eye className="w-4 h-4" />
           </Button>
-          {row.claim_status === 'SUBMITTED' && (
-            <>
-              <Button 
-                size="sm" 
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => {
-                  setSelectedClaim(row);
-                  setActionType('approve');
-                  setApprovedAmount(row.nilai_klaim?.toString() || '');
-                  setShowActionDialog(true);
-                }}
-              >
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button 
-                size="sm" 
-                variant="destructive"
-                onClick={() => {
-                  setSelectedClaim(row);
-                  setActionType('reject');
-                  setShowActionDialog(true);
-                }}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => {
-                  setSelectedClaim(row);
-                  setActionType('clarify');
-                  setShowActionDialog(true);
-                }}
-              >
-                <MessageSquare className="w-4 h-4" />
-              </Button>
-            </>
+          {row.claim_status === 'Draft' && (
+            <Button 
+              size="sm" 
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => {
+                setSelectedClaim(row);
+                setActionType('check');
+                setShowActionDialog(true);
+              }}
+            >
+              Check
+            </Button>
+          )}
+          {row.claim_status === 'Checked' && (
+            <Button 
+              size="sm" 
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => {
+                setSelectedClaim(row);
+                setActionType('verify');
+                setShowActionDialog(true);
+              }}
+            >
+              Verify Docs
+            </Button>
+          )}
+          {row.claim_status === 'Doc Verified' && (
+            <Button 
+              size="sm" 
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={() => {
+                setSelectedClaim(row);
+                setActionType('invoice');
+                setShowActionDialog(true);
+              }}
+            >
+              Issue Invoice
+            </Button>
+          )}
+          {row.claim_status === 'Invoiced' && (
+            <Button 
+              size="sm" 
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => {
+                setSelectedClaim(row);
+                setActionType('pay');
+                setShowActionDialog(true);
+              }}
+            >
+              Mark Paid
+            </Button>
           )}
         </div>
       )
@@ -328,29 +347,37 @@ export default function ClaimReview() {
           <Button variant="outline" size="sm">
             <Eye className="w-4 h-4" />
           </Button>
-          {row.status === 'IN_PROGRESS' && (
-            <>
-              <Button 
-                size="sm" 
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => {
-                  // Handle approve subrogation
-                  console.log('Approve subrogation', row);
-                }}
-              >
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => {
-                  // Handle update status
-                  console.log('Update subrogation', row);
-                }}
-              >
-                <MessageSquare className="w-4 h-4" />
-              </Button>
-            </>
+          {row.status === 'Draft' && (
+            <Button 
+              size="sm" 
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={async () => {
+                await base44.entities.Subrogation.update(row.id, {
+                  status: 'Invoiced',
+                  invoiced_by: user?.email,
+                  invoiced_date: new Date().toISOString().split('T')[0]
+                });
+                loadData();
+              }}
+            >
+              Issue Invoice
+            </Button>
+          )}
+          {row.status === 'Invoiced' && (
+            <Button 
+              size="sm" 
+              className="bg-green-600 hover:bg-green-700"
+              onClick={async () => {
+                await base44.entities.Subrogation.update(row.id, {
+                  status: 'Paid / Closed',
+                  closed_by: user?.email,
+                  closed_date: new Date().toISOString().split('T')[0]
+                });
+                loadData();
+              }}
+            >
+              Mark Paid
+            </Button>
           )}
         </div>
       )
@@ -438,8 +465,8 @@ export default function ClaimReview() {
           className="from-purple-500 to-purple-600"
         />
         <StatCard
-          title="Approved Value"
-          value={`Rp ${(approvedValue / 1000000).toFixed(1)}M`}
+          title="Paid Value"
+          value={`Rp ${(paidValue / 1000000).toFixed(1)}M`}
           icon={CheckCircle2}
           gradient
           className="from-green-500 to-green-600"
@@ -483,11 +510,11 @@ export default function ClaimReview() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Claim Status</SelectItem>
-                <SelectItem value="SUBMITTED">Submitted</SelectItem>
-                <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
-                <SelectItem value="APPROVED">Approved</SelectItem>
-                <SelectItem value="REJECTED">Rejected</SelectItem>
-                <SelectItem value="SETTLED">Settled</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Checked">Checked</SelectItem>
+                <SelectItem value="Doc Verified">Doc Verified</SelectItem>
+                <SelectItem value="Invoiced">Invoiced</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filters.subrogationStatus} onValueChange={(val) => handleFilterChange('subrogationStatus', val)}>
@@ -496,10 +523,9 @@ export default function ClaimReview() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Subrogation</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                <SelectItem value="RECOVERED">Recovered</SelectItem>
-                <SelectItem value="CLOSED">Closed</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Invoiced">Invoiced</SelectItem>
+                <SelectItem value="Paid / Closed">Paid / Closed</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -560,13 +586,13 @@ export default function ClaimReview() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {actionType === 'approve' && 'Approve Claim'}
-              {actionType === 'partial' && 'Partial Approval'}
-              {actionType === 'reject' && 'Reject Claim'}
-              {actionType === 'clarify' && 'Request Clarification'}
+              {actionType === 'check' && 'Check Claim'}
+              {actionType === 'verify' && 'Verify Documents'}
+              {actionType === 'invoice' && 'Issue Invoice'}
+              {actionType === 'pay' && 'Mark as Paid'}
             </DialogTitle>
             <DialogDescription>
-              Claim: {selectedClaim?.claim_no}
+              Claim: {selectedClaim?.claim_no} - {selectedClaim?.nama_tertanggung}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -591,26 +617,13 @@ export default function ClaimReview() {
               </div>
             </div>
 
-            {(actionType === 'approve' || actionType === 'partial') && (
-              <div className="mb-4">
-                <label className="text-sm font-medium">Approved Amount (IDR) *</label>
-                <Input
-                  type="number"
-                  value={approvedAmount}
-                  onChange={(e) => setApprovedAmount(e.target.value)}
-                  placeholder="Enter approved amount"
-                />
-              </div>
-            )}
-
             <div>
-              <label className="text-sm font-medium">
-                {actionType === 'reject' ? 'Rejection Reason *' : 'Remarks'}
-              </label>
+              <label className="text-sm font-medium">Remarks</label>
               <Textarea
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                placeholder={actionType === 'clarify' ? 'Enter clarification needed...' : 'Enter remarks...'}
+                placeholder="Enter remarks..."
+                rows={3}
               />
             </div>
           </div>
@@ -620,12 +633,8 @@ export default function ClaimReview() {
             </Button>
             <Button
               onClick={handleClaimAction}
-              disabled={processing || (actionType === 'reject' && !remarks)}
-              className={
-                actionType === 'approve' ? 'bg-green-600 hover:bg-green-700' :
-                actionType === 'reject' ? 'bg-red-600 hover:bg-red-700' :
-                'bg-blue-600 hover:bg-blue-700'
-              }
+              disabled={processing}
+              className="bg-blue-600 hover:bg-blue-700"
             >
               {processing ? (
                 <>
@@ -634,10 +643,11 @@ export default function ClaimReview() {
                 </>
               ) : (
                 <>
-                  {actionType === 'approve' && <><Check className="w-4 h-4 mr-2" />Approve</>}
-                  {actionType === 'partial' && <><Check className="w-4 h-4 mr-2" />Partial Approve</>}
-                  {actionType === 'reject' && <><X className="w-4 h-4 mr-2" />Reject</>}
-                  {actionType === 'clarify' && <><MessageSquare className="w-4 h-4 mr-2" />Request</>}
+                  <Check className="w-4 h-4 mr-2" />
+                  {actionType === 'check' && 'Mark as Checked'}
+                  {actionType === 'verify' && 'Mark as Verified'}
+                  {actionType === 'invoice' && 'Issue Invoice'}
+                  {actionType === 'pay' && 'Mark as Paid'}
                 </>
               )}
             </Button>

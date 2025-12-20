@@ -84,6 +84,8 @@ export default function Layout({ children, currentPageName }) {
       { name: 'Submit Debtor', icon: Upload, path: 'SubmitDebtor', roles: ['BRINS'] },
       { name: 'Document Eligibility', icon: FileCheck, path: 'DocumentEligibility', roles: ['BRINS'] },
       { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview', roles: ['TUGURE'] },
+      { name: 'Batch Processing', icon: FileText, path: 'BatchProcessing', roles: ['TUGURE'] },
+      { name: 'Nota Management', icon: FileText, path: 'NotaManagement', roles: ['TUGURE'] },
       { name: 'Payment Intent', icon: DollarSign, path: 'PaymentIntent', roles: ['BRINS'] },
       { name: 'Reconciliation', icon: Scale, path: 'Reconciliation', roles: ['TUGURE'] },
       { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit', roles: ['BRINS'] },
