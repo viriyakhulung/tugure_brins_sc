@@ -18,6 +18,7 @@ import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
+import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function ClaimReview() {
   const [user, setUser] = useState(null);
@@ -148,40 +149,49 @@ export default function ClaimReview() {
         });
       }
 
-      // Send email notifications
-      const notifSettings = await base44.entities.NotificationSetting.list();
-      const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled);
-      
-      for (const setting of brinsSettings) {
-        if (setting.notify_claim_status) {
-          await base44.integrations.Core.SendEmail({
-            to: setting.notification_email,
-            subject: `Claim ${newStatus} - ${selectedClaim.nama_tertanggung}`,
-            body: `Claim ${selectedClaim.claim_no} status changed to ${newStatus}.\n\nDebtor: ${selectedClaim.nama_tertanggung}\nClaim Amount: Rp ${(selectedClaim.nilai_klaim || 0).toLocaleString('id-ID')}\nRemarks: ${remarks}\n\nProcessed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
-          });
+      // Determine target role for notifications
+      const targetRole = actionType === 'verify' ? 'TUGURE' : 
+                        actionType === 'pay' ? 'ALL' : 'BRINS';
+
+      // Send templated emails based on user preferences
+      await sendTemplatedEmail(
+        'Claim',
+        newStatus,
+        targetRole,
+        'notify_claim_status',
+        {
+          claim_no: selectedClaim.claim_no,
+          debtor_name: selectedClaim.nama_tertanggung,
+          claim_amount: `Rp ${(selectedClaim.nilai_klaim || 0).toLocaleString('id-ID')}`,
+          user_name: user?.email || 'System',
+          date: new Date().toLocaleDateString('id-ID'),
+          invoice_number: actionType === 'invoice' ? `INV-CLM-${selectedClaim.claim_no}` : '',
+          settlement_ref: remarks || ''
         }
-      }
+      );
 
-      await base44.entities.Notification.create({
-        title: `Claim ${newStatus}`,
-        message: `Claim ${selectedClaim.claim_no} moved to ${newStatus}`,
-        type: 'INFO',
-        module: 'CLAIM',
-        reference_id: selectedClaim.id,
-        target_role: 'BRINS'
-      });
+      // Create system notification
+      await createNotification(
+        `Claim ${newStatus}`,
+        `Claim ${selectedClaim.claim_no} moved to ${newStatus} by ${user?.email}`,
+        'INFO',
+        'CLAIM',
+        selectedClaim.id,
+        targetRole
+      );
 
-      await base44.entities.AuditLog.create({
-        action: `CLAIM_${actionType.toUpperCase()}`,
-        module: 'CLAIM',
-        entity_type: 'Claim',
-        entity_id: selectedClaim.id,
-        old_value: JSON.stringify({ status: selectedClaim.claim_status }),
-        new_value: JSON.stringify({ status: newStatus || 'ON_HOLD' }),
-        user_email: user?.email,
-        user_role: user?.role,
-        reason: remarks
-      });
+      // Create audit log
+      await createAuditLog(
+        `CLAIM_${actionType.toUpperCase()}`,
+        'CLAIM',
+        'Claim',
+        selectedClaim.id,
+        { status: selectedClaim.claim_status },
+        { status: newStatus },
+        user?.email,
+        user?.role,
+        remarks
+      );
 
       setSuccessMessage(`Claim ${actionType === 'approve' ? 'approved' : actionType === 'reject' ? 'rejected' : 'updated'} successfully`);
       setShowActionDialog(false);
@@ -383,6 +393,30 @@ export default function ClaimReview() {
                   currency: 'IDR',
                   status: 'Draft'
                 });
+
+                // Send templated email
+                await sendTemplatedEmail(
+                  'Subrogation',
+                  'Invoiced',
+                  'BRINS',
+                  'notify_subrogation_status',
+                  {
+                    subrogation_id: row.subrogation_id,
+                    claim_id: row.claim_id,
+                    recovery_amount: `IDR ${(row.recovery_amount || 0).toLocaleString()}`,
+                    date: new Date().toLocaleDateString('id-ID'),
+                    user_name: user?.email
+                  }
+                );
+
+                await createNotification(
+                  'Subrogation Invoiced',
+                  `Subrogation ${row.subrogation_id} has been invoiced`,
+                  'INFO',
+                  'CLAIM',
+                  row.id,
+                  'BRINS'
+                );
                 
                 loadData();
               }}
@@ -400,6 +434,31 @@ export default function ClaimReview() {
                   closed_by: user?.email,
                   closed_date: new Date().toISOString().split('T')[0]
                 });
+
+                // Send templated email
+                await sendTemplatedEmail(
+                  'Subrogation',
+                  'Paid / Closed',
+                  'ALL',
+                  'notify_subrogation_status',
+                  {
+                    subrogation_id: row.subrogation_id,
+                    claim_id: row.claim_id,
+                    recovery_amount: `IDR ${(row.recovery_amount || 0).toLocaleString()}`,
+                    date: new Date().toLocaleDateString('id-ID'),
+                    user_name: user?.email
+                  }
+                );
+
+                await createNotification(
+                  'Subrogation Closed',
+                  `Subrogation ${row.subrogation_id} completed and closed`,
+                  'INFO',
+                  'CLAIM',
+                  row.id,
+                  'ALL'
+                );
+
                 loadData();
               }}
             >

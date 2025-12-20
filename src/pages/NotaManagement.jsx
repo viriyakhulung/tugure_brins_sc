@@ -12,6 +12,7 @@ import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function NotaManagement() {
   const [user, setUser] = useState(null);
@@ -100,43 +101,50 @@ export default function NotaManagement() {
 
       await base44.entities.Nota.update(selectedNota.id, updateData);
 
-      // Send notifications
-      const notifSettings = await base44.entities.NotificationSetting.list();
-      const targetRole = selectedNota.nota_type === 'Batch' ? 'BRINS' : 'ALL';
-      const relevantSettings = notifSettings.filter(s => 
-        (s.user_role === targetRole || targetRole === 'ALL') && 
-        s.email_enabled && 
-        s.notify_nota_status
+      // Determine target role based on nota type and status
+      const targetRole = nextStatus === 'Issued' ? 'BRINS' :
+                        nextStatus === 'Confirmed' ? 'TUGURE' :
+                        'ALL';
+
+      // Send templated emails based on user preferences
+      await sendTemplatedEmail(
+        'Nota',
+        nextStatus,
+        targetRole,
+        'notify_nota_status',
+        {
+          nota_number: selectedNota.nota_number,
+          nota_type: selectedNota.nota_type,
+          reference_id: selectedNota.reference_id,
+          amount: `Rp ${(selectedNota.amount || 0).toLocaleString('id-ID')}`,
+          date: new Date().toLocaleDateString('id-ID'),
+          user_name: user?.email || 'System',
+          payment_reference: remarks || ''
+        }
       );
-      
-      for (const setting of relevantSettings) {
-        await base44.integrations.Core.SendEmail({
-          to: setting.notification_email,
-          subject: `Nota ${nextStatus} - ${selectedNota.nota_number}`,
-          body: `Nota ${selectedNota.nota_number} (${selectedNota.nota_type}) moved to ${nextStatus}.\n\nAmount: Rp ${(selectedNota.amount || 0).toLocaleString('id-ID')}\nReference: ${selectedNota.reference_id}\nRemarks: ${remarks}\n\nProcessed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
-        });
-      }
 
-      await base44.entities.Notification.create({
-        title: `Nota ${nextStatus}`,
-        message: `Nota ${selectedNota.nota_number} moved to ${nextStatus}`,
-        type: 'INFO',
-        module: 'DEBTOR',
-        reference_id: selectedNota.id,
-        target_role: targetRole
-      });
+      // Create system notification
+      await createNotification(
+        `Nota ${nextStatus}`,
+        `Nota ${selectedNota.nota_number} (${selectedNota.nota_type}) moved to ${nextStatus}`,
+        nextStatus === 'Issued' ? 'ACTION_REQUIRED' : 'INFO',
+        'DEBTOR',
+        selectedNota.id,
+        targetRole
+      );
 
-      await base44.entities.AuditLog.create({
-        action: `NOTA_${nextStatus.toUpperCase()}`,
-        module: 'DEBTOR',
-        entity_type: 'Nota',
-        entity_id: selectedNota.id,
-        old_value: JSON.stringify({ status: selectedNota.status }),
-        new_value: JSON.stringify({ status: nextStatus }),
-        user_email: user?.email,
-        user_role: user?.role,
-        reason: remarks
-      });
+      // Create audit log
+      await createAuditLog(
+        `NOTA_${nextStatus.toUpperCase()}`,
+        'DEBTOR',
+        'Nota',
+        selectedNota.id,
+        { status: selectedNota.status },
+        { status: nextStatus },
+        user?.email,
+        user?.role,
+        remarks
+      );
 
       setSuccessMessage(`Nota moved to ${nextStatus} successfully`);
       setShowActionDialog(false);

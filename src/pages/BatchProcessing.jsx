@@ -13,6 +13,7 @@ import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function BatchProcessing() {
   const [user, setUser] = useState(null);
@@ -125,38 +126,49 @@ export default function BatchProcessing() {
         });
       }
 
-      // Send notifications
-      const notifSettings = await base44.entities.NotificationSetting.list();
-      const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled && s.notify_batch_status);
+      // Send templated emails based on user preferences
+      const targetRole = nextStatus === 'Nota Issued' || nextStatus === 'Paid' || nextStatus === 'Closed' ? 'BRINS' : 
+                        nextStatus === 'Branch Confirmed' ? 'TUGURE' : 'ALL';
       
-      for (const setting of brinsSettings) {
-        await base44.integrations.Core.SendEmail({
-          to: setting.notification_email,
-          subject: `Batch ${nextStatus} - ${selectedBatch.batch_id}`,
-          body: `Batch ${selectedBatch.batch_id} moved to ${nextStatus}.\n\nTotal Records: ${selectedBatch.total_records}\nTotal Premium: Rp ${(selectedBatch.total_premium || 0).toLocaleString('id-ID')}\nRemarks: ${remarks}\n\nProcessed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}`
-        });
-      }
+      await sendTemplatedEmail(
+        'Batch',
+        nextStatus,
+        targetRole,
+        'notify_batch_status',
+        {
+          batch_id: selectedBatch.batch_id,
+          user_name: user?.email || 'System',
+          date: new Date().toLocaleDateString('id-ID'),
+          total_records: selectedBatch.total_records || 0,
+          total_exposure: `Rp ${(selectedBatch.total_exposure || 0).toLocaleString('id-ID')}`,
+          total_premium: `Rp ${(selectedBatch.total_premium || 0).toLocaleString('id-ID')}`,
+          nota_number: nextStatus === 'Nota Issued' ? `NOTA-${selectedBatch.batch_id}` : '',
+          payment_reference: remarks || ''
+        }
+      );
 
-      await base44.entities.Notification.create({
-        title: `Batch ${nextStatus}`,
-        message: `Batch ${selectedBatch.batch_id} moved to ${nextStatus}`,
-        type: 'INFO',
-        module: 'DEBTOR',
-        reference_id: selectedBatch.id,
-        target_role: 'BRINS'
-      });
+      // Create system notification
+      await createNotification(
+        `Batch ${nextStatus}`,
+        `Batch ${selectedBatch.batch_id} moved to ${nextStatus} by ${user?.email}`,
+        nextStatus === 'Nota Issued' ? 'ACTION_REQUIRED' : 'INFO',
+        'DEBTOR',
+        selectedBatch.id,
+        targetRole
+      );
 
-      await base44.entities.AuditLog.create({
-        action: `BATCH_${nextStatus.toUpperCase().replace(/ /g, '_')}`,
-        module: 'DEBTOR',
-        entity_type: 'Batch',
-        entity_id: selectedBatch.id,
-        old_value: JSON.stringify({ status: selectedBatch.status }),
-        new_value: JSON.stringify({ status: nextStatus }),
-        user_email: user?.email,
-        user_role: user?.role,
-        reason: remarks
-      });
+      // Create audit log
+      await createAuditLog(
+        `BATCH_${nextStatus.toUpperCase().replace(/ /g, '_')}`,
+        'DEBTOR',
+        'Batch',
+        selectedBatch.id,
+        { status: selectedBatch.status },
+        { status: nextStatus },
+        user?.email,
+        user?.role,
+        remarks
+      );
 
       setSuccessMessage(`Batch moved to ${nextStatus} successfully`);
       setShowActionDialog(false);

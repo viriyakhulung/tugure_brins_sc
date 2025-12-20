@@ -686,32 +686,44 @@ export default function SystemConfiguration() {
       )
     },
     {
-      header: 'Email',
+      header: 'Contact',
       cell: (row) => (
-        <div className="flex items-center gap-2">
-          <Mail className={`w-4 h-4 ${row.email_enabled ? 'text-green-600' : 'text-gray-400'}`} />
-          <span className="text-sm">{row.notification_email || '-'}</span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Mail className={`w-4 h-4 ${row.email_enabled ? 'text-green-600' : 'text-gray-400'}`} />
+            <span className="text-sm">{row.notification_email || '-'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <MessageSquare className={`w-4 h-4 ${row.whatsapp_enabled ? 'text-green-600' : 'text-gray-400'}`} />
+            <span className="text-sm">{row.whatsapp_number || '-'}</span>
+          </div>
         </div>
       )
     },
     {
-      header: 'WhatsApp',
-      cell: (row) => (
-        <div className="flex items-center gap-2">
-          <MessageSquare className={`w-4 h-4 ${row.whatsapp_enabled ? 'text-green-600' : 'text-gray-400'}`} />
-          <span className="text-sm">{row.whatsapp_number || '-'}</span>
-        </div>
-      )
-    },
-    {
-      header: 'Notifications',
+      header: 'Active Notifications',
       cell: (row) => (
         <div className="flex flex-wrap gap-1">
-          {row.notify_on_submit && <Badge variant="outline" className="text-xs">Submit</Badge>}
-          {row.notify_on_approval && <Badge variant="outline" className="text-xs">Approval</Badge>}
-          {row.notify_on_payment && <Badge variant="outline" className="text-xs">Payment</Badge>}
-          {row.notify_on_claim && <Badge variant="outline" className="text-xs">Claim</Badge>}
+          {row.notify_batch_status && <Badge variant="outline" className="text-xs bg-blue-50">Batch</Badge>}
+          {row.notify_record_status && <Badge variant="outline" className="text-xs bg-indigo-50">Record</Badge>}
+          {row.notify_nota_status && <Badge variant="outline" className="text-xs bg-purple-50">Nota</Badge>}
+          {row.notify_claim_status && <Badge variant="outline" className="text-xs bg-pink-50">Claim</Badge>}
+          {row.notify_subrogation_status && <Badge variant="outline" className="text-xs bg-orange-50">Subrogation</Badge>}
+          {row.notify_payment_received && <Badge variant="outline" className="text-xs bg-green-50">Payment</Badge>}
+          {row.notify_approval_required && <Badge variant="outline" className="text-xs bg-yellow-50">Approval</Badge>}
+          {row.notify_document_verification && <Badge variant="outline" className="text-xs bg-teal-50">Document</Badge>}
         </div>
+      )
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <Button variant="ghost" size="sm" onClick={() => {
+          setCurrentSetting(row);
+          setActiveTab('my-settings');
+        }}>
+          <Edit className="w-4 h-4" />
+        </Button>
       )
     }
   ];
