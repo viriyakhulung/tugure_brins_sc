@@ -134,6 +134,20 @@ export default function ClaimReview() {
 
       await base44.entities.Claim.update(selectedClaim.id, updateData);
 
+      // Auto-create Nota Claim when invoiced
+      if (actionType === 'invoice') {
+        const notaNumber = `NOTA-CLM-${selectedClaim.claim_no}-${Date.now()}`;
+        await base44.entities.Nota.create({
+          nota_number: notaNumber,
+          nota_type: 'Claim',
+          reference_id: selectedClaim.claim_no,
+          contract_id: selectedClaim.contract_id,
+          amount: selectedClaim.share_tugure_amount || 0,
+          currency: 'IDR',
+          status: 'Draft'
+        });
+      }
+
       // Send email notifications
       const notifSettings = await base44.entities.NotificationSetting.list();
       const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled);
@@ -357,6 +371,19 @@ export default function ClaimReview() {
                   invoiced_by: user?.email,
                   invoiced_date: new Date().toISOString().split('T')[0]
                 });
+                
+                // Auto-create Nota Subrogation
+                const notaNumber = `NOTA-SUB-${row.subrogation_id}-${Date.now()}`;
+                await base44.entities.Nota.create({
+                  nota_number: notaNumber,
+                  nota_type: 'Subrogation',
+                  reference_id: row.subrogation_id,
+                  contract_id: row.contract_id || '',
+                  amount: row.recovery_amount || 0,
+                  currency: 'IDR',
+                  status: 'Draft'
+                });
+                
                 loadData();
               }}
             >
