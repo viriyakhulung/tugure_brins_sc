@@ -42,6 +42,7 @@ export default function SystemConfiguration() {
   
   // User notification setting
   const [currentSetting, setCurrentSetting] = useState({
+    full_name: '',
     notification_email: '',
     whatsapp_number: '',
     email_enabled: true,
@@ -51,6 +52,9 @@ export default function SystemConfiguration() {
     notify_nota_status: true,
     notify_claim_status: true,
     notify_subrogation_status: true,
+    notify_bordero_status: true,
+    notify_invoice_status: true,
+    notify_reconciliation_status: true,
     notify_payment_received: true,
     notify_approval_required: true,
     notify_document_verification: true
@@ -106,6 +110,12 @@ export default function SystemConfiguration() {
       const userSetting = settingsData.find(s => s.user_email === currentUser.email);
       if (userSetting) {
         setCurrentSetting(userSetting);
+      } else {
+        setCurrentSetting(prev => ({
+          ...prev,
+          full_name: currentUser.full_name || currentUser.email,
+          user_email: currentUser.email
+        }));
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -523,6 +533,7 @@ export default function SystemConfiguration() {
       } else {
         await base44.entities.NotificationSetting.create({
           ...currentSetting,
+          full_name: currentSetting.full_name || user.full_name || user.email,
           user_email: user.email,
           user_role: user.role.toUpperCase()
         });
@@ -783,8 +794,9 @@ export default function SystemConfiguration() {
       header: 'User',
       cell: (row) => (
         <div>
-          <p className="font-medium">{row.user_email}</p>
-          <StatusBadge status={row.user_role} />
+          <p className="font-medium">{row.full_name || row.user_email}</p>
+          <p className="text-xs text-gray-500">{row.user_email}</p>
+          <StatusBadge status={row.user_role} className="mt-1" />
         </div>
       )
     },
@@ -810,8 +822,11 @@ export default function SystemConfiguration() {
           {row.notify_batch_status && <Badge variant="outline" className="text-xs bg-blue-50">Batch</Badge>}
           {row.notify_record_status && <Badge variant="outline" className="text-xs bg-indigo-50">Record</Badge>}
           {row.notify_nota_status && <Badge variant="outline" className="text-xs bg-purple-50">Nota</Badge>}
+          {row.notify_bordero_status && <Badge variant="outline" className="text-xs bg-violet-50">Bordero</Badge>}
+          {row.notify_invoice_status && <Badge variant="outline" className="text-xs bg-fuchsia-50">Invoice</Badge>}
           {row.notify_claim_status && <Badge variant="outline" className="text-xs bg-pink-50">Claim</Badge>}
           {row.notify_subrogation_status && <Badge variant="outline" className="text-xs bg-orange-50">Subrogation</Badge>}
+          {row.notify_reconciliation_status && <Badge variant="outline" className="text-xs bg-amber-50">Recon</Badge>}
           {row.notify_payment_received && <Badge variant="outline" className="text-xs bg-green-50">Payment</Badge>}
           {row.notify_approval_required && <Badge variant="outline" className="text-xs bg-yellow-50">Approval</Badge>}
           {row.notify_document_verification && <Badge variant="outline" className="text-xs bg-teal-50">Document</Badge>}
@@ -823,7 +838,6 @@ export default function SystemConfiguration() {
       cell: (row) => (
         <Button variant="ghost" size="sm" onClick={() => {
           setCurrentSetting(row);
-          setActiveTab('my-settings');
         }}>
           <Edit className="w-4 h-4" />
         </Button>
@@ -856,7 +870,7 @@ export default function SystemConfiguration() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="notifications">
             <Bell className="w-4 h-4 mr-2" />
             Notifications ({unreadNotifications.length})
@@ -865,13 +879,9 @@ export default function SystemConfiguration() {
             <Mail className="w-4 h-4 mr-2" />
             Email Templates
           </TabsTrigger>
-          <TabsTrigger value="my-settings">
-            <User className="w-4 h-4 mr-2" />
-            My Settings
-          </TabsTrigger>
-          <TabsTrigger value="all-settings">
+          <TabsTrigger value="notif-engine">
             <Settings className="w-4 h-4 mr-2" />
-            All Settings
+            Notif Engine
           </TabsTrigger>
           <TabsTrigger value="rules">
             <Shield className="w-4 h-4 mr-2" />
@@ -1003,115 +1013,129 @@ export default function SystemConfiguration() {
           />
         </TabsContent>
 
-        {/* My Settings Tab */}
-        <TabsContent value="my-settings" className="mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Contact Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Email for Notifications</Label>
-                  <Input
-                    type="email"
-                    value={currentSetting.notification_email}
-                    onChange={(e) => setCurrentSetting({...currentSetting, notification_email: e.target.value})}
-                    placeholder="your.email@example.com"
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label>WhatsApp Number</Label>
-                  <Input
-                    type="tel"
-                    value={currentSetting.whatsapp_number}
-                    onChange={(e) => setCurrentSetting({...currentSetting, whatsapp_number: e.target.value})}
-                    placeholder="+62812345678"
-                    className="mt-1"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <Label>Enable Email Notifications</Label>
-                  <Switch
-                    checked={currentSetting.email_enabled}
-                    onCheckedChange={(checked) => setCurrentSetting({...currentSetting, email_enabled: checked})}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label>Enable WhatsApp Notifications</Label>
-                  <Switch
-                    checked={currentSetting.whatsapp_enabled}
-                    onCheckedChange={(checked) => setCurrentSetting({...currentSetting, whatsapp_enabled: checked})}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Notification Types</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">Configure which workflow notifications you want to receive</p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { key: 'notify_batch_status', label: 'Batch Status Changes', description: 'Uploaded → Validated → Matched → Approved → Paid → Closed', color: 'blue' },
-                  { key: 'notify_record_status', label: 'Record Status Changes', description: 'Accepted → Revised → Rejected', color: 'indigo' },
-                  { key: 'notify_nota_status', label: 'Nota Status Changes', description: 'Draft → Issued → Confirmed → Paid', color: 'purple' },
-                  { key: 'notify_claim_status', label: 'Claim Status Changes', description: 'Draft → Checked → Doc Verified → Invoiced → Paid', color: 'pink' },
-                  { key: 'notify_subrogation_status', label: 'Subrogation Status Changes', description: 'Draft → Invoiced → Paid/Closed', color: 'orange' },
-                  { key: 'notify_payment_received', label: 'Payment Received', description: 'All payment confirmations', color: 'green' },
-                  { key: 'notify_approval_required', label: 'Approval Required', description: 'Actions requiring your approval', color: 'yellow' },
-                  { key: 'notify_document_verification', label: 'Document Verification', description: 'Document upload and verification updates', color: 'teal' }
-                ].map(({ key, label, description, color }) => (
-                  <div key={key} className={`flex items-start justify-between p-4 bg-${color}-50 border border-${color}-100 rounded-lg`}>
-                    <div className="flex-1">
-                      <Label className="font-medium">{label}</Label>
-                      <p className="text-xs text-gray-500 mt-1">{description}</p>
-                    </div>
-                    <Switch
-                      checked={currentSetting[key]}
-                      onCheckedChange={(checked) => setCurrentSetting({...currentSetting, [key]: checked})}
+        {/* Notif Engine Tab */}
+        <TabsContent value="notif-engine" className="mt-4 space-y-6">
+          {/* My Settings Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>My Notification Preferences</CardTitle>
+              <p className="text-sm text-gray-500">Configure your personal notification settings</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label>Full Name</Label>
+                    <Input
+                      type="text"
+                      value={currentSetting.full_name}
+                      onChange={(e) => setCurrentSetting({...currentSetting, full_name: e.target.value})}
+                      placeholder="Your full name"
+                      className="mt-1"
                     />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
 
-          <Card className="mt-6">
-            <CardContent className="p-6 flex justify-center">
-              <Button
-                onClick={handleSaveUserSettings}
-                disabled={processing}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Save Settings
-                  </>
-                )}
-              </Button>
+                  <div>
+                    <Label>Email for Notifications</Label>
+                    <Input
+                      type="email"
+                      value={currentSetting.notification_email}
+                      onChange={(e) => setCurrentSetting({...currentSetting, notification_email: e.target.value})}
+                      placeholder="your.email@example.com"
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>WhatsApp Number</Label>
+                    <Input
+                      type="tel"
+                      value={currentSetting.whatsapp_number}
+                      onChange={(e) => setCurrentSetting({...currentSetting, whatsapp_number: e.target.value})}
+                      placeholder="+62812345678"
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <Label>Enable Email Notifications</Label>
+                    <Switch
+                      checked={currentSetting.email_enabled}
+                      onCheckedChange={(checked) => setCurrentSetting({...currentSetting, email_enabled: checked})}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <Label>Enable WhatsApp Notifications</Label>
+                    <Switch
+                      checked={currentSetting.whatsapp_enabled}
+                      onCheckedChange={(checked) => setCurrentSetting({...currentSetting, whatsapp_enabled: checked})}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleSaveUserSettings}
+                    disabled={processing}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                  >
+                    {processing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Save My Settings
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                <div className="lg:col-span-2 space-y-3">
+                  <Label className="text-base font-semibold">Notification Types</Label>
+                  <p className="text-sm text-gray-500 mb-4">Select which workflow notifications you want to receive</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                      { key: 'notify_batch_status', label: 'Batch Status', description: 'Uploaded → Validated → Matched → Approved → Paid → Closed', color: 'blue' },
+                      { key: 'notify_record_status', label: 'Record Status', description: 'Accepted → Revised → Rejected', color: 'indigo' },
+                      { key: 'notify_nota_status', label: 'Nota Status', description: 'Draft → Issued → Confirmed → Paid', color: 'purple' },
+                      { key: 'notify_bordero_status', label: 'Bordero Status', description: 'Generated → Under Review → Final', color: 'violet' },
+                      { key: 'notify_invoice_status', label: 'Invoice Status', description: 'Issued → Partially Paid → Paid', color: 'fuchsia' },
+                      { key: 'notify_claim_status', label: 'Claim Status', description: 'Draft → Checked → Doc Verified → Invoiced → Paid', color: 'pink' },
+                      { key: 'notify_subrogation_status', label: 'Subrogation Status', description: 'Draft → Invoiced → Paid/Closed', color: 'orange' },
+                      { key: 'notify_reconciliation_status', label: 'Reconciliation Status', description: 'In Progress → Exception → Ready to Close → Closed', color: 'amber' },
+                      { key: 'notify_payment_received', label: 'Payment Received', description: 'Payment confirmations and matching', color: 'green' },
+                      { key: 'notify_approval_required', label: 'Approval Required', description: 'Actions requiring your approval', color: 'yellow' },
+                      { key: 'notify_document_verification', label: 'Document Verification', description: 'Document upload and verification updates', color: 'teal' }
+                    ].map(({ key, label, description, color }) => (
+                      <div key={key} className={`flex items-start justify-between p-3 bg-${color}-50 border border-${color}-100 rounded-lg`}>
+                        <div className="flex-1 pr-3">
+                          <Label className="font-medium text-sm">{label}</Label>
+                          <p className="text-xs text-gray-500 mt-0.5">{description}</p>
+                        </div>
+                        <Switch
+                          checked={currentSetting[key]}
+                          onCheckedChange={(checked) => setCurrentSetting({...currentSetting, [key]: checked})}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* All Settings Tab */}
-        <TabsContent value="all-settings" className="mt-4">
-          {selectedSettings.length > 0 && (
-            <Card className="mb-4">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-600">{selectedSettings.length} settings selected</p>
+          {/* All User Settings Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>All User Notification Settings</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">Manage notification preferences for all users</p>
+                </div>
+                {selectedSettings.length > 0 && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -1119,18 +1143,20 @@ export default function SystemConfiguration() {
                     disabled={processing}
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Selected
+                    Delete ({selectedSettings.length})
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          <DataTable
-            columns={settingsColumns}
-            data={notificationSettings}
-            isLoading={loading}
-            emptyMessage="No notification settings found"
-          />
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <DataTable
+                columns={settingsColumns}
+                data={notificationSettings}
+                isLoading={loading}
+                emptyMessage="No notification settings found"
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Business Rules Tab */}
