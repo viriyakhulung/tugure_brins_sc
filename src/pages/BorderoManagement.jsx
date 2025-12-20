@@ -351,6 +351,61 @@ export default function BorderoManagement() {
         }
       />
 
+      {successMessage && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Bordero Action Dialog */}
+      <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move Bordero to {actionType}</DialogTitle>
+            <DialogDescription>
+              Update bordero {selectedItem?.bordero_id} status from {selectedItem?.status} to {actionType}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Period:</span>
+                <span className="font-medium">{selectedItem?.period}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Total Debtors:</span>
+                <span className="font-medium">{selectedItem?.total_debtors}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Total Premium:</span>
+                <span className="font-medium">Rp {(selectedItem?.total_premium || 0).toLocaleString('id-ID')}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowActionDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleBorderoAction}
+              disabled={processing}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <ArrowRight className="w-4 h-4 mr-2" />
+                  Confirm
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <FilterPanel
         filters={filters}
         onFilterChange={handleFilterChange}
