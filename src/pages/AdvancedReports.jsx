@@ -18,12 +18,17 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 export default function AdvancedReports() {
   const [loading, setLoading] = useState(true);
   const [debtors, setDebtors] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [claims, setClaims] = useState([]);
+  const [subrogations, setSubrogations] = useState([]);
   const [filters, setFilters] = useState({
     batch: 'all',
     period: '2024',
     branch: 'all',
-    plafonRange: 'all'
+    plafonRange: 'all',
+    batchStatus: 'all',
+    claimStatus: 'all',
+    creditType: 'all'
   });
 
   useEffect(() => {
@@ -33,12 +38,16 @@ export default function AdvancedReports() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [debtorData, claimData] = await Promise.all([
+      const [debtorData, batchData, claimData, subrogationData] = await Promise.all([
         base44.entities.Debtor.list(),
-        base44.entities.Claim.list()
+        base44.entities.Batch.list(),
+        base44.entities.Claim.list(),
+        base44.entities.Subrogation.list()
       ]);
       setDebtors(debtorData || []);
+      setBatches(batchData || []);
       setClaims(claimData || []);
+      setSubrogations(subrogationData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -50,6 +59,9 @@ export default function AdvancedReports() {
     if (filters.batch !== 'all' && d.batch_id !== filters.batch) return false;
     if (filters.period !== 'all' && d.batch_year?.toString() !== filters.period) return false;
     if (filters.branch !== 'all' && d.branch_code !== filters.branch) return false;
+    if (filters.batchStatus !== 'all' && d.batch_status !== filters.batchStatus) return false;
+    if (filters.claimStatus !== 'all' && d.claim_status !== filters.claimStatus) return false;
+    if (filters.creditType !== 'all' && d.credit_type !== filters.creditType) return false;
     if (filters.plafonRange !== 'all') {
       const plafon = d.credit_plafond || 0;
       if (filters.plafonRange === '<100M' && plafon >= 100000000) return false;
@@ -60,106 +72,381 @@ export default function AdvancedReports() {
     return true;
   });
 
-  // Loss Ratio Calculations
+  const filteredBatches = batches.filter(b => {
+    if (filters.batch !== 'all' && b.batch_id !== filters.batch) return false;
+    if (filters.batchStatus !== 'all' && b.status !== filters.batchStatus) return false;
+    return true;
+  });
+
+  const filteredClaims = claims.filter(c => {
+    if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
+    return true;
+  });
+
+  const filteredSubrogations = subrogations.filter(s => {
+    const matchingClaim = claims.find(c => c.id === s.claim_id);
+    if (filters.claimStatus !== 'all' && matchingClaim?.claim_status !== filters.claimStatus) return false;
+    return true;
+  });
+
+  // Loss Ratio Calculations (STATUS-BASED)
   const lossRatioData = () => {
-    const totalPremium = filteredDebtors.reduce((sum, d) => sum + (d.gross_premium || 0), 0);
-    const totalClaimPaid = filteredDebtors.reduce((sum, d) => sum + (d.claim_amount || 0), 0);
-    const lossRatio = totalPremium > 0 ? (totalClaimPaid / totalPremium * 100) : 0;
+    // Only include Paid/Closed batches for earned premium
+    const earnedBatches = filteredBatches.filter(b => ['Paid', 'Closed'].includes(b.status));
+    const earnedBatchIds = earnedBatches.map(b => b.batch_id);
+    const earnedDebtors = filteredDebtors.filter(d => earnedBatchIds.includes(d.batch_id));
+    
+    const premiumEarned = earnedDebtors.reduce((sum, d) => sum + (d.gross_premium || 0), 0);
+    
+    // Only count Paid claims
+    const paidClaims = filteredClaims.filter(c => c.claim_status === 'Paid');
+    const claimPaid = paidClaims.reduce((sum, c) => sum + (c.share_tugure_amount || 0), 0);
+    
+    const lossRatio = premiumEarned > 0 ? (claimPaid / premiumEarned * 100) : 0;
 
-    // Monthly trend
+    // Process Health
+    const totalBatches = filteredBatches.length;
+    const closedBatches = filteredBatches.filter(b => b.status === 'Closed').length;
+    const outstandingBatches = totalBatches - closedBatches;
+    
+    const totalClaimsInvoiced = filteredClaims.filter(c => ['Invoiced', 'Paid'].includes(c.claim_status)).length;
+    const totalClaimsPaid = paidClaims.length;
+    const claimPaymentRate = totalClaimsInvoiced > 0 ? (totalClaimsPaid / totalClaimsInvoiced * 100) : 0;
+
+    // Trend by status
     const monthlyData = {};
-    filteredDebtors.forEach(d => {
-      const month = d.batch_month || 1;
-      const key = `${d.batch_year}-${String(month).padStart(2, '0')}`;
+    paidClaims.forEach(c => {
+      const date = c.paid_date || c.created_date;
+      if (!date) return;
+      const key = date.substring(0, 7); // YYYY-MM
       if (!monthlyData[key]) {
-        monthlyData[key] = { month: key, premium: 0, claim: 0 };
+        monthlyData[key] = { month: key, claimPaid: 0, Draft: 0, Checked: 0, 'Doc Verified': 0, Invoiced: 0, Paid: 0 };
       }
-      monthlyData[key].premium += d.gross_premium || 0;
-      monthlyData[key].claim += d.claim_amount || 0;
+      monthlyData[key].claimPaid += c.share_tugure_amount || 0;
     });
 
-    const trend = Object.values(monthlyData).map(m => ({
-      ...m,
-      lossRatio: m.premium > 0 ? (m.claim / m.premium * 100).toFixed(2) : 0
-    })).sort((a, b) => a.month.localeCompare(b.month));
-
-    return { totalPremium, totalClaimPaid, lossRatio, trend };
-  };
-
-  // Premium by Status
-  const premiumByStatus = () => {
-    const statusData = {};
-    filteredDebtors.forEach(d => {
-      const status = d.underwriting_status || 'UNKNOWN';
-      if (!statusData[status]) {
-        statusData[status] = 0;
+    // Add claim status distribution by month
+    filteredClaims.forEach(c => {
+      const date = c.created_date;
+      if (!date) return;
+      const key = date.substring(0, 7);
+      if (!monthlyData[key]) {
+        monthlyData[key] = { month: key, claimPaid: 0, Draft: 0, Checked: 0, 'Doc Verified': 0, Invoiced: 0, Paid: 0 };
       }
-      statusData[status] += d.gross_premium || 0;
+      monthlyData[key][c.claim_status] = (monthlyData[key][c.claim_status] || 0) + 1;
     });
 
-    return Object.entries(statusData).map(([status, amount]) => ({
-      status,
-      amount,
-      percentage: ((amount / filteredDebtors.reduce((sum, d) => sum + (d.gross_premium || 0), 0)) * 100).toFixed(1)
+    const trend = Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+
+    // Distribution by credit type
+    const byCreditType = {};
+    earnedDebtors.forEach(d => {
+      const type = d.credit_type || 'Unknown';
+      if (!byCreditType[type]) byCreditType[type] = { premium: 0, claim: 0 };
+      byCreditType[type].premium += d.gross_premium || 0;
+    });
+    paidClaims.forEach(c => {
+      const debtor = debtors.find(d => d.id === c.debtor_id);
+      const type = debtor?.credit_type || 'Unknown';
+      if (!byCreditType[type]) byCreditType[type] = { premium: 0, claim: 0 };
+      byCreditType[type].claim += c.share_tugure_amount || 0;
+    });
+    const creditTypeData = Object.entries(byCreditType).map(([type, data]) => ({
+      type,
+      lossRatio: data.premium > 0 ? ((data.claim / data.premium) * 100).toFixed(2) : 0,
+      premium: data.premium,
+      claim: data.claim
     }));
-  };
 
-  // Claim Paid Report
-  const claimPaidData = () => {
-    const paidClaims = filteredDebtors.filter(d => d.claim_status === 'SETTLED');
-    const totalPaid = paidClaims.reduce((sum, d) => sum + (d.claim_amount || 0), 0);
-    const avgClaim = paidClaims.length > 0 ? totalPaid / paidClaims.length : 0;
-
-    // By plafon range
-    const ranges = {
-      '<100M': 0,
-      '100-500M': 0,
-      '500M-1B': 0,
-      '>1B': 0
-    };
-    paidClaims.forEach(d => {
-      const plafon = d.credit_plafond || 0;
-      if (plafon < 100000000) ranges['<100M'] += d.claim_amount || 0;
-      else if (plafon < 500000000) ranges['100-500M'] += d.claim_amount || 0;
-      else if (plafon < 1000000000) ranges['500M-1B'] += d.claim_amount || 0;
-      else ranges['>1B'] += d.claim_amount || 0;
+    // Distribution by branch
+    const byBranch = {};
+    earnedDebtors.forEach(d => {
+      const branch = d.branch_desc || 'Unknown';
+      if (!byBranch[branch]) byBranch[branch] = { premium: 0, claim: 0 };
+      byBranch[branch].premium += d.gross_premium || 0;
     });
+    paidClaims.forEach(c => {
+      const debtor = debtors.find(d => d.id === c.debtor_id);
+      const branch = debtor?.branch_desc || 'Unknown';
+      if (!byBranch[branch]) byBranch[branch] = { premium: 0, claim: 0 };
+      byBranch[branch].claim += c.share_tugure_amount || 0;
+    });
+    const branchData = Object.entries(byBranch).map(([branch, data]) => ({
+      branch,
+      lossRatio: data.premium > 0 ? ((data.claim / data.premium) * 100).toFixed(2) : 0
+    })).sort((a, b) => parseFloat(b.lossRatio) - parseFloat(a.lossRatio)).slice(0, 10);
 
     return { 
-      totalPaid, 
-      count: paidClaims.length, 
-      avgClaim,
-      byRange: Object.entries(ranges).map(([range, amount]) => ({ range, amount }))
+      premiumEarned, 
+      claimPaid, 
+      lossRatio, 
+      closedBatches,
+      outstandingBatches,
+      claimPaymentRate,
+      trend,
+      creditTypeData,
+      branchData
     };
   };
 
-  // Outstanding Recovery
-  const outstandingRecovery = () => {
-    const totalClaimPaid = filteredDebtors.reduce((sum, d) => sum + (d.claim_amount || 0), 0);
-    const totalRecovered = filteredDebtors.reduce((sum, d) => sum + (d.subrogation_amount || 0), 0);
-    const outstanding = totalClaimPaid - totalRecovered;
-    const recoveryRate = totalClaimPaid > 0 ? (totalRecovered / totalClaimPaid * 100) : 0;
+  // Premium by Status (PROCESS PERFORMANCE)
+  const premiumByStatus = () => {
+    const totalGrossPremium = filteredBatches.reduce((sum, b) => sum + (b.total_premium || 0), 0);
+    const netPremium = filteredDebtors.reduce((sum, d) => sum + (d.net_premium || 0), 0);
+    
+    // Paid Premium = batch_status in (Paid, Closed)
+    const paidBatches = filteredBatches.filter(b => ['Paid', 'Closed'].includes(b.status));
+    const paidPremium = paidBatches.reduce((sum, b) => sum + (b.total_premium || 0), 0);
+    const paidPercentage = totalGrossPremium > 0 ? (paidPremium / totalGrossPremium * 100) : 0;
+    
+    // Outstanding Premium
+    const outstandingPremium = totalGrossPremium - paidPremium;
+    const outstandingPercentage = totalGrossPremium > 0 ? (outstandingPremium / totalGrossPremium * 100) : 0;
 
-    return { totalClaimPaid, totalRecovered, outstanding, recoveryRate };
+    // Premium by batch status
+    const statusData = {};
+    filteredBatches.forEach(b => {
+      const status = b.status || 'UNKNOWN';
+      statusData[status] = (statusData[status] || 0) + (b.total_premium || 0);
+    });
+    const byStatus = Object.entries(statusData).map(([status, amount]) => ({
+      status,
+      amount
+    })).sort((a, b) => b.amount - a.amount);
+
+    // Trend over time by status
+    const monthlyData = {};
+    filteredBatches.forEach(b => {
+      const date = b.created_date;
+      if (!date) return;
+      const key = date.substring(0, 7);
+      if (!monthlyData[key]) {
+        monthlyData[key] = { month: key, Uploaded: 0, Validated: 0, Matched: 0, Approved: 0, 'Nota Issued': 0, 'Branch Confirmed': 0, Paid: 0, Closed: 0 };
+      }
+      const status = b.status || 'UNKNOWN';
+      monthlyData[key][status] = (monthlyData[key][status] || 0) + (b.total_premium || 0);
+    });
+    const trend = Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+
+    // Distribution by branch
+    const byBranch = {};
+    filteredDebtors.forEach(d => {
+      const branch = d.branch_desc || 'Unknown';
+      const status = d.batch_status || 'UNKNOWN';
+      if (!byBranch[branch]) byBranch[branch] = { paid: 0, outstanding: 0 };
+      if (['Paid', 'Closed'].includes(status)) {
+        byBranch[branch].paid += d.gross_premium || 0;
+      } else {
+        byBranch[branch].outstanding += d.gross_premium || 0;
+      }
+    });
+    const branchData = Object.entries(byBranch).map(([branch, data]) => ({
+      branch,
+      paid: data.paid,
+      outstanding: data.outstanding
+    })).sort((a, b) => (b.paid + b.outstanding) - (a.paid + a.outstanding)).slice(0, 10);
+
+    // Identify bottleneck
+    const bottleneck = byStatus.find(s => !['Paid', 'Closed'].includes(s.status)) || {};
+
+    return { 
+      totalGrossPremium,
+      netPremium,
+      paidPremium,
+      paidPercentage,
+      outstandingPremium,
+      outstandingPercentage,
+      byStatus,
+      trend,
+      branchData,
+      bottleneck
+    };
   };
 
-  // Subrogation Tracking
-  const subrogationData = () => {
-    const statusCount = {};
-    filteredDebtors.forEach(d => {
-      const status = d.subrogation_status || 'NO_SUBROGATION';
-      statusCount[status] = (statusCount[status] || 0) + 1;
+  // Claim Paid Report (LIFECYCLE VIEW)
+  const claimPaidData = () => {
+    const paidClaims = filteredClaims.filter(c => c.claim_status === 'Paid');
+    const totalPaid = paidClaims.reduce((sum, c) => sum + (c.share_tugure_amount || 0), 0);
+    
+    // Claims in progress
+    const inProgress = filteredClaims.filter(c => ['Draft', 'Checked', 'Doc Verified'].includes(c.claim_status)).length;
+    
+    // Claims invoiced but not paid
+    const invoicedNotPaid = filteredClaims.filter(c => c.claim_status === 'Invoiced').length;
+    
+    // Average settlement time (simplified - using dates if available)
+    let totalDays = 0;
+    let settledCount = 0;
+    paidClaims.forEach(c => {
+      if (c.created_date && c.paid_date) {
+        const created = new Date(c.created_date);
+        const paid = new Date(c.paid_date);
+        const days = Math.floor((paid - created) / (1000 * 60 * 60 * 24));
+        if (days >= 0) {
+          totalDays += days;
+          settledCount++;
+        }
+      }
     });
+    const avgSettlementDays = settledCount > 0 ? Math.round(totalDays / settledCount) : 0;
 
-    const totalRecovery = filteredDebtors
-      .filter(d => d.subrogation_status === 'RECOVERED')
-      .reduce((sum, d) => sum + (d.subrogation_amount || 0), 0);
+    // Trend by status over time
+    const monthlyData = {};
+    filteredClaims.forEach(c => {
+      const date = c.created_date;
+      if (!date) return;
+      const key = date.substring(0, 7);
+      if (!monthlyData[key]) {
+        monthlyData[key] = { month: key, Draft: 0, Checked: 0, 'Doc Verified': 0, Invoiced: 0, Paid: 0 };
+      }
+      monthlyData[key][c.claim_status] = (monthlyData[key][c.claim_status] || 0) + 1;
+    });
+    const trend = Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+
+    // Distribution by status
+    const byStatus = {};
+    filteredClaims.forEach(c => {
+      const status = c.claim_status || 'UNKNOWN';
+      if (!byStatus[status]) byStatus[status] = 0;
+      byStatus[status] += c.share_tugure_amount || 0;
+    });
+    const statusData = Object.entries(byStatus).map(([status, amount]) => ({ status, amount }));
+
+    // Distribution by product
+    const byProduct = {};
+    paidClaims.forEach(c => {
+      const debtor = debtors.find(d => d.id === c.debtor_id);
+      const product = debtor?.credit_type || 'Unknown';
+      byProduct[product] = (byProduct[product] || 0) + (c.share_tugure_amount || 0);
+    });
+    const productData = Object.entries(byProduct).map(([product, amount]) => ({ product, amount }));
+
+    return { 
+      totalPaid,
+      count: paidClaims.length,
+      inProgress,
+      invoicedNotPaid,
+      avgSettlementDays,
+      trend,
+      statusData,
+      productData
+    };
+  };
+
+  // Outstanding Recovery (OUTSTANDING RISK VIEW)
+  const outstandingRecovery = () => {
+    const paidClaims = filteredClaims.filter(c => c.claim_status === 'Paid');
+    const totalClaimPaid = paidClaims.reduce((sum, c) => sum + (c.share_tugure_amount || 0), 0);
+    
+    const paidSubrogations = filteredSubrogations.filter(s => s.status === 'Paid / Closed');
+    const totalRecovered = paidSubrogations.reduce((sum, s) => sum + (s.recovery_amount || 0), 0);
+    
+    const outstanding = totalClaimPaid - totalRecovered;
+
+    // Trend over time
+    const monthlyData = {};
+    paidClaims.forEach(c => {
+      const date = c.paid_date || c.created_date;
+      if (!date) return;
+      const key = date.substring(0, 7);
+      if (!monthlyData[key]) monthlyData[key] = { month: key, claimPaid: 0, recovered: 0, outstanding: 0 };
+      monthlyData[key].claimPaid += c.share_tugure_amount || 0;
+    });
+    paidSubrogations.forEach(s => {
+      const date = s.closed_date || s.created_date;
+      if (!date) return;
+      const key = date.substring(0, 7);
+      if (!monthlyData[key]) monthlyData[key] = { month: key, claimPaid: 0, recovered: 0, outstanding: 0 };
+      monthlyData[key].recovered += s.recovery_amount || 0;
+    });
+    Object.values(monthlyData).forEach(m => {
+      m.outstanding = m.claimPaid - m.recovered;
+    });
+    const trend = Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+
+    // Distribution by credit type
+    const byType = {};
+    paidClaims.forEach(c => {
+      const debtor = debtors.find(d => d.id === c.debtor_id);
+      const type = debtor?.credit_type || 'Unknown';
+      if (!byType[type]) byType[type] = { claimPaid: 0, recovered: 0 };
+      byType[type].claimPaid += c.share_tugure_amount || 0;
+    });
+    paidSubrogations.forEach(s => {
+      const claim = claims.find(c => c.id === s.claim_id);
+      const debtor = debtors.find(d => d.id === claim?.debtor_id);
+      const type = debtor?.credit_type || 'Unknown';
+      if (!byType[type]) byType[type] = { claimPaid: 0, recovered: 0 };
+      byType[type].recovered += s.recovery_amount || 0;
+    });
+    const typeData = Object.entries(byType).map(([type, data]) => ({
+      type,
+      outstanding: data.claimPaid - data.recovered
+    }));
+
+    return { 
+      totalClaimPaid, 
+      totalRecovered, 
+      outstanding,
+      trend,
+      typeData
+    };
+  };
+
+  // Subrogation Tracking (SETTLEMENT EFFICIENCY)
+  const subrogationData = () => {
+    const totalAmount = filteredSubrogations.reduce((sum, s) => sum + (s.recovery_amount || 0), 0);
+    
+    const recovered = filteredSubrogations.filter(s => s.status === 'Paid / Closed');
+    const recoveredAmount = recovered.reduce((sum, s) => sum + (s.recovery_amount || 0), 0);
+    
+    const pending = filteredSubrogations.filter(s => s.status !== 'Paid / Closed');
+    const pendingAmount = pending.reduce((sum, s) => sum + (s.recovery_amount || 0), 0);
+    
+    const recoveryRate = totalAmount > 0 ? (recoveredAmount / totalAmount * 100) : 0;
+
+    // Trend by status over time
+    const monthlyData = {};
+    filteredSubrogations.forEach(s => {
+      const date = s.created_date;
+      if (!date) return;
+      const key = date.substring(0, 7);
+      if (!monthlyData[key]) {
+        monthlyData[key] = { month: key, Draft: 0, Invoiced: 0, 'Paid / Closed': 0 };
+      }
+      monthlyData[key][s.status] = (monthlyData[key][s.status] || 0) + (s.recovery_amount || 0);
+    });
+    const trend = Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+
+    // Distribution by status
+    const byStatus = {};
+    filteredSubrogations.forEach(s => {
+      const status = s.status || 'UNKNOWN';
+      byStatus[status] = (byStatus[status] || 0) + (s.recovery_amount || 0);
+    });
+    const statusData = Object.entries(byStatus).map(([status, amount]) => ({ status, amount }));
+
+    // Distribution by branch
+    const byBranch = {};
+    recovered.forEach(s => {
+      const claim = claims.find(c => c.id === s.claim_id);
+      const debtor = debtors.find(d => d.id === claim?.debtor_id);
+      const branch = debtor?.branch_desc || 'Unknown';
+      byBranch[branch] = (byBranch[branch] || 0) + (s.recovery_amount || 0);
+    });
+    const branchData = Object.entries(byBranch)
+      .map(([branch, amount]) => ({ branch, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 10);
 
     return {
-      statusData: Object.entries(statusCount).map(([status, count]) => ({ status, count })),
-      totalRecovery,
-      successRate: statusCount['RECOVERED'] ? 
-        ((statusCount['RECOVERED'] / Object.values(statusCount).reduce((a,b) => a+b, 0)) * 100).toFixed(1) : 0
+      totalAmount,
+      recoveredAmount,
+      pendingAmount,
+      recoveryRate,
+      trend,
+      statusData,
+      branchData
     };
   };
 
@@ -194,9 +481,12 @@ export default function AdvancedReports() {
   const recovery = outstandingRecovery();
   const subrogation = subrogationData();
 
-  const batches = [...new Set(debtors.map(d => d.batch_id))];
-  const branches = [...new Set(debtors.map(d => d.branch_code))];
-  const years = [...new Set(debtors.map(d => d.batch_year?.toString()))];
+  const batchIds = [...new Set(batches.map(b => b.batch_id))].filter(Boolean);
+  const branches = [...new Set(debtors.map(d => d.branch_code))].filter(Boolean);
+  const years = [...new Set(debtors.map(d => d.batch_year?.toString()))].filter(Boolean);
+  const batchStatuses = ['Uploaded', 'Validated', 'Matched', 'Approved', 'Nota Issued', 'Branch Confirmed', 'Paid', 'Closed'];
+  const claimStatuses = ['Draft', 'Checked', 'Doc Verified', 'Invoiced', 'Paid'];
+  const creditTypes = ['Individual', 'Corporate'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
@@ -227,7 +517,7 @@ export default function AdvancedReports() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Batches</SelectItem>
-                  {batches.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  {batchIds.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -240,6 +530,44 @@ export default function AdvancedReports() {
                 <SelectContent>
                   <SelectItem value="all">All Years</SelectItem>
                   {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-semibold mb-2 block text-gray-900">Batch Status</label>
+              <Select value={filters.batchStatus} onValueChange={(v) => setFilters({...filters, batchStatus: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {batchStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-semibold mb-2 block text-gray-900">Claim Status</label>
+              <Select value={filters.claimStatus} onValueChange={(v) => setFilters({...filters, claimStatus: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {claimStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div>
+              <label className="text-sm font-semibold mb-2 block text-gray-900">Credit Type</label>
+              <Select value={filters.creditType} onValueChange={(v) => setFilters({...filters, creditType: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {creditTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -272,7 +600,7 @@ export default function AdvancedReports() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <Button variant="outline" size="sm" onClick={() => setFilters({ batch: 'all', period: 'all', branch: 'all', plafonRange: 'all' })} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold">
+            <Button variant="outline" size="sm" onClick={() => setFilters({ batch: 'all', period: 'all', branch: 'all', plafonRange: 'all', batchStatus: 'all', claimStatus: 'all', creditType: 'all' })} className="bg-white hover:bg-gray-50 text-gray-900 font-semibold">
               Clear Filters
             </Button>
           </div>
@@ -302,19 +630,19 @@ export default function AdvancedReports() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <StatCard
-                title="Total Premium"
-                value={`Rp ${(lossRatio.totalPremium / 1000000).toFixed(1)}M`}
-                subtitle="Total premium collected"
+                title="Premium Earned"
+                value={`Rp ${(lossRatio.premiumEarned / 1000000).toFixed(1)}M`}
+                subtitle="Batch Paid/Closed only"
                 icon={DollarSign}
                 gradient
                 className="from-blue-500 to-indigo-600"
               />
               <StatCard
-                title="Total Claim Paid"
-                value={`Rp ${(lossRatio.totalClaimPaid / 1000000).toFixed(1)}M`}
-                subtitle="Total claims settled"
+                title="Claim Paid"
+                value={`Rp ${(lossRatio.claimPaid / 1000000).toFixed(1)}M`}
+                subtitle="Paid claims only"
                 icon={FileText}
                 gradient
                 className="from-red-500 to-pink-600"
@@ -327,7 +655,34 @@ export default function AdvancedReports() {
                 gradient
                 className={lossRatio.lossRatio < 70 ? 'from-green-500 to-emerald-600' : lossRatio.lossRatio < 85 ? 'from-yellow-500 to-orange-600' : 'from-red-500 to-red-700'}
               />
+              <StatCard
+                title="Claim Payment Rate"
+                value={`${lossRatio.claimPaymentRate.toFixed(1)}%`}
+                subtitle="Claims paid vs invoiced"
+                icon={TrendingUp}
+                gradient
+                className="from-purple-500 to-purple-600"
+              />
             </div>
+
+            {/* Process Health Summary */}
+            <Card className="shadow-lg border-2 bg-gradient-to-br from-white to-slate-50">
+              <CardHeader className="bg-gradient-to-r from-slate-600 to-slate-700 text-white border-b-2">
+                <CardTitle className="text-white font-bold">📋 Process Health Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-green-50 rounded-lg border-2 border-green-200">
+                    <p className="text-sm text-gray-600">Closed Batches</p>
+                    <p className="text-2xl font-bold text-green-700">{lossRatio.closedBatches}</p>
+                  </div>
+                  <div className="p-3 bg-orange-50 rounded-lg border-2 border-orange-200">
+                    <p className="text-sm text-gray-600">Outstanding Batches</p>
+                    <p className="text-2xl font-bold text-orange-700">{lossRatio.outstandingBatches}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-blue-50">
               <CardHeader className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-b-4 border-indigo-700">
