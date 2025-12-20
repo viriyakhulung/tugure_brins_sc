@@ -227,12 +227,15 @@ export default function ClaimSubmit() {
 
   const downloadTemplate = () => {
     const templateData = [
-      ['NAMA_TERTANGGUNG', 'NO_KTP_NPWP', 'NO_FASILITAS_KREDIT', 'BDO_PREMI', 'TANGGAL_REALISASI_KREDIT', 
-       'PLAFOND', 'MAX_COVERAGE', 'KOL_DEBITUR', 'DOL', 'NILAI_KLAIM', 'CLAIMNO', 'POLICYNO', 
-       'NOMOR_SERTIFIKAT', 'SHARE_TUGURE_PCT', 'SHARE_TUGURE_AMOUNT'],
-      ['PT Sejahtera Manufacturing', '03.456.789.0-123.000', '7001234567894', 'BDO/2024/10/0025', '2024-10-10', 
-       '1200000000', '1020000000', '3', '2024-12-01', '150000000', 'CLM/2024/12/001', 'POL/2024/KUR/001',
-       'CERT-2024-100025', '85', '127500000']
+      // Simplified header - only essential fields for claim upload
+      ['participant_no', 'nama_tertanggung', 'no_ktp_npwp', 'no_fasilitas_kredit', 
+       'plafond', 'kol_debitur', 'dol', 'nilai_klaim', 'claim_remarks'],
+      // Example Individual Claim
+      ['P2024001', 'Budi Santoso', '3201234567890123', '1001234567', 
+       '50000000', '3', '2024-12-01', '35000000', 'Meninggal dunia akibat kecelakaan'],
+      // Example Corporate Claim
+      ['P2024002', 'PT Sejahtera Abadi', '01.234.567.8-901.000', '1001234568', 
+       '500000000', '4', '2024-12-05', '300000000', 'Default - Kolektibilitas 4, gagal bayar 90 hari']
     ];
     
     const csvContent = templateData.map(row => row.join(',')).join('\n');
@@ -240,7 +243,7 @@ export default function ClaimSubmit() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'claim_template.csv';
+    a.download = 'claim_upload_template.csv';
     a.click();
   };
 

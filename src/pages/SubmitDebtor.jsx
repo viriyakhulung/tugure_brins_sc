@@ -331,17 +331,18 @@ export default function SubmitDebtor() {
 
   const downloadTemplate = () => {
     const templateData = [
-      ['batch_id', 'batch_month', 'batch_year', 'program_id', 'product_code', 'credit_type', 'currency', 
-       'participant_no', 'loan_account_no', 'debtor_name', 'debtor_identifier', 'debtor_type', 'debtor_address',
-       'region_desc', 'loan_type', 'loan_type_desc', 'covering_type_desc', 'coverage_start_date', 'coverage_end_date',
-       'credit_plafond', 'outstanding_amount', 'coverage_pct', 'collectability_col', 'flag_restruktur',
-       'underwriting_status', 'gross_premium', 'reinsurance_premium', 'ric_amount', 'bf_amount', 'net_premium',
-       'unit_code', 'unit_desc', 'branch_code', 'branch_desc'],
-      ['BATCH-2024-001', '12', '2024', 'PROG-KUR-001', 'KUR-MIKRO', 'Corporate', 'IDR',
-       'P2024001', '1234567890', 'PT Example Corp', '01.234.567.8-901.000', 'PT', 'Jl. Example No. 123, Jakarta',
-       'DKI Jakarta', 'KMK', 'Kredit Modal Kerja', 'Full Coverage', '2024-01-15', '2025-01-14',
-       '500000000', '450000000', '80', '1', '0', 'DRAFT', '5000000', '4000000', '1300000', '100000', '2600000',
-       'U001', 'Unit Jakarta', 'BR001', 'Cabang Jakarta Pusat']
+      // Simplified header - only essential fields for upload
+      ['participant_no', 'debtor_name', 'loan_account_no', 'debtor_identifier', 'credit_type', 
+       'debtor_type', 'debtor_address', 'credit_plafond', 'outstanding_amount', 'coverage_pct', 
+       'coverage_start_date', 'coverage_end_date', 'gross_premium', 'branch_code', 'branch_desc'],
+      // Example Individual
+      ['P2024001', 'Budi Santoso', '1001234567', '3201234567890123', 'Individual', 
+       'Individual', 'Jl. Merdeka No. 45, Jakarta Pusat', '50000000', '45000000', '75', 
+       '2024-01-15', '2025-01-14', '500000', 'BR001', 'Cabang Jakarta Pusat'],
+      // Example Corporate
+      ['P2024002', 'PT Sejahtera Abadi', '1001234568', '01.234.567.8-901.000', 'Corporate', 
+       'PT', 'Jl. Sudirman No. 100, Jakarta Selatan', '500000000', '450000000', '80', 
+       '2024-01-15', '2025-01-14', '5000000', 'BR002', 'Cabang Jakarta Selatan']
     ];
     
     const csvContent = templateData.map(row => row.join(',')).join('\n');
@@ -349,7 +350,7 @@ export default function SubmitDebtor() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'debtor_template.csv';
+    a.download = 'debtor_upload_template.csv';
     a.click();
   };
 
