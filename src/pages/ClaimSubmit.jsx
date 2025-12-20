@@ -227,15 +227,18 @@ export default function ClaimSubmit() {
 
   const downloadTemplate = () => {
     const templateData = [
-      // Simplified header - only essential fields for claim upload
-      ['participant_no', 'nama_tertanggung', 'no_ktp_npwp', 'no_fasilitas_kredit', 
-       'plafond', 'kol_debitur', 'dol', 'nilai_klaim', 'claim_remarks'],
+      // Header matching user requirements
+      ['claimno', 'policyno', 'nomor_sertifikat', 'participant_no', 'nama_tertanggung', 'no_ktp_npwp', 
+       'no_fasilitas_kredit', 'tanggal_realisasi_kredit', 'nilai_klaim', 'dol', 'kol_debitur', 
+       'plafond', 'max_coverage', 'share_tugure_pct', 'share_tugure_amount', 'bdo_premi_period', 'check_bdo_premi'],
       // Example Individual Claim
-      ['P2024001', 'Budi Santoso', '3201234567890123', '1001234567', 
-       '50000000', '3', '2024-12-01', '35000000', 'Meninggal dunia akibat kecelakaan'],
+      ['CLM/2025/01/001', 'POL/2025/KUR/001', 'CERT-2025-P2024001', 'P2024001', 'Budi Santoso', '3201234567890123', 
+       '1001234567', '2024-01-15', '35000000', '2024-12-01', '3', 
+       '50000000', '37500000', '75', '26250000', '2024-10', 'TRUE'],
       // Example Corporate Claim
-      ['P2024002', 'PT Sejahtera Abadi', '01.234.567.8-901.000', '1001234568', 
-       '500000000', '4', '2024-12-05', '300000000', 'Default - Kolektibilitas 4, gagal bayar 90 hari']
+      ['CLM/2025/01/002', 'POL/2025/KI/001', 'CERT-2025-P2024002', 'P2024002', 'PT Sejahtera Abadi', '01.234.567.8-901.000', 
+       '1001234568', '2024-01-15', '300000000', '2024-12-05', '4', 
+       '500000000', '400000000', '80', '240000000', '2024-10', 'TRUE']
     ];
     
     const csvContent = templateData.map(row => row.join(',')).join('\n');
