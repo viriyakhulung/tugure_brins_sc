@@ -103,12 +103,27 @@ export default function DebtorReview() {
         return;
       }
       
+      // 1. Update Debtor status
       await base44.entities.Debtor.update(selectedDebtor.id, {
         underwriting_status: newStatus,
         batch_status: newStatus === 'APPROVED' ? 'COMPLETED' : 'REJECTED'
       });
 
-      // Send email notification
+      // 2. Auto-create Record entity if approved
+      if (approvalAction === 'approve') {
+        await base44.entities.Record.create({
+          batch_id: selectedDebtor.batch_id,
+          debtor_id: selectedDebtor.id,
+          record_status: 'Accepted',
+          exposure_amount: selectedDebtor.outstanding_amount || 0,
+          premium_amount: selectedDebtor.gross_premium || 0,
+          revision_count: 0,
+          accepted_by: user?.email,
+          accepted_date: new Date().toISOString().split('T')[0]
+        });
+      }
+
+      // 3. Send email notification
       const notifSettings = await base44.entities.NotificationSetting.list();
       const brinsSettings = notifSettings.filter(s => s.user_role === 'BRINS' && s.email_enabled);
       
@@ -122,6 +137,7 @@ export default function DebtorReview() {
         }
       }
 
+      // 4. Create notification
       await base44.entities.Notification.create({
         title: `Debtor ${newStatus}`,
         message: `${selectedDebtor.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`,
@@ -131,6 +147,7 @@ export default function DebtorReview() {
         target_role: 'BRINS'
       });
 
+      // 5. Audit log
       await base44.entities.AuditLog.create({
         action: `DEBTOR_${newStatus}`,
         module: 'DEBTOR',
