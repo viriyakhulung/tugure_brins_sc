@@ -74,23 +74,29 @@ export default function SystemConfiguration() {
         base44.entities.EmailTemplate.list()
       ]);
       
-      // Always load system configs
-      setSystemConfigs(configData || []);
+      // Create sample data if any is empty
+      const needsSampleData = !configData || configData.length === 0 || 
+                              !notifData || notifData.length === 0 ||
+                              !templates || templates.length === 0;
       
-      // Create sample data if empty
-      if (!configData || configData.length === 0) {
+      if (needsSampleData) {
         await createSampleConfigs();
-        const newConfigData = await base44.entities.SystemConfig.list();
-        const newNotifData = await base44.entities.Notification.list();
-        const newTemplateData = await base44.entities.EmailTemplate.list();
+        // Reload all data after creating samples
+        const [newConfigData, newNotifData, newTemplateData] = await Promise.all([
+          base44.entities.SystemConfig.list(),
+          base44.entities.Notification.list(),
+          base44.entities.EmailTemplate.list()
+        ]);
         setSystemConfigs(newConfigData || []);
         setNotifications(newNotifData || []);
         setEmailTemplates(newTemplateData || []);
+      } else {
+        setSystemConfigs(configData || []);
+        setNotifications(notifData || []);
+        setEmailTemplates(templates || []);
       }
       
-      setNotifications(notifData || []);
       setNotificationSettings(settingsData || []);
-      setEmailTemplates(templates || []);
       
       const userSetting = settingsData.find(s => s.user_email === currentUser.email);
       if (userSetting) {
