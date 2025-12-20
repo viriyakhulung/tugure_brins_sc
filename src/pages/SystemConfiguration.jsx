@@ -26,6 +26,7 @@ export default function SystemConfiguration() {
   const [notifications, setNotifications] = useState([]);
   const [notificationSettings, setNotificationSettings] = useState([]);
   const [selectedSettings, setSelectedSettings] = useState([]);
+  const [systemConfigs, setSystemConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('notifications');
   const [emailTemplates, setEmailTemplates] = useState([]);
@@ -77,11 +78,14 @@ export default function SystemConfiguration() {
         const newConfigData = await base44.entities.SystemConfig.list();
         setConfigs(newConfigData || []);
       } else {
-        setConfigs(configData || []);
+        setSystemConfigs(newConfigData || []);
+      } else {
+        setSystemConfigs(configData || []);
       }
       
       setNotifications(notifData || []);
       setNotificationSettings(settingsData || []);
+      setEmailTemplates(templates || []);
       
       const userSetting = settingsData.find(s => s.user_email === currentUser.email);
       if (userSetting) {
@@ -411,7 +415,7 @@ export default function SystemConfiguration() {
       'thresholds': 'FINANCIAL_THRESHOLD',
       'approval': 'APPROVAL_MATRIX'
     };
-    return configs.filter(c => c.config_type === typeMap[type]);
+    return systemConfigs.filter(c => c.config_type === typeMap[type]);
   };
 
   const unreadNotifications = notifications.filter(n => !n.is_read);
@@ -526,10 +530,14 @@ export default function SystemConfiguration() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="notifications">
             <Bell className="w-4 h-4 mr-2" />
             Notifications ({unreadNotifications.length})
+          </TabsTrigger>
+          <TabsTrigger value="email-templates">
+            <Mail className="w-4 h-4 mr-2" />
+            Email Templates
           </TabsTrigger>
           <TabsTrigger value="my-settings">
             <User className="w-4 h-4 mr-2" />
@@ -594,6 +602,75 @@ export default function SystemConfiguration() {
               ))
             )}
           </div>
+        </TabsContent>
+
+        {/* Email Templates Tab */}
+        <TabsContent value="email-templates" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold">Email Notification Templates</h3>
+              <p className="text-sm text-gray-500">Configure automated email messages for status transitions</p>
+            </div>
+            <Button onClick={() => { setSelectedTemplate(null); setShowTemplateDialog(true); }}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Template
+            </Button>
+          </div>
+
+          <DataTable
+            columns={[
+              {
+                header: 'Object Type',
+                accessorKey: 'object_type',
+                cell: (row) => (
+                  <Badge variant="outline">{row.object_type}</Badge>
+                )
+              },
+              {
+                header: 'Status Transition',
+                accessorKey: 'status_to',
+                cell: (row) => (
+                  <div className="flex items-center gap-2">
+                    {row.status_from && <span className="text-gray-500">{row.status_from} →</span>}
+                    <span className="font-medium">{row.status_to}</span>
+                  </div>
+                )
+              },
+              {
+                header: 'Recipient',
+                accessorKey: 'recipient_role',
+                cell: (row) => <Badge>{row.recipient_role}</Badge>
+              },
+              {
+                header: 'Subject',
+                accessorKey: 'email_subject',
+                cell: (row) => <span className="text-sm">{row.email_subject}</span>
+              },
+              {
+                header: 'Status',
+                accessorKey: 'is_active',
+                cell: (row) => (
+                  <Badge variant={row.is_active ? 'default' : 'secondary'}>
+                    {row.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                )
+              },
+              {
+                header: 'Actions',
+                cell: (row) => (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => { setSelectedTemplate(row); setShowTemplateDialog(true); }}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                )
+              }
+            ]}
+            data={emailTemplates}
+            isLoading={loading}
+          />
         </TabsContent>
 
         {/* My Settings Tab */}
@@ -771,6 +848,116 @@ export default function SystemConfiguration() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Email Template Dialog */}
+      <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{selectedTemplate?.id ? 'Edit Email Template' : 'Add Email Template'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Object Type</Label>
+                <select
+                  value={selectedTemplate?.object_type || 'Batch'}
+                  onChange={(e) => setSelectedTemplate({ ...selectedTemplate, object_type: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="Batch">Batch</option>
+                  <option value="Record">Record</option>
+                  <option value="Nota">Nota</option>
+                  <option value="Claim">Claim</option>
+                  <option value="Subrogation">Subrogation</option>
+                </select>
+              </div>
+              <div>
+                <Label>Recipient Role</Label>
+                <select
+                  value={selectedTemplate?.recipient_role || 'BRINS'}
+                  onChange={(e) => setSelectedTemplate({ ...selectedTemplate, recipient_role: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="BRINS">BRINS</option>
+                  <option value="TUGURE">TUGURE</option>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="ALL">ALL</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Status From (Optional)</Label>
+                <Input
+                  value={selectedTemplate?.status_from || ''}
+                  onChange={(e) => setSelectedTemplate({ ...selectedTemplate, status_from: e.target.value })}
+                  placeholder="e.g., Uploaded"
+                />
+              </div>
+              <div>
+                <Label>Status To</Label>
+                <Input
+                  value={selectedTemplate?.status_to || ''}
+                  onChange={(e) => setSelectedTemplate({ ...selectedTemplate, status_to: e.target.value })}
+                  placeholder="e.g., Validated"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Email Subject</Label>
+              <Input
+                value={selectedTemplate?.email_subject || ''}
+                onChange={(e) => setSelectedTemplate({ ...selectedTemplate, email_subject: e.target.value })}
+                placeholder="Use variables: {batch_id}, {user_name}, {date}, etc"
+              />
+            </div>
+
+            <div>
+              <Label>Email Body</Label>
+              <Textarea
+                value={selectedTemplate?.email_body || ''}
+                onChange={(e) => setSelectedTemplate({ ...selectedTemplate, email_body: e.target.value })}
+                rows={8}
+                placeholder="Use variables: {batch_id}, {user_name}, {date}, {total_premium}, etc"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Available variables: {'{batch_id}, {user_name}, {date}, {total_records}, {total_premium}, {amount}, {claim_no}, {debtor_name}'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={selectedTemplate?.is_active !== false}
+                onChange={(e) => setSelectedTemplate({ ...selectedTemplate, is_active: e.target.checked })}
+                className="rounded"
+              />
+              <Label>Active</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTemplateDialog(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              try {
+                if (selectedTemplate?.id) {
+                  await base44.entities.EmailTemplate.update(selectedTemplate.id, selectedTemplate);
+                } else {
+                  await base44.entities.EmailTemplate.create(selectedTemplate);
+                }
+                await loadData();
+                setShowTemplateDialog(false);
+                setSuccessMessage('Email template saved successfully');
+              } catch (error) {
+                console.error('Failed to save template:', error);
+              }
+            }}>
+              Save Template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Config Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
