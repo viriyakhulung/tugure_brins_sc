@@ -151,6 +151,27 @@ export default function SubmitDebtor() {
 
     try {
       const batchId = previewData[0]?.batch_id || `BATCH-${Date.now()}`;
+      const batchMonth = previewData[0]?.batch_month || new Date().getMonth() + 1;
+      const batchYear = previewData[0]?.batch_year || new Date().getFullYear();
+      
+      // Calculate batch totals
+      const totalRecords = previewData.length;
+      const totalExposure = previewData.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0);
+      const totalPremium = previewData.reduce((sum, d) => sum + (d.gross_premium || 0), 0);
+
+      // 1. Create Batch first
+      await base44.entities.Batch.create({
+        batch_id: batchId,
+        batch_month: batchMonth,
+        batch_year: batchYear,
+        contract_id: selectedContract,
+        total_records: totalRecords,
+        total_exposure: totalExposure,
+        total_premium: totalPremium,
+        status: 'Uploaded'
+      });
+
+      // 2. Create Debtors
       const debtorsToCreate = previewData.map(d => ({
         ...d,
         contract_id: selectedContract,
@@ -168,7 +189,7 @@ export default function SubmitDebtor() {
 
       await base44.entities.Debtor.bulkCreate(debtorsToCreate);
 
-      // Create notification
+      // 3. Create notification
       await base44.entities.Notification.create({
         title: 'New Debtor Submission',
         message: `Batch ${batchId} with ${debtorsToCreate.length} debtors submitted for approval`,
@@ -206,11 +227,14 @@ export default function SubmitDebtor() {
 
     try {
       const batchId = `BATCH-CORP-${Date.now()}`;
+      const batchMonth = new Date().getMonth() + 1;
+      const batchYear = new Date().getFullYear();
+      
       const debtorsToCreate = validDebtors.map((d, idx) => ({
         contract_id: selectedContract,
         batch_id: batchId,
-        batch_month: new Date().getMonth() + 1,
-        batch_year: new Date().getFullYear(),
+        batch_month: batchMonth,
+        batch_year: batchYear,
         credit_type: 'Corporate',
         currency: 'IDR',
         participant_no: `P${Date.now()}-${idx}`,
@@ -235,8 +259,27 @@ export default function SubmitDebtor() {
         source_system: 'MANUAL-INPUT'
       }));
 
+      // Calculate batch totals
+      const totalRecords = debtorsToCreate.length;
+      const totalExposure = debtorsToCreate.reduce((sum, d) => sum + d.outstanding_amount, 0);
+      const totalPremium = debtorsToCreate.reduce((sum, d) => sum + (d.credit_plafond * 0.025), 0);
+
+      // 1. Create Batch first
+      await base44.entities.Batch.create({
+        batch_id: batchId,
+        batch_month: batchMonth,
+        batch_year: batchYear,
+        contract_id: selectedContract,
+        total_records: totalRecords,
+        total_exposure: totalExposure,
+        total_premium: totalPremium,
+        status: 'Uploaded'
+      });
+
+      // 2. Create Debtors
       await base44.entities.Debtor.bulkCreate(debtorsToCreate);
 
+      // 3. Create notification
       await base44.entities.Notification.create({
         title: 'New Corporate Debtor Submission',
         message: `Batch ${batchId} with ${debtorsToCreate.length} corporate debtors submitted`,
