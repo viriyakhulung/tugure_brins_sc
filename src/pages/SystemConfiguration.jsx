@@ -44,11 +44,14 @@ export default function SystemConfiguration() {
     whatsapp_number: '',
     email_enabled: true,
     whatsapp_enabled: false,
-    notify_on_submit: true,
-    notify_on_approval: true,
-    notify_on_rejection: true,
-    notify_on_payment: true,
-    notify_on_claim: true
+    notify_batch_status: true,
+    notify_record_status: true,
+    notify_nota_status: true,
+    notify_claim_status: true,
+    notify_subrogation_status: true,
+    notify_payment_received: true,
+    notify_approval_required: true,
+    notify_document_verification: true
   });
 
   // Config form
@@ -932,17 +935,24 @@ export default function SystemConfiguration() {
             <Card>
               <CardHeader>
                 <CardTitle>Notification Types</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">Configure which workflow notifications you want to receive</p>
               </CardHeader>
               <CardContent className="space-y-3">
                 {[
-                  { key: 'notify_on_submit', label: 'Debtor Submission', color: 'blue' },
-                  { key: 'notify_on_approval', label: 'Approval', color: 'green' },
-                  { key: 'notify_on_rejection', label: 'Rejection', color: 'red' },
-                  { key: 'notify_on_payment', label: 'Payment', color: 'yellow' },
-                  { key: 'notify_on_claim', label: 'Claim', color: 'purple' }
-                ].map(({ key, label, color }) => (
-                  <div key={key} className={`flex items-center justify-between p-3 bg-${color}-50 rounded-lg`}>
-                    <Label>{label}</Label>
+                  { key: 'notify_batch_status', label: 'Batch Status Changes', description: 'Uploaded → Validated → Matched → Approved → Paid → Closed', color: 'blue' },
+                  { key: 'notify_record_status', label: 'Record Status Changes', description: 'Accepted → Revised → Rejected', color: 'indigo' },
+                  { key: 'notify_nota_status', label: 'Nota Status Changes', description: 'Draft → Issued → Confirmed → Paid', color: 'purple' },
+                  { key: 'notify_claim_status', label: 'Claim Status Changes', description: 'Draft → Checked → Doc Verified → Invoiced → Paid', color: 'pink' },
+                  { key: 'notify_subrogation_status', label: 'Subrogation Status Changes', description: 'Draft → Invoiced → Paid/Closed', color: 'orange' },
+                  { key: 'notify_payment_received', label: 'Payment Received', description: 'All payment confirmations', color: 'green' },
+                  { key: 'notify_approval_required', label: 'Approval Required', description: 'Actions requiring your approval', color: 'yellow' },
+                  { key: 'notify_document_verification', label: 'Document Verification', description: 'Document upload and verification updates', color: 'teal' }
+                ].map(({ key, label, description, color }) => (
+                  <div key={key} className={`flex items-start justify-between p-4 bg-${color}-50 border border-${color}-100 rounded-lg`}>
+                    <div className="flex-1">
+                      <Label className="font-medium">{label}</Label>
+                      <p className="text-xs text-gray-500 mt-1">{description}</p>
+                    </div>
                     <Switch
                       checked={currentSetting[key]}
                       onCheckedChange={(checked) => setCurrentSetting({...currentSetting, [key]: checked})}
