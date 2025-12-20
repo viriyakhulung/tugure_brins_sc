@@ -9,13 +9,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { 
   FileText, CheckCircle2, XCircle, Clock, Eye, Download, 
-  RefreshCw, Check, X, Loader2, Search, AlertCircle
+  RefreshCw, Check, X, Loader2, Search, AlertCircle, DollarSign
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import StatCard from "@/components/dashboard/StatCard";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 const DOCUMENT_TYPES = [
@@ -332,6 +333,42 @@ export default function DebtorReview() {
           <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
         </Alert>
       )}
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Debtors"
+          value={debtors.length}
+          subtitle={`${debtors.filter(d => d.credit_type === 'Individual').length} individual / ${debtors.filter(d => d.credit_type === 'Corporate').length} corporate`}
+          icon={FileText}
+          gradient
+          className="from-blue-500 to-blue-600"
+        />
+        <StatCard
+          title="Pending Review"
+          value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length}
+          subtitle="Awaiting approval"
+          icon={Clock}
+          gradient
+          className="from-orange-500 to-orange-600"
+        />
+        <StatCard
+          title="Total Exposure"
+          value={`Rp ${(debtors.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0) / 1000000).toFixed(1)}M`}
+          subtitle="Outstanding amount"
+          icon={DollarSign}
+          gradient
+          className="from-green-500 to-green-600"
+        />
+        <StatCard
+          title="Approved Debtors"
+          value={debtors.filter(d => d.underwriting_status === 'APPROVED').length}
+          subtitle={`${((debtors.filter(d => d.underwriting_status === 'APPROVED').length / (debtors.length || 1)) * 100).toFixed(0)}% approval rate`}
+          icon={CheckCircle2}
+          gradient
+          className="from-purple-500 to-purple-600"
+        />
+      </div>
 
       {/* Filters */}
       <Card>

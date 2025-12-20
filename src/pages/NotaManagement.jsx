@@ -6,12 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
-  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, Download
+  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, Download, FileText, Clock, DollarSign
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import StatCard from "@/components/dashboard/StatCard";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function NotaManagement() {
@@ -268,6 +269,42 @@ export default function NotaManagement() {
           <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
         </Alert>
       )}
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Notas"
+          value={notas.length}
+          subtitle={`${notas.filter(n => n.nota_type === 'Batch').length} batch / ${notas.filter(n => n.nota_type === 'Claim').length} claim`}
+          icon={FileText}
+          gradient
+          className="from-blue-500 to-blue-600"
+        />
+        <StatCard
+          title="Pending Confirmation"
+          value={notas.filter(n => n.status === 'Issued').length}
+          subtitle="Awaiting branch"
+          icon={Clock}
+          gradient
+          className="from-orange-500 to-orange-600"
+        />
+        <StatCard
+          title="Total Amount"
+          value={`Rp ${(notas.reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
+          subtitle="All notas"
+          icon={DollarSign}
+          gradient
+          className="from-green-500 to-green-600"
+        />
+        <StatCard
+          title="Paid Notas"
+          value={notas.filter(n => n.status === 'Paid').length}
+          subtitle={`Rp ${(notas.filter(n => n.status === 'Paid').reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
+          icon={CheckCircle2}
+          gradient
+          className="from-purple-500 to-purple-600"
+        />
+      </div>
 
       {/* Filters */}
       <Card>

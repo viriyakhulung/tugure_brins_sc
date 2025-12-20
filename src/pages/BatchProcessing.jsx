@@ -7,12 +7,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
-  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye
+  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, FileText, Clock, DollarSign
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import StatCard from "@/components/dashboard/StatCard";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function BatchProcessing() {
@@ -293,6 +294,42 @@ export default function BatchProcessing() {
           <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
         </Alert>
       )}
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Batches"
+          value={batches.length}
+          subtitle={`${batches.filter(b => b.status === 'Closed').length} closed`}
+          icon={FileText}
+          gradient
+          className="from-blue-500 to-blue-600"
+        />
+        <StatCard
+          title="Pending Validation"
+          value={batches.filter(b => b.status === 'Uploaded').length}
+          subtitle="Awaiting validation"
+          icon={Clock}
+          gradient
+          className="from-orange-500 to-orange-600"
+        />
+        <StatCard
+          title="Total Premium"
+          value={`Rp ${(batches.reduce((sum, b) => sum + (b.total_premium || 0), 0) / 1000000).toFixed(1)}M`}
+          subtitle="All batches"
+          icon={DollarSign}
+          gradient
+          className="from-green-500 to-green-600"
+        />
+        <StatCard
+          title="Approved Batches"
+          value={batches.filter(b => ['Approved', 'Nota Issued', 'Branch Confirmed', 'Paid', 'Closed'].includes(b.status)).length}
+          subtitle={`${batches.filter(b => b.status === 'Paid').length} paid`}
+          icon={CheckCircle2}
+          gradient
+          className="from-purple-500 to-purple-600"
+        />
+      </div>
 
       {/* Filters */}
       <Card>
