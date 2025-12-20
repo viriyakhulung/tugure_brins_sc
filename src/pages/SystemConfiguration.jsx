@@ -67,17 +67,16 @@ export default function SystemConfiguration() {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
       
-      const [configData, notifData, settingsData] = await Promise.all([
+      const [configData, notifData, settingsData, templates] = await Promise.all([
         base44.entities.SystemConfig.list(),
         base44.entities.Notification.list(),
-        base44.entities.NotificationSetting.list()
+        base44.entities.NotificationSetting.list(),
+        base44.entities.EmailTemplate.list()
       ]);
       
       if (!configData || configData.length === 0) {
         await createSampleConfigs();
         const newConfigData = await base44.entities.SystemConfig.list();
-        setConfigs(newConfigData || []);
-      } else {
         setSystemConfigs(newConfigData || []);
       } else {
         setSystemConfigs(configData || []);
