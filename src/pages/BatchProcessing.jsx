@@ -215,7 +215,15 @@ export default function BatchProcessing() {
       )
     },
     { header: 'Total Records', accessorKey: 'total_records' },
-    { header: 'Total Exposure', cell: (row) => `Rp ${(row.total_exposure || 0).toLocaleString('id-ID')}` },
+    { 
+      header: 'Total TSI (Sum Insured)', 
+      cell: (row) => (
+        <div>
+          <p className="font-medium">Rp {(row.total_exposure || 0).toLocaleString('id-ID')}</p>
+          <p className="text-xs text-gray-500">Exposure</p>
+        </div>
+      )
+    },
     { header: 'Total Premium', cell: (row) => `Rp ${(row.total_premium || 0).toLocaleString('id-ID')}` },
     { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     {
@@ -266,7 +274,7 @@ export default function BatchProcessing() {
     <div className="space-y-6">
       <PageHeader
         title="Batch Processing"
-        subtitle="Process batches through workflow stages"
+        subtitle="Review and validate batch submissions with TSI (Total Sum Insured) verification"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Batch Processing' }
@@ -348,8 +356,16 @@ export default function BatchProcessing() {
                   <span className="ml-2 font-medium">{selectedBatch?.total_records}</span>
                 </div>
                 <div>
+                  <span className="text-gray-500">Total TSI (Exposure):</span>
+                  <span className="ml-2 font-medium">Rp {(selectedBatch?.total_exposure || 0).toLocaleString('id-ID')}</span>
+                </div>
+                <div>
                   <span className="text-gray-500">Total Premium:</span>
                   <span className="ml-2 font-medium">Rp {(selectedBatch?.total_premium || 0).toLocaleString('id-ID')}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Batch Period:</span>
+                  <span className="ml-2 font-medium">{selectedBatch?.batch_month}/{selectedBatch?.batch_year}</span>
                 </div>
               </div>
             </div>
