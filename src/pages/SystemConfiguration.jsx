@@ -130,11 +130,12 @@ export default function SystemConfiguration() {
       }
     }
     
-    // Create sample notifications
+    // Create sample notifications - Complete workflow coverage
     const sampleNotifications = [
+      // Batch Workflow
       {
         title: '[Batch] Status Updated: Uploaded → Validated',
-        message: 'Batch BATCH-2025-001 has been validated by tugure@company.com. Email notification sent to brins@company.com with validation details.',
+        message: 'Batch BATCH-2025-001 has been validated by tugure@company.com. Total 45 records validated. Email notification sent to brins@company.com with validation details.',
         type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
@@ -142,7 +143,7 @@ export default function SystemConfiguration() {
       },
       {
         title: '[Batch] Status Updated: Validated → Matched',
-        message: 'Batch BATCH-2025-001 has been matched by system. 45 records matched successfully. Email notification sent to both parties.',
+        message: 'Batch BATCH-2025-001 has been matched by system. 45 records matched successfully. Matching process completed. Email notification sent to both parties.',
         type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
@@ -150,15 +151,75 @@ export default function SystemConfiguration() {
       },
       {
         title: '[Batch] Status Updated: Matched → Approved',
-        message: 'Batch BATCH-2025-001 with total premium IDR 125,000,000 has been approved by tugure@company.com. Auto email sent to BRINS.',
+        message: 'Batch BATCH-2025-001 with total premium IDR 125,000,000 has been approved by tugure@company.com. Ready for Nota issuance. Auto email sent to BRINS.',
         type: 'DECISION',
         module: 'SYSTEM',
         is_read: false,
         target_role: 'BRINS'
       },
       {
+        title: '[Batch] Status Updated: Approved → Nota Issued',
+        message: 'Batch BATCH-2025-001 - Nota has been issued. Nota number: NOTA-2025-001. Total amount: IDR 125,000,000. Email sent to brins@company.com for branch confirmation.',
+        type: 'ACTION_REQUIRED',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: '[Batch] Status Updated: Nota Issued → Branch Confirmed',
+        message: 'Batch BATCH-2025-001 - Branch has confirmed Nota NOTA-2025-001. Waiting for payment. Email notification sent to tugure@company.com.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'TUGURE'
+      },
+      {
+        title: '[Batch] Status Updated: Branch Confirmed → Paid',
+        message: 'Batch BATCH-2025-001 - Payment received for Nota NOTA-2025-001. Amount: IDR 125,000,000. Payment date: 2025-01-15. Email sent to both parties.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'ALL'
+      },
+      {
+        title: '[Batch] Status Updated: Paid → Closed',
+        message: 'Batch BATCH-2025-001 has been closed successfully. All processes completed. Final reconciliation done. Email sent to all stakeholders.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'ALL'
+      },
+      
+      // Record Workflow
+      {
+        title: '[Record] Status Updated: Accepted → Revised',
+        message: 'Record REC-2025-001 in Batch BATCH-2025-002 marked as Revised. Reason: Incomplete documentation. Please resubmit corrected data. Email sent to brins@company.com.',
+        type: 'WARNING',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: '[Record] Status Updated: Revised → Accepted',
+        message: 'Record REC-2025-001 has been re-validated and accepted. Corrections verified successfully. Email sent to brins@company.com.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      {
+        title: '[Record] Status Updated: Accepted → Rejected',
+        message: 'Record REC-2025-003 has been rejected permanently. Reason: Non-eligible debtor - exceeds age limit. Email sent to brins@company.com with rejection details.',
+        type: 'WARNING',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'BRINS'
+      },
+      
+      // Nota Workflow
+      {
         title: '[Nota] Status Updated: Draft → Issued',
-        message: 'Nota NOTA-2025-001 for Batch BATCH-2025-001 has been issued. Total amount: IDR 125,000,000. Email sent to brins@company.com.',
+        message: 'Nota NOTA-2025-002 has been issued for Batch BATCH-2025-002. Total amount: IDR 85,500,000. Issued date: 2025-01-10. Email sent to brins@company.com.',
         type: 'ACTION_REQUIRED',
         module: 'SYSTEM',
         is_read: false,
@@ -166,15 +227,25 @@ export default function SystemConfiguration() {
       },
       {
         title: '[Nota] Status Updated: Issued → Confirmed',
-        message: 'Nota NOTA-2025-001 has been confirmed by Branch. Email notification sent to tugure@company.com for payment processing.',
+        message: 'Nota NOTA-2025-002 has been confirmed by Branch on 2025-01-12. Confirmed by: branch_manager@brins.com. Email notification sent to tugure@company.com for payment processing.',
         type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
         target_role: 'TUGURE'
       },
       {
+        title: '[Nota] Status Updated: Confirmed → Paid',
+        message: 'Nota NOTA-2025-002 payment completed. Amount paid: IDR 85,500,000. Payment reference: PAY-2025-002. Email sent to all parties.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'ALL'
+      },
+      
+      // Claim Workflow
+      {
         title: '[Claim] Status Updated: Draft → Checked',
-        message: 'Claim CLM-2025-001 for debtor PT ABC has been checked and approved. Email notification sent to brins@company.com.',
+        message: 'Claim CLM-2025-001 for debtor PT ABC has been checked and eligibility verified. Claim amount: IDR 50,000,000. Email notification sent to brins@company.com.',
         type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
@@ -182,27 +253,45 @@ export default function SystemConfiguration() {
       },
       {
         title: '[Claim] Status Updated: Checked → Doc Verified',
-        message: 'Claim CLM-2025-001 documents verified successfully. Next step: invoicing. Email sent to finance team.',
+        message: 'Claim CLM-2025-001 - All supporting documents verified successfully. Next step: invoicing. Verified by: claim_officer@tugure.com. Email sent to finance team.',
         type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
         target_role: 'TUGURE'
       },
       {
-        title: '[Record] Status Updated: Accepted → Revised',
-        message: 'Record REC-2025-001 in Batch BATCH-2025-002 marked as Revised. Reason: Incomplete documentation. Email sent to brins@company.com.',
-        type: 'WARNING',
+        title: '[Claim] Status Updated: Doc Verified → Invoiced',
+        message: 'Claim CLM-2025-001 has been invoiced. Invoice number: INV-CLM-2025-001. Amount: IDR 50,000,000. Email sent to brins@company.com.',
+        type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
         target_role: 'BRINS'
       },
       {
+        title: '[Claim] Status Updated: Invoiced → Paid',
+        message: 'Claim CLM-2025-001 payment completed. Settlement amount: IDR 50,000,000. Settlement date: 2025-01-20. Email sent to all parties.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'ALL'
+      },
+      
+      // Subrogation Workflow
+      {
         title: '[Subrogation] Status Updated: Draft → Invoiced',
-        message: 'Subrogation SUB-2025-001 for Claim CLM-2025-001 has been invoiced. Recovery amount: IDR 25,000,000. Email sent to BRINS.',
+        message: 'Subrogation SUB-2025-001 for Claim CLM-2025-001 has been invoiced. Recovery amount: IDR 25,000,000. Invoice sent. Email sent to BRINS.',
         type: 'INFO',
         module: 'SYSTEM',
         is_read: false,
         target_role: 'BRINS'
+      },
+      {
+        title: '[Subrogation] Status Updated: Invoiced → Paid / Closed',
+        message: 'Subrogation SUB-2025-001 completed and closed. Recovery received: IDR 25,000,000. Final settlement done. Email sent to all stakeholders.',
+        type: 'INFO',
+        module: 'SYSTEM',
+        is_read: false,
+        target_role: 'ALL'
       }
     ];
     
@@ -214,15 +303,25 @@ export default function SystemConfiguration() {
       }
     }
     
-    // Create sample email templates
+    // Create sample email templates - Complete end-to-end workflow
     const sampleTemplates = [
+      // === BATCH WORKFLOW ===
       {
         object_type: 'Batch',
         status_from: 'Uploaded',
         status_to: 'Validated',
         recipient_role: 'BRINS',
-        email_subject: 'Batch {batch_id} - Validated Successfully',
-        email_body: 'Dear BRINS Team,\n\nYour batch {batch_id} has been validated successfully by {user_name} on {date}.\n\nTotal Records: {total_records}\nTotal Premium: {total_premium}\n\nNext Step: Matching process\n\nBest regards,\nTUGURE System',
+        email_subject: '[Batch {batch_id}] Validated Successfully',
+        email_body: 'Dear BRINS Team,\n\nYour batch {batch_id} has been validated successfully by {user_name} on {date}.\n\nValidation Summary:\n- Total Records: {total_records}\n- Total Exposure: {total_exposure}\n- Total Premium: {total_premium}\n\nNext Step: System will proceed with matching process.\n\nBest regards,\nTUGURE Reinsurance System',
+        is_active: true
+      },
+      {
+        object_type: 'Batch',
+        status_from: 'Validated',
+        status_to: 'Matched',
+        recipient_role: 'ALL',
+        email_subject: '[Batch {batch_id}] Matching Completed',
+        email_body: 'Dear Team,\n\nBatch {batch_id} matching process completed on {date}.\n\nMatching Results:\n- Records Matched: {total_records}\n- Total Premium Matched: {total_premium}\n\nNext Step: Approval review by TUGURE team.\n\nBest regards,\nSystem Automation',
         is_active: true
       },
       {
@@ -230,17 +329,84 @@ export default function SystemConfiguration() {
         status_from: 'Matched',
         status_to: 'Approved',
         recipient_role: 'BRINS',
-        email_subject: 'Batch {batch_id} - Approved',
-        email_body: 'Dear BRINS Team,\n\nBatch {batch_id} has been approved by {user_name}.\n\nApproval Date: {date}\nTotal Exposure: {total_exposure}\nTotal Premium: {total_premium}\n\nNota will be issued shortly.\n\nBest regards,\nTUGURE System',
+        email_subject: '[Batch {batch_id}] Approved for Coverage',
+        email_body: 'Dear BRINS Team,\n\nBatch {batch_id} has been approved by {user_name}.\n\nApproval Details:\n- Approval Date: {date}\n- Total Exposure: {total_exposure}\n- Total Premium: {total_premium}\n- Approved Records: {total_records}\n\nNext Step: Nota will be issued within 24 hours.\n\nBest regards,\nTUGURE Reinsurance System',
         is_active: true
       },
+      {
+        object_type: 'Batch',
+        status_from: 'Approved',
+        status_to: 'Nota Issued',
+        recipient_role: 'BRINS',
+        email_subject: '[Batch {batch_id}] Nota Issued - Action Required',
+        email_body: 'Dear BRINS Team,\n\nNota has been issued for Batch {batch_id}.\n\nNota Details:\n- Nota Number: {nota_number}\n- Issue Date: {date}\n- Total Amount: {total_premium}\n\nAction Required: Please confirm receipt at your branch within 3 business days.\n\nBest regards,\nTUGURE Reinsurance System',
+        is_active: true
+      },
+      {
+        object_type: 'Batch',
+        status_from: 'Nota Issued',
+        status_to: 'Branch Confirmed',
+        recipient_role: 'TUGURE',
+        email_subject: '[Batch {batch_id}] Branch Confirmation Received',
+        email_body: 'Dear TUGURE Team,\n\nBranch has confirmed receipt of Nota for Batch {batch_id}.\n\nConfirmation Details:\n- Confirmed by: {user_name}\n- Confirmation Date: {date}\n- Nota Amount: {total_premium}\n\nNext Step: Please proceed with payment processing.\n\nBest regards,\nBRINS System',
+        is_active: true
+      },
+      {
+        object_type: 'Batch',
+        status_from: 'Branch Confirmed',
+        status_to: 'Paid',
+        recipient_role: 'ALL',
+        email_subject: '[Batch {batch_id}] Payment Received',
+        email_body: 'Dear Team,\n\nPayment received for Batch {batch_id}.\n\nPayment Details:\n- Payment Date: {date}\n- Amount Paid: {total_premium}\n- Payment Reference: {payment_reference}\n\nNext Step: Batch will be closed after final reconciliation.\n\nBest regards,\nSystem Automation',
+        is_active: true
+      },
+      {
+        object_type: 'Batch',
+        status_from: 'Paid',
+        status_to: 'Closed',
+        recipient_role: 'ALL',
+        email_subject: '[Batch {batch_id}] Batch Closed Successfully',
+        email_body: 'Dear Team,\n\nBatch {batch_id} has been closed successfully.\n\nFinal Summary:\n- Total Records: {total_records}\n- Total Exposure: {total_exposure}\n- Total Premium: {total_premium}\n- Closed Date: {date}\n\nAll processes completed. Batch is now archived.\n\nBest regards,\nSystem Automation',
+        is_active: true
+      },
+      
+      // === RECORD WORKFLOW ===
+      {
+        object_type: 'Record',
+        status_from: 'Accepted',
+        status_to: 'Revised',
+        recipient_role: 'BRINS',
+        email_subject: '[Record {record_id}] Revision Required',
+        email_body: 'Dear BRINS Team,\n\nRecord {record_id} in Batch {batch_id} requires revision.\n\nRevision Details:\n- Reason: {revision_reason}\n- Revised Date: {date}\n- Reviewed by: {user_name}\n\nAction Required: Please submit corrected information within 5 business days.\n\nBest regards,\nTUGURE Reinsurance System',
+        is_active: true
+      },
+      {
+        object_type: 'Record',
+        status_from: 'Revised',
+        status_to: 'Accepted',
+        recipient_role: 'BRINS',
+        email_subject: '[Record {record_id}] Re-validation Accepted',
+        email_body: 'Dear BRINS Team,\n\nRecord {record_id} has been re-validated and accepted.\n\nAcceptance Details:\n- Re-validation Date: {date}\n- Validated by: {user_name}\n- Batch: {batch_id}\n\nRecord is now included in the active batch.\n\nBest regards,\nTUGURE Reinsurance System',
+        is_active: true
+      },
+      {
+        object_type: 'Record',
+        status_from: 'Accepted',
+        status_to: 'Rejected',
+        recipient_role: 'BRINS',
+        email_subject: '[Record {record_id}] Record Rejected',
+        email_body: 'Dear BRINS Team,\n\nRecord {record_id} has been permanently rejected.\n\nRejection Details:\n- Reason: {rejection_reason}\n- Rejection Date: {date}\n- Reviewed by: {user_name}\n\nThis record will not be covered under the reinsurance policy.\n\nBest regards,\nTUGURE Reinsurance System',
+        is_active: true
+      },
+      
+      // === NOTA WORKFLOW ===
       {
         object_type: 'Nota',
         status_from: 'Draft',
         status_to: 'Issued',
         recipient_role: 'BRINS',
-        email_subject: 'Nota {nota_number} - Issued',
-        email_body: 'Dear BRINS Team,\n\nNota {nota_number} has been issued for {nota_type} {reference_id}.\n\nAmount: {amount}\nIssued Date: {date}\n\nPlease confirm receipt at your branch.\n\nBest regards,\nTUGURE System',
+        email_subject: '[Nota {nota_number}] Nota Issued',
+        email_body: 'Dear BRINS Team,\n\nNota {nota_number} has been issued.\n\nNota Details:\n- Type: {nota_type}\n- Reference: {reference_id}\n- Amount: {amount}\n- Issue Date: {date}\n\nAction Required: Please confirm receipt at your branch.\n\nBest regards,\nTUGURE Reinsurance System',
         is_active: true
       },
       {
@@ -248,17 +414,37 @@ export default function SystemConfiguration() {
         status_from: 'Issued',
         status_to: 'Confirmed',
         recipient_role: 'TUGURE',
-        email_subject: 'Nota {nota_number} - Branch Confirmed',
-        email_body: 'Dear TUGURE Team,\n\nNota {nota_number} has been confirmed by Branch on {date}.\n\nConfirmed by: {user_name}\nAmount: {amount}\n\nPlease proceed with payment processing.\n\nBest regards,\nBRINS System',
+        email_subject: '[Nota {nota_number}] Branch Confirmation',
+        email_body: 'Dear TUGURE Team,\n\nNota {nota_number} has been confirmed by Branch.\n\nConfirmation Details:\n- Confirmed by: {user_name}\n- Confirmation Date: {date}\n- Amount: {amount}\n\nNext Step: Please proceed with payment processing.\n\nBest regards,\nBRINS System',
         is_active: true
       },
+      {
+        object_type: 'Nota',
+        status_from: 'Confirmed',
+        status_to: 'Paid',
+        recipient_role: 'ALL',
+        email_subject: '[Nota {nota_number}] Payment Completed',
+        email_body: 'Dear Team,\n\nPayment completed for Nota {nota_number}.\n\nPayment Details:\n- Amount Paid: {amount}\n- Payment Date: {date}\n- Payment Reference: {payment_reference}\n\nNota is now fully settled.\n\nBest regards,\nSystem Automation',
+        is_active: true
+      },
+      
+      // === CLAIM WORKFLOW ===
       {
         object_type: 'Claim',
         status_from: 'Draft',
         status_to: 'Checked',
         recipient_role: 'BRINS',
-        email_subject: 'Claim {claim_no} - Checked',
-        email_body: 'Dear BRINS Team,\n\nClaim {claim_no} for debtor {debtor_name} has been checked.\n\nClaim Amount: {claim_amount}\nChecked Date: {date}\n\nNext Step: Document verification\n\nBest regards,\nTUGURE System',
+        email_subject: '[Claim {claim_no}] Eligibility Check Completed',
+        email_body: 'Dear BRINS Team,\n\nClaim {claim_no} has been checked for eligibility.\n\nClaim Details:\n- Debtor: {debtor_name}\n- Claim Amount: {claim_amount}\n- Checked Date: {date}\n- Checked by: {user_name}\n\nNext Step: Document verification process.\n\nBest regards,\nTUGURE Reinsurance System',
+        is_active: true
+      },
+      {
+        object_type: 'Claim',
+        status_from: 'Checked',
+        status_to: 'Doc Verified',
+        recipient_role: 'TUGURE',
+        email_subject: '[Claim {claim_no}] Documents Verified',
+        email_body: 'Dear TUGURE Team,\n\nAll supporting documents for Claim {claim_no} have been verified.\n\nVerification Details:\n- Claim Amount: {claim_amount}\n- Verified Date: {date}\n- Verified by: {user_name}\n\nNext Step: Invoicing process.\n\nBest regards,\nSystem Automation',
         is_active: true
       },
       {
@@ -266,26 +452,37 @@ export default function SystemConfiguration() {
         status_from: 'Doc Verified',
         status_to: 'Invoiced',
         recipient_role: 'BRINS',
-        email_subject: 'Claim {claim_no} - Invoiced',
-        email_body: 'Dear BRINS Team,\n\nClaim {claim_no} has been invoiced.\n\nInvoice Amount: {claim_amount}\nInvoiced Date: {date}\n\nPayment will be processed shortly.\n\nBest regards,\nTUGURE System',
+        email_subject: '[Claim {claim_no}] Claim Invoiced',
+        email_body: 'Dear BRINS Team,\n\nClaim {claim_no} has been invoiced.\n\nInvoice Details:\n- Invoice Number: {invoice_number}\n- Invoice Amount: {claim_amount}\n- Invoice Date: {date}\n\nNext Step: Payment processing within SLA.\n\nBest regards,\nTUGURE Reinsurance System',
         is_active: true
       },
       {
-        object_type: 'Record',
-        status_from: 'Accepted',
-        status_to: 'Revised',
-        recipient_role: 'BRINS',
-        email_subject: 'Record {record_id} - Revision Required',
-        email_body: 'Dear BRINS Team,\n\nRecord {record_id} in Batch {batch_id} requires revision.\n\nReason: {revision_reason}\nRevised Date: {date}\n\nPlease submit corrected information.\n\nBest regards,\nTUGURE System',
+        object_type: 'Claim',
+        status_from: 'Invoiced',
+        status_to: 'Paid',
+        recipient_role: 'ALL',
+        email_subject: '[Claim {claim_no}] Settlement Completed',
+        email_body: 'Dear Team,\n\nClaim {claim_no} settlement completed.\n\nSettlement Details:\n- Settlement Amount: {claim_amount}\n- Settlement Date: {date}\n- Payment Reference: {settlement_ref}\n\nClaim is now fully settled and closed.\n\nBest regards,\nSystem Automation',
         is_active: true
       },
+      
+      // === SUBROGATION WORKFLOW ===
       {
         object_type: 'Subrogation',
         status_from: 'Draft',
         status_to: 'Invoiced',
         recipient_role: 'BRINS',
-        email_subject: 'Subrogation {subrogation_id} - Invoiced',
-        email_body: 'Dear BRINS Team,\n\nSubrogation {subrogation_id} for Claim {claim_id} has been invoiced.\n\nRecovery Amount: {recovery_amount}\nInvoiced Date: {date}\n\nBest regards,\nTUGURE System',
+        email_subject: '[Subrogation {subrogation_id}] Recovery Invoice Issued',
+        email_body: 'Dear BRINS Team,\n\nSubrogation invoice issued for Claim {claim_id}.\n\nSubrogation Details:\n- Subrogation ID: {subrogation_id}\n- Recovery Amount: {recovery_amount}\n- Invoice Date: {date}\n\nPlease process recovery payment.\n\nBest regards,\nTUGURE Reinsurance System',
+        is_active: true
+      },
+      {
+        object_type: 'Subrogation',
+        status_from: 'Invoiced',
+        status_to: 'Paid / Closed',
+        recipient_role: 'ALL',
+        email_subject: '[Subrogation {subrogation_id}] Recovery Completed',
+        email_body: 'Dear Team,\n\nSubrogation {subrogation_id} completed and closed.\n\nRecovery Summary:\n- Recovery Amount: {recovery_amount}\n- Recovery Date: {date}\n- Related Claim: {claim_id}\n\nSubrogation process is now complete.\n\nBest regards,\nSystem Automation',
         is_active: true
       }
     ];
