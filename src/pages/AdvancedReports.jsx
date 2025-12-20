@@ -1009,11 +1009,11 @@ export default function AdvancedReports() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard
                 title="Total Claim Paid"
                 value={`Rp ${(recovery.totalClaimPaid / 1000000).toFixed(1)}M`}
-                subtitle="Total claims paid"
+                subtitle="Paid claims"
                 icon={FileText}
                 gradient
                 className="from-red-500 to-pink-600"
@@ -1021,56 +1021,55 @@ export default function AdvancedReports() {
               <StatCard
                 title="Total Recovered"
                 value={`Rp ${(recovery.totalRecovered / 1000000).toFixed(1)}M`}
-                subtitle="Amount recovered"
+                subtitle="Subrogation paid"
                 icon={DollarSign}
                 gradient
                 className="from-green-500 to-emerald-600"
               />
               <StatCard
-                title="Outstanding"
+                title="Outstanding Recovery"
                 value={`Rp ${(recovery.outstanding / 1000000).toFixed(1)}M`}
-                subtitle="Remaining to recover"
+                subtitle="Exposure remaining"
                 icon={TrendingUp}
                 gradient
                 className="from-orange-500 to-red-600"
               />
-              <StatCard
-                title="Recovery Rate"
-                value={`${recovery.recoveryRate.toFixed(1)}%`}
-                subtitle="Success rate"
-                icon={TrendingDown}
-                gradient
-                className="from-blue-500 to-indigo-600"
-              />
             </div>
 
+            {/* Trend */}
             <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-orange-50">
               <CardHeader className="bg-gradient-to-r from-orange-500 to-red-600 text-white border-b-4 border-red-700">
-                <CardTitle className="text-white font-bold text-xl">🔄 Recovery Breakdown</CardTitle>
+                <CardTitle className="text-white font-bold text-xl">📈 Outstanding Recovery Trend Over Time</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-orange-50">
-                {loading ? (
-                  <Skeleton className="h-80 w-full" />
-                ) : (
+              <CardContent className="pt-6">
+                {loading ? <Skeleton className="h-80 w-full" /> : (
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={[
-                      { name: 'Claim Paid', value: recovery.totalClaimPaid },
-                      { name: 'Recovered', value: recovery.totalRecovered },
-                      { name: 'Outstanding', value: recovery.outstanding }
-                    ]}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
-                      <XAxis dataKey="name" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <Tooltip 
-                        formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`}
-                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #F59E0B', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
-                        labelStyle={{ color: '#000000', fontWeight: 700 }}
-                      />
-                      <Bar dataKey="value" fill="#3b82f6" radius={[10, 10, 0, 0]}>
-                        {[0, 1, 2].map((index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Bar>
+                    <LineChart data={recovery.trend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12, fontWeight: 700 }} angle={-15} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 12, fontWeight: 700 }} />
+                      <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                      <Legend wrapperStyle={{ fontWeight: 700 }} />
+                      <Line type="monotone" dataKey="outstanding" stroke="#f59e0b" strokeWidth={4} name="Outstanding" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-red-50">
+              <CardHeader className="bg-gradient-to-r from-red-500 to-pink-600 text-white border-b-4 border-pink-700">
+                <CardTitle className="text-white font-bold text-xl">🔄 Outstanding Recovery by Credit Type</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                {loading ? <Skeleton className="h-64 w-full" /> : (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={recovery.typeData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="type" tick={{ fontSize: 12, fontWeight: 700 }} />
+                      <YAxis tick={{ fontSize: 12, fontWeight: 700 }} />
+                      <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                      <Bar dataKey="outstanding" fill="#ef4444" name="Outstanding Recovery" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -1091,49 +1090,103 @@ export default function AdvancedReports() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <StatCard
-                title="Total Recovery"
-                value={`Rp ${(subrogation.totalRecovery / 1000000).toFixed(1)}M`}
-                subtitle="Successfully recovered"
+                title="Total Amount"
+                value={`Rp ${(subrogation.totalAmount / 1000000).toFixed(1)}M`}
+                subtitle="All subrogations"
                 icon={DollarSign}
+                gradient
+                className="from-blue-500 to-indigo-600"
+              />
+              <StatCard
+                title="Recovered Amount"
+                value={`Rp ${(subrogation.recoveredAmount / 1000000).toFixed(1)}M`}
+                subtitle="Paid / Closed"
+                icon={TrendingUp}
                 gradient
                 className="from-green-500 to-emerald-600"
               />
               <StatCard
-                title="Success Rate"
-                value={`${subrogation.successRate}%`}
-                subtitle="Recovery success rate"
-                icon={TrendingUp}
+                title="Pending Amount"
+                value={`Rp ${(subrogation.pendingAmount / 1000000).toFixed(1)}M`}
+                subtitle="Draft + Invoiced"
+                icon={Clock}
                 gradient
-                className="from-blue-500 to-indigo-600"
+                className="from-orange-500 to-orange-600"
+              />
+              <StatCard
+                title="Recovery Rate"
+                value={`${subrogation.recoveryRate.toFixed(1)}%`}
+                subtitle="Success rate"
+                icon={TrendingDown}
+                gradient
+                className="from-purple-500 to-purple-600"
               />
             </div>
 
+            {/* Trend */}
             <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-purple-50">
               <CardHeader className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white border-b-4 border-indigo-700">
-                <CardTitle className="text-white font-bold text-xl">⚖️ Subrogation Status Distribution</CardTitle>
+                <CardTitle className="text-white font-bold text-xl">📈 Subrogation Amount by Status Over Time</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 bg-gradient-to-br from-slate-50 to-purple-50">
-                {loading ? (
-                  <Skeleton className="h-80 w-full" />
-                ) : (
+              <CardContent className="pt-6">
+                {loading ? <Skeleton className="h-80 w-full" /> : (
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={subrogation.statusData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#CBD5E1" strokeWidth={1.5} />
-                      <XAxis dataKey="status" tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <YAxis tick={{ fontSize: 14, fill: '#000000', fontWeight: 700 }} stroke="#475569" strokeWidth={2} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#ffffff', border: '3px solid #8B5CF6', borderRadius: '12px', color: '#000000', fontWeight: 700, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}
-                        labelStyle={{ color: '#000000', fontWeight: 700 }}
-                      />
-                      <Legend wrapperStyle={{ color: '#000000', fontWeight: 700, fontSize: '14px' }} />
-                      <Bar dataKey="count" fill="#8b5cf6" name="Cases Count" radius={[10, 10, 0, 0]} />
-                    </BarChart>
+                    <AreaChart data={subrogation.trend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12, fontWeight: 700 }} angle={-15} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 12, fontWeight: 700 }} />
+                      <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                      <Legend wrapperStyle={{ fontWeight: 700 }} />
+                      <Area type="monotone" dataKey="Draft" stackId="1" stroke="#fbbf24" fill="#fbbf24" name="Draft" />
+                      <Area type="monotone" dataKey="Invoiced" stackId="1" stroke="#60a5fa" fill="#60a5fa" name="Invoiced" />
+                      <Area type="monotone" dataKey="Paid / Closed" stackId="1" stroke="#10b981" fill="#10b981" name="Paid / Closed" />
+                    </AreaChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>
             </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-indigo-50">
+                <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-b-4 border-purple-700">
+                  <CardTitle className="text-white font-bold text-xl">⚖️ Subrogation by Status</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-64 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={subrogation.statusData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="status" tick={{ fontSize: 11, fontWeight: 700 }} angle={-15} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
+                        <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                        <Bar dataKey="amount" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-2xl border-3 bg-gradient-to-br from-white to-green-50">
+                <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-b-4 border-emerald-700">
+                  <CardTitle className="text-white font-bold text-xl">🏢 Top 10 Subrogation by Branch</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {loading ? <Skeleton className="h-64 w-full" /> : (
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={subrogation.branchData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" tick={{ fontSize: 11, fontWeight: 700 }} />
+                        <YAxis type="category" dataKey="branch" tick={{ fontSize: 10, fontWeight: 700 }} width={100} />
+                        <Tooltip formatter={(value) => `Rp ${(value / 1000000).toFixed(2)}M`} />
+                        <Bar dataKey="amount" fill="#10b981" radius={[0, 8, 8, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
