@@ -57,6 +57,25 @@ export default function SubmitDebtor() {
     }
   };
 
+  const parseCSV = (text) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim());
+      const row = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index] || '';
+      });
+      rows.push(row);
+    }
+    
+    return rows;
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -66,112 +85,65 @@ export default function SubmitDebtor() {
     setErrorMessage('');
 
     try {
-      // Upload file
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      // Read file directly in browser - much faster than AI extraction
+      const text = await file.text();
+      const parsedData = parseCSV(text);
       
-      // Extract data - use flexible schema that accepts either format
-      const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url,
-        json_schema: {
-          type: 'object',
-          properties: {
-            data: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  cover_id: { type: ['number', 'string'] },
-                  program_id: { type: 'string' },
-                  batch_month: { type: ['number', 'string'] },
-                  batch_year: { type: ['number', 'string'] },
-                  nomor_peserta: { type: 'string' },
-                  nomor_rekening_pinjaman: { type: 'string' },
-                  nomor_perjanjian_kredit: { type: 'string' },
-                  nama_peserta: { type: 'string' },
-                  alamat_usaha: { type: 'string' },
-                  loan_type: { type: 'string' },
-                  loan_type_desc: { type: 'string' },
-                  jenis_pengajuan_desc: { type: 'string' },
-                  jenis_covering_desc: { type: 'string' },
-                  tanggal_mulai_covering: { type: 'string' },
-                  tanggal_akhir_covering: { type: 'string' },
-                  plafon: { type: ['number', 'string'] },
-                  nominal_premi: { type: ['number', 'string'] },
-                  premium_reinsurance: { type: ['number', 'string'] },
-                  ric_amount: { type: ['number', 'string'] },
-                  bf_amount: { type: ['number', 'string'] },
-                  net_premi: { type: ['number', 'string'] },
-                  unit_code: { type: 'string' },
-                  unit_desc: { type: 'string' },
-                  branch_desc: { type: 'string' },
-                  region_desc: { type: 'string' },
-                  status_aktif: { type: ['number', 'string'] },
-                  flag_restruktur: { type: ['number', 'string'] },
-                  kolektabilitas: { type: ['number', 'string'] },
-                  remark_premi: { type: 'string' }
-                }
-              }
-            }
-          }
-        }
-      });
-
-      if (result.status === 'success' && result.output) {
-        // Parse and map data from template to Debtor entity
-        const rawData = result.output.data || result.output;
-        const dataArray = Array.isArray(rawData) ? rawData : [rawData];
-        const enrichedData = dataArray.map((row, idx) => {
-          const batchId = `BATCH-${row.batch_year || new Date().getFullYear()}-${String(row.batch_month || new Date().getMonth() + 1).padStart(2, '0')}-${Date.now()}`;
-          
-          return {
-            cover_id: row.cover_id || idx + 1,
-            program_id: row.program_id || 'PROG-001',
-            batch_id: batchId,
-            batch_month: row.batch_month || new Date().getMonth() + 1,
-            batch_year: row.batch_year || new Date().getFullYear(),
-            participant_no: row.nomor_peserta || `P${Date.now()}-${idx}`,
-            loan_account_no: row.nomor_rekening_pinjaman || `LA${Date.now()}-${idx}`,
-            credit_agreement_no: row.nomor_perjanjian_kredit || '',
-            debtor_name: row.nama_peserta || '',
-            debtor_address: row.alamat_usaha || '',
-            debtor_identifier: '',
-            debtor_type: creditType === 'Corporate' ? 'PT' : 'Individual',
-            credit_type: creditType,
-            currency: 'IDR',
-            product_code: row.loan_type || 'KUR',
-            loan_type: row.loan_type || 'KMK',
-            loan_type_desc: row.loan_type_desc || 'Kredit Modal Kerja',
-            submission_type_desc: row.jenis_pengajuan_desc || 'Pengajuan Baru',
-            covering_type_desc: row.jenis_covering_desc || 'Full Coverage',
-            coverage_start_date: row.tanggal_mulai_covering || coverageStart || new Date().toISOString().split('T')[0],
-            coverage_end_date: row.tanggal_akhir_covering || coverageEnd || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0],
-            credit_plafond: parseFloat(row.plafon) || 0,
-            outstanding_amount: parseFloat(row.plafon) || 0,
-            coverage_pct: 75,
-            gross_premium: parseFloat(row.nominal_premi) || 0,
-            reinsurance_premium: parseFloat(row.premium_reinsurance) || 0,
-            ric_amount: parseFloat(row.ric_amount) || 0,
-            bf_amount: parseFloat(row.bf_amount) || 0,
-            net_premium: parseFloat(row.net_premi) || 0,
-            unit_code: row.unit_code || 'U001',
-            unit_desc: row.unit_desc || 'Unit Jakarta',
-            branch_code: 'BR001',
-            branch_desc: row.branch_desc || 'Cabang Jakarta',
-            region_desc: row.region_desc || 'DKI Jakarta',
-            received_date: new Date().toISOString(),
-            status_aktif: row.status_aktif || 1,
-            flag_restruktur: row.flag_restruktur || 0,
-            collectability_col: row.kolektabilitas || 1,
-            premium_remarks: row.remark_premi || '',
-            underwriting_status: 'DRAFT'
-          };
-        });
-        
-        setPreviewData(enrichedData);
-        setShowPreview(true);
-      } else {
-        setErrorMessage('Failed to extract data from file');
+      if (parsedData.length === 0) {
+        setErrorMessage('No data found in file');
+        setLoading(false);
+        return;
       }
+
+      // Map parsed CSV to Debtor entity instantly
+      const batchTimestamp = Date.now();
+      const batchId = `BATCH-${parsedData[0].batch_year || new Date().getFullYear()}-${String(parsedData[0].batch_month || new Date().getMonth() + 1).padStart(2, '0')}-${batchTimestamp}`;
+      
+      const enrichedData = parsedData.map((row, idx) => ({
+        cover_id: parseInt(row.cover_id) || idx + 1,
+        program_id: row.program_id || 'PROG-001',
+        batch_id: batchId,
+        batch_month: parseInt(row.batch_month) || new Date().getMonth() + 1,
+        batch_year: parseInt(row.batch_year) || new Date().getFullYear(),
+        participant_no: row.nomor_peserta || `P${batchTimestamp}-${idx}`,
+        loan_account_no: row.nomor_rekening_pinjaman || `LA${batchTimestamp}-${idx}`,
+        credit_agreement_no: row.nomor_perjanjian_kredit || '',
+        debtor_name: row.nama_peserta || '',
+        debtor_address: row.alamat_usaha || '',
+        debtor_identifier: '',
+        debtor_type: creditType === 'Corporate' ? 'PT' : 'Individual',
+        credit_type: creditType,
+        currency: 'IDR',
+        product_code: row.loan_type || 'KUR',
+        loan_type: row.loan_type || 'KMK',
+        loan_type_desc: row.loan_type_desc || 'Kredit Modal Kerja',
+        submission_type_desc: row.jenis_pengajuan_desc || 'Pengajuan Baru',
+        covering_type_desc: row.jenis_covering_desc || 'Full Coverage',
+        coverage_start_date: row.tanggal_mulai_covering || coverageStart || new Date().toISOString().split('T')[0],
+        coverage_end_date: row.tanggal_akhir_covering || coverageEnd || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0],
+        credit_plafond: parseFloat(row.plafon?.replace(/[^0-9.-]/g, '')) || 0,
+        outstanding_amount: parseFloat(row.plafon?.replace(/[^0-9.-]/g, '')) || 0,
+        coverage_pct: 75,
+        gross_premium: parseFloat(row.nominal_premi?.replace(/[^0-9.-]/g, '')) || 0,
+        reinsurance_premium: parseFloat(row.premium_reinsurance?.replace(/[^0-9.-]/g, '')) || 0,
+        ric_amount: parseFloat(row.ric_amount?.replace(/[^0-9.-]/g, '')) || 0,
+        bf_amount: parseFloat(row.bf_amount?.replace(/[^0-9.-]/g, '')) || 0,
+        net_premium: parseFloat(row.net_premi?.replace(/[^0-9.-]/g, '')) || 0,
+        unit_code: row.unit_code || 'U001',
+        unit_desc: row.unit_desc || 'Unit Jakarta',
+        branch_code: 'BR001',
+        branch_desc: row.branch_desc || 'Cabang Jakarta',
+        region_desc: row.region_desc || 'DKI Jakarta',
+        received_date: new Date().toISOString(),
+        status_aktif: parseInt(row.status_aktif) || 1,
+        flag_restruktur: parseInt(row.flag_restruktur) || 0,
+        collectability_col: parseInt(row.kolektabilitas) || 1,
+        premium_remarks: row.remark_premi || '',
+        underwriting_status: 'DRAFT'
+      }));
+      
+      setPreviewData(enrichedData);
+      setShowPreview(true);
     } catch (error) {
       console.error('File upload error:', error);
       setErrorMessage('Failed to process file. Please check the format and try again.');
