@@ -109,6 +109,7 @@ export default function NotaManagement() {
       // Send templated emails based on user preferences
       await sendTemplatedEmail(
         'Nota',
+        selectedNota.status,
         nextStatus,
         targetRole,
         'notify_nota_status',
