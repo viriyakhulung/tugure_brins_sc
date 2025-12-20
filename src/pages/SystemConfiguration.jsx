@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { 
   Settings, Bell, Mail, MessageSquare, Shield, DollarSign, 
-  CheckCircle2, RefreshCw, Loader2, Plus, Edit, Trash2, Eye, User
+  CheckCircle2, RefreshCw, Loader2, Plus, Edit, Trash2, Eye, User, TestTube, AlertCircle
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
@@ -37,6 +37,8 @@ export default function SystemConfiguration() {
   const [editingConfig, setEditingConfig] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
   
   // User notification setting
   const [currentSetting, setCurrentSetting] = useState({
@@ -631,6 +633,107 @@ export default function SystemConfiguration() {
 
   const unreadNotifications = notifications.filter(n => !n.is_read);
 
+  const handleResetData = async (dataType) => {
+    if (!window.confirm(`Are you sure you want to reset all ${dataType} data? This cannot be undone.`)) {
+      return;
+    }
+
+    setResetting(true);
+    setResetMessage('');
+    
+    try {
+      let deletedCount = 0;
+      
+      if (dataType === 'debtors') {
+        const debtors = await base44.entities.Debtor.list();
+        for (const debtor of debtors) {
+          await base44.entities.Debtor.delete(debtor.id);
+        }
+        deletedCount = debtors.length;
+        
+        const batches = await base44.entities.Batch.list();
+        for (const batch of batches) {
+          await base44.entities.Batch.delete(batch.id);
+        }
+        
+        const records = await base44.entities.Record.list();
+        for (const record of records) {
+          await base44.entities.Record.delete(record.id);
+        }
+        
+        const documents = await base44.entities.Document.list();
+        for (const doc of documents) {
+          await base44.entities.Document.delete(doc.id);
+        }
+        
+        const borderos = await base44.entities.Bordero.list();
+        for (const bordero of borderos) {
+          await base44.entities.Bordero.delete(bordero.id);
+        }
+        
+        const notas = await base44.entities.Nota.list();
+        for (const nota of notas) {
+          await base44.entities.Nota.delete(nota.id);
+        }
+      } else if (dataType === 'claims') {
+        const claims = await base44.entities.Claim.list();
+        for (const claim of claims) {
+          await base44.entities.Claim.delete(claim.id);
+        }
+        deletedCount = claims.length;
+        
+        const subrogations = await base44.entities.Subrogation.list();
+        for (const subrogation of subrogations) {
+          await base44.entities.Subrogation.delete(subrogation.id);
+        }
+      } else if (dataType === 'financial') {
+        const invoices = await base44.entities.Invoice.list();
+        for (const invoice of invoices) {
+          await base44.entities.Invoice.delete(invoice.id);
+        }
+        
+        const payments = await base44.entities.Payment.list();
+        for (const payment of payments) {
+          await base44.entities.Payment.delete(payment.id);
+        }
+        
+        const paymentIntents = await base44.entities.PaymentIntent.list();
+        for (const intent of paymentIntents) {
+          await base44.entities.PaymentIntent.delete(intent.id);
+        }
+        
+        const recons = await base44.entities.Reconciliation.list();
+        for (const recon of recons) {
+          await base44.entities.Reconciliation.delete(recon.id);
+        }
+        
+        deletedCount = invoices.length + payments.length;
+      } else if (dataType === 'notifications') {
+        const notifications = await base44.entities.Notification.list();
+        for (const notif of notifications) {
+          await base44.entities.Notification.delete(notif.id);
+        }
+        deletedCount = notifications.length;
+        loadData();
+      } else if (dataType === 'all') {
+        await handleResetData('debtors');
+        await handleResetData('claims');
+        await handleResetData('financial');
+        await handleResetData('notifications');
+        setResetMessage('All testing data has been reset successfully!');
+        setResetting(false);
+        return;
+      }
+      
+      setResetMessage(`Successfully deleted ${deletedCount} ${dataType} records`);
+    } catch (error) {
+      console.error('Reset error:', error);
+      setResetMessage(`Failed to reset ${dataType}: ${error.message}`);
+    }
+    
+    setResetting(false);
+  };
+
   const configColumns = [
     { header: 'Config Key', cell: (row) => <span className="font-mono text-sm">{row.config_key}</span> },
     { header: 'Value', accessorKey: 'config_value' },
@@ -753,7 +856,7 @@ export default function SystemConfiguration() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="notifications">
             <Bell className="w-4 h-4 mr-2" />
             Notifications ({unreadNotifications.length})
@@ -777,6 +880,10 @@ export default function SystemConfiguration() {
           <TabsTrigger value="thresholds">
             <DollarSign className="w-4 h-4 mr-2" />
             Thresholds
+          </TabsTrigger>
+          <TabsTrigger value="testing">
+            <TestTube className="w-4 h-4 mr-2" />
+            Testing Tools
           </TabsTrigger>
         </TabsList>
 
@@ -1074,6 +1181,125 @@ export default function SystemConfiguration() {
                 isLoading={loading}
                 emptyMessage="No thresholds configured"
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Testing Tools Tab */}
+        <TabsContent value="testing" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Testing & Development Tools</CardTitle>
+              <p className="text-sm text-gray-500">Reset data for testing purposes. Use with caution!</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {resetMessage && (
+                <Alert className={resetMessage.includes('Failed') ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}>
+                  <AlertDescription className={resetMessage.includes('Failed') ? 'text-red-700' : 'text-green-700'}>
+                    {resetMessage}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="border-orange-200">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Reset Debtor Data</CardTitle>
+                    <p className="text-sm text-gray-500">Delete all debtors, batches, records, documents, borderos, and notas</p>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => handleResetData('debtors')}
+                      disabled={resetting}
+                      variant="outline"
+                      className="w-full border-orange-300 text-orange-700 hover:bg-orange-50"
+                    >
+                      {resetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Reset Debtor Data
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-orange-200">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Reset Claim Data</CardTitle>
+                    <p className="text-sm text-gray-500">Delete all claims and subrogations</p>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => handleResetData('claims')}
+                      disabled={resetting}
+                      variant="outline"
+                      className="w-full border-orange-300 text-orange-700 hover:bg-orange-50"
+                    >
+                      {resetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Reset Claim Data
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-orange-200">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Reset Financial Data</CardTitle>
+                    <p className="text-sm text-gray-500">Delete invoices, payments, and reconciliations</p>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => handleResetData('financial')}
+                      disabled={resetting}
+                      variant="outline"
+                      className="w-full border-orange-300 text-orange-700 hover:bg-orange-50"
+                    >
+                      {resetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Reset Financial Data
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-orange-200">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Reset Notifications</CardTitle>
+                    <p className="text-sm text-gray-500">Delete all notifications</p>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => handleResetData('notifications')}
+                      disabled={resetting}
+                      variant="outline"
+                      className="w-full border-orange-300 text-orange-700 hover:bg-orange-50"
+                    >
+                      {resetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Reset Notifications
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="border-red-300 bg-red-50">
+                <CardHeader>
+                  <CardTitle className="text-lg text-red-700">⚠️ Reset All Testing Data</CardTitle>
+                  <p className="text-sm text-red-600">This will delete ALL data except contracts and system configurations</p>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    onClick={() => handleResetData('all')}
+                    disabled={resetting}
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    {resetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Reset All Testing Data
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Note:</strong> Contracts and System Configurations are preserved during reset operations.
+                  These should be configured once and reused across testing sessions.
+                </AlertDescription>
+              </Alert>
             </CardContent>
           </Card>
         </TabsContent>
