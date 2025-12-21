@@ -257,9 +257,13 @@ export default function NotaManagement() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => setSelectedNota(row)}
+            onClick={() => {
+              setSelectedNota(row);
+              setShowActionDialog(true);
+            }}
           >
-            <Eye className="w-4 h-4" />
+            <Eye className="w-4 h-4 mr-1" />
+            View
           </Button>
           {row.status !== 'Paid' && getNextStatus(row.status) && (
             <Button 

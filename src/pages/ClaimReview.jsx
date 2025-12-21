@@ -279,9 +279,13 @@ export default function ClaimReview() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => setSelectedClaim(row)}
+            onClick={() => {
+              setSelectedClaim(row);
+              setShowActionDialog(true);
+            }}
           >
-            <Eye className="w-4 h-4" />
+            <Eye className="w-4 h-4 mr-1" />
+            View
           </Button>
           {row.claim_status === 'Draft' && (
             <Button 

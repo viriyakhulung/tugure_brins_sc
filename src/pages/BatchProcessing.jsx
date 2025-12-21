@@ -308,9 +308,13 @@ export default function BatchProcessing() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => setSelectedBatch(row)}
+            onClick={() => {
+              setSelectedBatch(row);
+              setShowActionDialog(true);
+            }}
           >
-            <Eye className="w-4 h-4" />
+            <Eye className="w-4 h-4 mr-1" />
+            View
           </Button>
           {row.status !== 'Closed' && getNextStatus(row.status) && (
             <Button 
