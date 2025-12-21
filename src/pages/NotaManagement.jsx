@@ -417,6 +417,57 @@ export default function NotaManagement() {
         emptyMessage="No notas found"
       />
 
+      {/* Detail Dialog (View only) */}
+      {selectedNota && !actionType && (
+        <Dialog open={!!selectedNota && !actionType} onOpenChange={(open) => !open && setSelectedNota(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Nota Detail</DialogTitle>
+              <DialogDescription>
+                Nota Number: {selectedNota?.nota_number}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Type:</span>
+                    <span className="ml-2 font-medium">{selectedNota?.nota_type}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Amount:</span>
+                    <span className="ml-2 font-medium">Rp {(selectedNota?.amount || 0).toLocaleString('id-ID')}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Currency:</span>
+                    <span className="ml-2 font-medium">{selectedNota?.currency}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Status:</span>
+                    <span className="ml-2"><StatusBadge status={selectedNota?.status} /></span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Reference:</span>
+                    <span className="ml-2 font-medium">{selectedNota?.reference_id}</span>
+                  </div>
+                  {selectedNota?.issued_by && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500">Issued By:</span>
+                      <span className="ml-2 font-medium">{selectedNota?.issued_by} on {selectedNota?.issued_date}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedNota(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Action Dialog */}
       <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
         <DialogContent>

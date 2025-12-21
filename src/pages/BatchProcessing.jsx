@@ -464,6 +464,55 @@ export default function BatchProcessing() {
         emptyMessage="No batches found"
       />
 
+      {/* Detail Dialog (View only) */}
+      {selectedBatch && !actionType && (
+        <Dialog open={!!selectedBatch && !actionType} onOpenChange={(open) => !open && setSelectedBatch(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Batch Detail</DialogTitle>
+              <DialogDescription>
+                Batch ID: {selectedBatch?.batch_id}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Total Records:</span>
+                    <span className="ml-2 font-medium">{selectedBatch?.total_records}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Total TSI (Exposure):</span>
+                    <span className="ml-2 font-medium">Rp {(selectedBatch?.total_exposure || 0).toLocaleString('id-ID')}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Total Premium:</span>
+                    <span className="ml-2 font-medium">Rp {(selectedBatch?.total_premium || 0).toLocaleString('id-ID')}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Batch Period:</span>
+                    <span className="ml-2 font-medium">{selectedBatch?.batch_month}/{selectedBatch?.batch_year}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Status:</span>
+                    <span className="ml-2"><StatusBadge status={selectedBatch?.status} /></span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Contract ID:</span>
+                    <span className="ml-2 font-medium">{selectedBatch?.contract_id}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedBatch(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Action Dialog */}
       <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
         <DialogContent>
