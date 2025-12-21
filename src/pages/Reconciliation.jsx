@@ -30,6 +30,7 @@ export default function Reconciliation() {
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [selectedPayments, setSelectedPayments] = useState([]);
   const [selectedReconciliations, setSelectedReconciliations] = useState([]);
+  const [showViewPaymentDialog, setShowViewPaymentDialog] = useState(false);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [showReconActionDialog, setShowReconActionDialog] = useState(false);
   const [showReconDetailDialog, setShowReconDetailDialog] = useState(false);
@@ -316,7 +317,10 @@ export default function Reconciliation() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => setSelectedPayment(row)}
+            onClick={() => {
+              setSelectedPayment(row);
+              setShowViewPaymentDialog(true);
+            }}
           >
             <Eye className="w-4 h-4 mr-1" />
             View
@@ -778,59 +782,57 @@ export default function Reconciliation() {
       </Dialog>
 
       {/* Payment Detail Dialog (View only) */}
-      {selectedPayment && !showMatchDialog && !showReconActionDialog && (
-        <Dialog open={!!selectedPayment && !showMatchDialog && !showReconActionDialog} onOpenChange={(open) => !open && setSelectedPayment(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Payment Detail</DialogTitle>
-              <DialogDescription>
-                Payment Reference: {selectedPayment?.payment_ref}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500">Payment Reference:</span>
-                    <span className="ml-2 font-medium">{selectedPayment?.payment_ref}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Amount:</span>
-                    <span className="ml-2 font-medium">IDR {(selectedPayment?.amount || 0).toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Payment Date:</span>
-                    <span className="ml-2 font-medium">{selectedPayment?.payment_date}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Currency:</span>
-                    <span className="ml-2 font-medium">{selectedPayment?.currency}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Match Status:</span>
-                    <span className="ml-2"><StatusBadge status={selectedPayment?.match_status} /></span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Exception Type:</span>
-                    <span className="ml-2"><StatusBadge status={selectedPayment?.exception_type} /></span>
-                  </div>
-                  {selectedPayment?.matched_by && (
-                    <div className="col-span-2">
-                      <span className="text-gray-500">Matched By:</span>
-                      <span className="ml-2 font-medium">{selectedPayment?.matched_by} on {selectedPayment?.matched_date}</span>
-                    </div>
-                  )}
+      <Dialog open={showViewPaymentDialog} onOpenChange={setShowViewPaymentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Payment Detail</DialogTitle>
+            <DialogDescription>
+              Payment Reference: {selectedPayment?.payment_ref}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Payment Reference:</span>
+                  <span className="ml-2 font-medium">{selectedPayment?.payment_ref}</span>
                 </div>
+                <div>
+                  <span className="text-gray-500">Amount:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedPayment?.amount || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Payment Date:</span>
+                  <span className="ml-2 font-medium">{selectedPayment?.payment_date}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Currency:</span>
+                  <span className="ml-2 font-medium">{selectedPayment?.currency}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Match Status:</span>
+                  <span className="ml-2"><StatusBadge status={selectedPayment?.match_status} /></span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Exception Type:</span>
+                  <span className="ml-2"><StatusBadge status={selectedPayment?.exception_type} /></span>
+                </div>
+                {selectedPayment?.matched_by && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Matched By:</span>
+                    <span className="ml-2 font-medium">{selectedPayment?.matched_by} on {selectedPayment?.matched_date}</span>
+                  </div>
+                )}
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSelectedPayment(null)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowViewPaymentDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Manual Match Dialog */}
       <Dialog open={showMatchDialog} onOpenChange={setShowMatchDialog}>

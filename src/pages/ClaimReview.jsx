@@ -30,6 +30,7 @@ export default function ClaimReview() {
   const [selectedClaim, setSelectedClaim] = useState(null);
   const [selectedClaims, setSelectedClaims] = useState([]);
   const [selectedSubrogations, setSelectedSubrogations] = useState([]);
+  const [showViewDialog, setShowViewDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [actionType, setActionType] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -281,7 +282,7 @@ export default function ClaimReview() {
             size="sm"
             onClick={() => {
               setSelectedClaim(row);
-              setShowActionDialog(true);
+              setShowViewDialog(true);
             }}
           >
             <Eye className="w-4 h-4 mr-1" />
@@ -675,69 +676,67 @@ export default function ClaimReview() {
       </Tabs>
 
       {/* Detail Dialog (View only) */}
-      {selectedClaim && !actionType && (
-        <Dialog open={!!selectedClaim && !actionType} onOpenChange={(open) => { if (!open) { setSelectedClaim(null); } }}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Claim Detail</DialogTitle>
-              <DialogDescription>
-                Claim: {selectedClaim?.claim_no} - {selectedClaim?.nama_tertanggung}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500">Claim No:</span>
-                    <span className="ml-2 font-medium">{selectedClaim?.claim_no}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Policy No:</span>
-                    <span className="ml-2 font-medium">{selectedClaim?.policy_no}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Debtor:</span>
-                    <span className="ml-2 font-medium">{selectedClaim?.nama_tertanggung}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">KTP/NPWP:</span>
-                    <span className="ml-2 font-medium">{selectedClaim?.no_ktp_npwp}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">DOL:</span>
-                    <span className="ml-2 font-medium">{selectedClaim?.dol}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Claim Amount:</span>
-                    <span className="ml-2 font-medium">Rp {(selectedClaim?.nilai_klaim || 0).toLocaleString('id-ID')}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Share Tugure:</span>
-                    <span className="ml-2 font-medium">{selectedClaim?.share_tugure_pct}%</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Tugure Amount:</span>
-                    <span className="ml-2 font-medium">Rp {(selectedClaim?.share_tugure_amount || 0).toLocaleString('id-ID')}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Status:</span>
-                    <span className="ml-2"><StatusBadge status={selectedClaim?.claim_status} /></span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Eligibility:</span>
-                    <span className="ml-2"><StatusBadge status={selectedClaim?.eligibility_status} /></span>
-                  </div>
+      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Claim Detail</DialogTitle>
+            <DialogDescription>
+              Claim: {selectedClaim?.claim_no} - {selectedClaim?.nama_tertanggung}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Claim No:</span>
+                  <span className="ml-2 font-medium">{selectedClaim?.claim_no}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Policy No:</span>
+                  <span className="ml-2 font-medium">{selectedClaim?.policy_no}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Debtor:</span>
+                  <span className="ml-2 font-medium">{selectedClaim?.nama_tertanggung}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">KTP/NPWP:</span>
+                  <span className="ml-2 font-medium">{selectedClaim?.no_ktp_npwp}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">DOL:</span>
+                  <span className="ml-2 font-medium">{selectedClaim?.dol}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Claim Amount:</span>
+                  <span className="ml-2 font-medium">Rp {(selectedClaim?.nilai_klaim || 0).toLocaleString('id-ID')}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Share Tugure:</span>
+                  <span className="ml-2 font-medium">{selectedClaim?.share_tugure_pct}%</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Tugure Amount:</span>
+                  <span className="ml-2 font-medium">Rp {(selectedClaim?.share_tugure_amount || 0).toLocaleString('id-ID')}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Status:</span>
+                  <span className="ml-2"><StatusBadge status={selectedClaim?.claim_status} /></span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Eligibility:</span>
+                  <span className="ml-2"><StatusBadge status={selectedClaim?.eligibility_status} /></span>
                 </div>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSelectedClaim(null)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowViewDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Action Dialog */}
       <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
