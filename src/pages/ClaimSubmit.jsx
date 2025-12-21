@@ -380,6 +380,10 @@ export default function ClaimSubmit() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
+            <Button variant="outline" onClick={downloadTemplate}>
+              <Download className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
             <Button 
               variant="outline"
               onClick={() => setShowUploadDialog(true)}
@@ -774,10 +778,6 @@ export default function ClaimSubmit() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowUploadDialog(false)}>
               Cancel
-            </Button>
-            <Button variant="outline" onClick={downloadTemplate}>
-              <Download className="w-4 h-4 mr-2" />
-              Download Template
             </Button>
             <Button className="bg-blue-600 hover:bg-blue-700">
               <Upload className="w-4 h-4 mr-2" />
