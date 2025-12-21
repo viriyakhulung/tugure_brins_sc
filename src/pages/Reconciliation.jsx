@@ -310,8 +310,16 @@ export default function Reconciliation() {
       header: 'Actions',
       cell: (row) => (
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Eye className="w-4 h-4" />
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              setSelectedPayment(row);
+              setShowMatchDialog(true);
+            }}
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            View
           </Button>
           {isTugure && row.match_status !== 'MATCHED' && (
             <Button 
