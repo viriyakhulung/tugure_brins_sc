@@ -116,6 +116,29 @@ export default function BatchProcessing() {
 
       await base44.entities.Batch.update(selectedBatch.id, updateData);
 
+      // 2. CRITICAL: Create Reconciliation record if moving to Closed and not exist yet
+      if (nextStatus === 'Closed') {
+        const existingRecons = await base44.entities.Reconciliation.filter({ 
+          contract_id: selectedBatch.contract_id,
+          period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`
+        });
+        
+        if (existingRecons.length === 0) {
+          await base44.entities.Reconciliation.create({
+            recon_id: `RECON-${selectedBatch.batch_id}-${Date.now()}`,
+            contract_id: selectedBatch.contract_id,
+            period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`,
+            total_invoiced: selectedBatch.total_premium || 0,
+            total_paid: selectedBatch.total_premium || 0,
+            difference: 0,
+            currency: 'IDR',
+            status: 'CLOSED',
+            closed_by: user?.email,
+            closed_date: new Date().toISOString().split('T')[0]
+          });
+        }
+      }
+
       // 3. Create Nota AND Invoice when status changes to Nota Issued
       if (nextStatus === 'Nota Issued') {
         const notaNumber = `NOTA-${selectedBatch.batch_id}-${Date.now()}`;
