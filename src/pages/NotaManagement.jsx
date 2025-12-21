@@ -100,14 +100,28 @@ export default function NotaManagement() {
         updateData.payment_reference = remarks;
       }
 
+      // 1. Update Nota
       await base44.entities.Nota.update(selectedNota.id, updateData);
 
-      // Determine target role based on nota type and status
+      // 2. CRITICAL: Sync Debtor invoice_status if Nota is for Batch
+      if (selectedNota.nota_type === 'Batch' && selectedNota.reference_id) {
+        const batchDebtors = await base44.entities.Debtor.filter({ batch_id: selectedNota.reference_id });
+        const invoiceStatus = nextStatus === 'Paid' ? 'PAID' : nextStatus === 'Issued' ? 'ISSUED' : 'NOT_ISSUED';
+        for (const debtor of batchDebtors) {
+          await base44.entities.Debtor.update(debtor.id, {
+            invoice_status: invoiceStatus,
+            invoice_no: selectedNota.nota_number,
+            invoice_amount: selectedNota.amount
+          });
+        }
+      }
+
+      // 3. Determine target role based on nota type and status
       const targetRole = nextStatus === 'Issued' ? 'BRINS' :
                         nextStatus === 'Confirmed' ? 'TUGURE' :
                         'ALL';
 
-      // Send templated emails based on user preferences
+      // 4. Send templated emails based on user preferences
       await sendTemplatedEmail(
         'Nota',
         selectedNota.status,
@@ -125,7 +139,7 @@ export default function NotaManagement() {
         }
       );
 
-      // Create system notification
+      // 5. Create system notification
       await createNotification(
         `Nota ${nextStatus}`,
         `Nota ${selectedNota.nota_number} (${selectedNota.nota_type}) moved to ${nextStatus}`,
@@ -135,7 +149,7 @@ export default function NotaManagement() {
         targetRole
       );
 
-      // Create audit log
+      // 6. Create audit log
       await createAuditLog(
         `NOTA_${nextStatus.toUpperCase()}`,
         'DEBTOR',
