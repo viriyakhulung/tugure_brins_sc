@@ -31,9 +31,14 @@ export default function Reconciliation() {
   const [selectedPayments, setSelectedPayments] = useState([]);
   const [selectedReconciliations, setSelectedReconciliations] = useState([]);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
+  const [showReconActionDialog, setShowReconActionDialog] = useState(false);
+  const [showReconDetailDialog, setShowReconDetailDialog] = useState(false);
+  const [selectedRecon, setSelectedRecon] = useState(null);
+  const [reconAction, setReconAction] = useState('');
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [matchRemarks, setMatchRemarks] = useState('');
+  const [reconRemarks, setReconRemarks] = useState('');
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
@@ -185,30 +190,65 @@ export default function Reconciliation() {
     setProcessing(false);
   };
 
-  const handleCloseReconciliation = async (recon) => {
+  const handleReconAction = async () => {
+    if (!selectedRecon || !reconAction) return;
+
     setProcessing(true);
     try {
-      // 1. Update reconciliation
-      await base44.entities.Reconciliation.update(recon.id, {
-        status: 'CLOSED',
-        closed_by: user?.email,
-        closed_date: new Date().toISOString().split('T')[0]
-      });
-
-      // 2. CRITICAL: Update all Debtor recon_status for closed reconciliation
-      const debtorsInProgress = await base44.entities.Debtor.filter({ 
-        recon_status: 'IN_PROGRESS'
-      });
-      for (const debtor of debtorsInProgress.slice(0, 10)) {
-        await base44.entities.Debtor.update(debtor.id, {
-          recon_status: 'CLOSED'
-        });
+      const updates = { remarks: reconRemarks };
+      
+      if (reconAction === 'MARK_EXCEPTION') {
+        updates.status = 'EXCEPTION';
+      } else if (reconAction === 'READY_TO_CLOSE') {
+        // Validate: difference should be 0 or acceptable
+        if (Math.abs(selectedRecon.difference) > 100000) {
+          alert('Cannot mark ready to close: Difference exceeds acceptable threshold (IDR 100K)');
+          setProcessing(false);
+          return;
+        }
+        updates.status = 'READY_TO_CLOSE';
+      } else if (reconAction === 'CLOSE') {
+        updates.status = 'CLOSED';
+        updates.closed_by = user?.email;
+        updates.closed_date = new Date().toISOString().split('T')[0];
+      } else if (reconAction === 'RESOLVE_EXCEPTION') {
+        updates.status = 'IN_PROGRESS';
       }
 
-      setSuccessMessage('Reconciliation closed successfully');
+      await base44.entities.Reconciliation.update(selectedRecon.id, updates);
+
+      // Update related debtors if closing
+      if (reconAction === 'CLOSE') {
+        const relatedDebtors = await base44.entities.Debtor.filter({ 
+          contract_id: selectedRecon.contract_id,
+          recon_status: 'IN_PROGRESS'
+        });
+        for (const debtor of relatedDebtors.slice(0, 50)) {
+          await base44.entities.Debtor.update(debtor.id, {
+            recon_status: 'CLOSED'
+          });
+        }
+      }
+
+      // Audit log
+      await base44.entities.AuditLog.create({
+        action: `RECON_${reconAction}`,
+        module: 'RECONCILIATION',
+        entity_type: 'Reconciliation',
+        entity_id: selectedRecon.id,
+        user_email: user?.email,
+        user_role: user?.role,
+        reason: reconRemarks
+      });
+
+      setSuccessMessage(`Reconciliation ${reconAction.toLowerCase().replace('_', ' ')} successfully`);
+      setShowReconActionDialog(false);
+      setSelectedRecon(null);
+      setReconAction('');
+      setReconRemarks('');
       loadData();
     } catch (error) {
-      console.error('Close error:', error);
+      console.error('Recon action error:', error);
     }
     setProcessing(false);
   };
@@ -321,25 +361,93 @@ export default function Reconciliation() {
     { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     {
       header: 'Actions',
-      cell: (row) => (
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Eye className="w-4 h-4 mr-1" />
-            Details
-          </Button>
-          {isTugure && row.status === 'READY_TO_CLOSE' && (
+      cell: (row) => {
+        const getActionButton = () => {
+          if (!isTugure) return null;
+          
+          switch (row.status) {
+            case 'IN_PROGRESS':
+              return (
+                <>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                    onClick={() => {
+                      setSelectedRecon(row);
+                      setReconAction('MARK_EXCEPTION');
+                      setShowReconActionDialog(true);
+                    }}
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-1" />
+                    Mark Exception
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={() => {
+                      setSelectedRecon(row);
+                      setReconAction('READY_TO_CLOSE');
+                      setShowReconActionDialog(true);
+                    }}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                    Ready to Close
+                  </Button>
+                </>
+              );
+            case 'EXCEPTION':
+              return (
+                <Button 
+                  size="sm" 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => {
+                    setSelectedRecon(row);
+                    setReconAction('RESOLVE_EXCEPTION');
+                    setShowReconActionDialog(true);
+                  }}
+                >
+                  <Check className="w-4 h-4 mr-1" />
+                  Resolve Exception
+                </Button>
+              );
+            case 'READY_TO_CLOSE':
+              return (
+                <Button 
+                  size="sm" 
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={() => {
+                    setSelectedRecon(row);
+                    setReconAction('CLOSE');
+                    setShowReconActionDialog(true);
+                  }}
+                >
+                  <Check className="w-4 h-4 mr-1" />
+                  Close Recon
+                </Button>
+              );
+            default:
+              return null;
+          }
+        };
+
+        return (
+          <div className="flex gap-2">
             <Button 
-              size="sm" 
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => handleCloseReconciliation(row)}
-              disabled={processing}
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                setSelectedRecon(row);
+                setShowReconDetailDialog(true);
+              }}
             >
-              <Check className="w-4 h-4 mr-1" />
-              Close
+              <Eye className="w-4 h-4 mr-1" />
+              Details
             </Button>
-          )}
-        </div>
-      )
+            {getActionButton()}
+          </div>
+        );
+      }
     }
   ];
 
@@ -492,6 +600,174 @@ export default function Reconciliation() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Recon Action Dialog */}
+      <Dialog open={showReconActionDialog} onOpenChange={setShowReconActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reconAction === 'MARK_EXCEPTION' && 'Mark as Exception'}
+              {reconAction === 'READY_TO_CLOSE' && 'Ready to Close'}
+              {reconAction === 'CLOSE' && 'Close Reconciliation'}
+              {reconAction === 'RESOLVE_EXCEPTION' && 'Resolve Exception'}
+            </DialogTitle>
+            <DialogDescription>
+              Recon ID: {selectedRecon?.recon_id} | Period: {selectedRecon?.period}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Total Invoiced:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_invoiced || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Total Paid:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_paid || 0).toLocaleString()}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-gray-500">Difference:</span>
+                  <span className={`ml-2 font-bold ${Math.abs(selectedRecon?.difference || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    IDR {(selectedRecon?.difference || 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {reconAction === 'READY_TO_CLOSE' && Math.abs(selectedRecon?.difference || 0) > 100000 && (
+              <Alert className="bg-red-50 border-red-200">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-700">
+                  Warning: Difference exceeds acceptable threshold (IDR 100K). Please resolve exceptions first.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div>
+              <label className="text-sm font-medium">Remarks *</label>
+              <Textarea
+                value={reconRemarks}
+                onChange={(e) => setReconRemarks(e.target.value)}
+                placeholder="Enter reason for this action..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowReconActionDialog(false);
+              setReconRemarks('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReconAction}
+              disabled={processing || !reconRemarks || (reconAction === 'READY_TO_CLOSE' && Math.abs(selectedRecon?.difference || 0) > 100000)}
+              className={
+                reconAction === 'MARK_EXCEPTION' ? 'bg-orange-600 hover:bg-orange-700' :
+                reconAction === 'RESOLVE_EXCEPTION' ? 'bg-blue-600 hover:bg-blue-700' :
+                'bg-green-600 hover:bg-green-700'
+              }
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Confirm
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recon Detail Dialog */}
+      <Dialog open={showReconDetailDialog} onOpenChange={setShowReconDetailDialog}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Reconciliation Details</DialogTitle>
+            <DialogDescription>
+              {selectedRecon?.recon_id} - {selectedRecon?.period}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-gray-500">Total Invoiced</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">IDR {((selectedRecon?.total_invoiced || 0) / 1000000).toFixed(1)}M</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-gray-500">Total Paid</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold text-green-600">IDR {((selectedRecon?.total_paid || 0) / 1000000).toFixed(1)}M</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-gray-500">Difference</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className={`text-2xl font-bold ${Math.abs(selectedRecon?.difference || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    IDR {((selectedRecon?.difference || 0) / 1000000).toFixed(1)}M
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-500">Contract ID</p>
+                <p className="font-medium">{selectedRecon?.contract_id}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Status</p>
+                <StatusBadge status={selectedRecon?.status} />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Currency</p>
+                <p className="font-medium">{selectedRecon?.currency || 'IDR'}</p>
+              </div>
+              {selectedRecon?.closed_by && (
+                <>
+                  <div>
+                    <p className="text-sm text-gray-500">Closed By</p>
+                    <p className="font-medium">{selectedRecon?.closed_by}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Closed Date</p>
+                    <p className="font-medium">{selectedRecon?.closed_date}</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {selectedRecon?.remarks && (
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Remarks</p>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm">{selectedRecon?.remarks}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReconDetailDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Manual Match Dialog */}
       <Dialog open={showMatchDialog} onOpenChange={setShowMatchDialog}>
