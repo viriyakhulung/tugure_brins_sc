@@ -39,6 +39,7 @@ export default function Reconciliation() {
   const [successMessage, setSuccessMessage] = useState('');
   const [matchRemarks, setMatchRemarks] = useState('');
   const [reconRemarks, setReconRemarks] = useState('');
+  const [selectedIntentId, setSelectedIntentId] = useState('');
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
@@ -129,19 +130,20 @@ export default function Reconciliation() {
   };
 
   const handleManualMatch = async () => {
-    if (!selectedPayment) return;
+    if (!selectedPayment || !selectedIntentId) return;
 
     setProcessing(true);
     try {
-      // 1. Update payment
+      // 1. Update payment with selected intent
       await base44.entities.Payment.update(selectedPayment.id, {
         match_status: 'MATCHED',
+        intent_id: selectedIntentId,
         matched_by: user?.email,
         matched_date: new Date().toISOString().split('T')[0]
       });
 
       // 2. CRITICAL: Get associated PaymentIntent and update Invoice
-      const matchedIntent = paymentIntents.find(pi => pi.id === selectedPayment.intent_id);
+      const matchedIntent = paymentIntents.find(pi => pi.id === selectedIntentId);
       if (matchedIntent && matchedIntent.invoice_id) {
         // Update Invoice paid amount
         const invoices = await base44.entities.Invoice.filter({ invoice_number: matchedIntent.invoice_id });
@@ -182,6 +184,7 @@ export default function Reconciliation() {
       setSuccessMessage('Payment matched successfully');
       setShowMatchDialog(false);
       setSelectedPayment(null);
+      setSelectedIntentId('');
       setMatchRemarks('');
       loadData();
     } catch (error) {
@@ -800,8 +803,8 @@ export default function Reconciliation() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Match To Payment Intent</label>
-              <Select>
+              <label className="text-sm font-medium">Match To Payment Intent *</label>
+              <Select value={selectedIntentId} onValueChange={setSelectedIntentId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select payment intent" />
                 </SelectTrigger>
@@ -813,6 +816,7 @@ export default function Reconciliation() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-gray-500 mt-1">Select the approved payment intent to match this payment with</p>
             </div>
             <div className="mt-4">
               <label className="text-sm font-medium">Remarks *</label>
@@ -824,12 +828,16 @@ export default function Reconciliation() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowMatchDialog(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowMatchDialog(false);
+              setSelectedIntentId('');
+              setMatchRemarks('');
+            }}>
               Cancel
             </Button>
             <Button
               onClick={handleManualMatch}
-              disabled={processing || !matchRemarks}
+              disabled={processing || !matchRemarks || !selectedIntentId}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {processing ? (

@@ -116,7 +116,31 @@ export default function BatchProcessing() {
 
       await base44.entities.Batch.update(selectedBatch.id, updateData);
 
-      // 2. CRITICAL: Create Reconciliation record if moving to Closed and not exist yet
+      // 2. CRITICAL: Create Bordero when status changes to Approved
+      if (nextStatus === 'Approved') {
+        const borderoId = `BDO-${selectedBatch.batch_id}-${Date.now()}`;
+        await base44.entities.Bordero.create({
+          bordero_id: borderoId,
+          contract_id: selectedBatch.contract_id,
+          batch_id: selectedBatch.batch_id,
+          period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`,
+          total_debtors: selectedBatch.total_records || 0,
+          total_exposure: selectedBatch.total_exposure || 0,
+          total_premium: selectedBatch.total_premium || 0,
+          currency: 'IDR',
+          status: 'GENERATED'
+        });
+
+        // Update all debtors with bordero status
+        const batchDebtorsForBordero = await base44.entities.Debtor.filter({ batch_id: selectedBatch.batch_id });
+        for (const debtor of batchDebtorsForBordero) {
+          await base44.entities.Debtor.update(debtor.id, {
+            bordero_status: 'GENERATED'
+          });
+        }
+      }
+
+      // 3. CRITICAL: Create Reconciliation record if moving to Closed and not exist yet
       if (nextStatus === 'Closed') {
         const existingRecons = await base44.entities.Reconciliation.filter({ 
           contract_id: selectedBatch.contract_id,
@@ -139,7 +163,7 @@ export default function BatchProcessing() {
         }
       }
 
-      // 3. Create Nota AND Invoice when status changes to Nota Issued
+      // 4. Create Nota AND Invoice when status changes to Nota Issued
       if (nextStatus === 'Nota Issued') {
         const notaNumber = `NOTA-${selectedBatch.batch_id}-${Date.now()}`;
         const invoiceNumber = `INV-${selectedBatch.batch_id}-${Date.now()}`;

@@ -155,15 +155,33 @@ export default function BorderoManagement() {
     // Export functionality
   };
 
-  const filteredDebtors = debtors.filter(d => {
-    if (filters.contract !== 'all' && d.contract_id !== filters.contract) return false;
-    if (filters.batch && !d.batch_id?.includes(filters.batch)) return false;
-    if (filters.submitStatus !== 'all' && d.underwriting_status !== filters.submitStatus) return false;
-    if (filters.reconStatus !== 'all' && d.recon_status !== filters.reconStatus) return false;
-    if (filters.startDate && d.created_date < filters.startDate) return false;
-    if (filters.endDate && d.created_date > filters.endDate) return false;
-    return true;
-  });
+  // Filter per tab based on workflow status
+  const getTabDebtors = () => {
+    let filtered = debtors.filter(d => {
+      if (filters.contract !== 'all' && d.contract_id !== filters.contract) return false;
+      if (filters.batch && !d.batch_id?.includes(filters.batch)) return false;
+      if (filters.submitStatus !== 'all' && d.underwriting_status !== filters.submitStatus) return false;
+      if (filters.reconStatus !== 'all' && d.recon_status !== filters.reconStatus) return false;
+      if (filters.startDate && d.created_date < filters.startDate) return false;
+      if (filters.endDate && d.created_date > filters.endDate) return false;
+      return true;
+    });
+
+    // Apply tab-specific filters
+    if (activeTab === 'debtors') {
+      // All approved debtors
+      return filtered.filter(d => d.underwriting_status === 'APPROVED');
+    } else if (activeTab === 'exposure') {
+      // Only approved with bordero generated
+      return filtered.filter(d => d.underwriting_status === 'APPROVED' && d.bordero_status);
+    } else if (activeTab === 'borderos') {
+      // Handled separately
+      return filtered;
+    }
+    return filtered;
+  };
+
+  const filteredDebtors = getTabDebtors();
 
   const filteredClaims = claims.filter(c => {
     if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
@@ -463,6 +481,14 @@ export default function BorderoManagement() {
         </TabsContent>
 
         <TabsContent value="borderos" className="mt-4">
+          {borderos.length === 0 ? (
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                No borderos yet. Borderos are auto-generated when a Batch reaches "Approved" status in Batch Processing.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <DataTable
             columns={borderoColumns}
             data={borderos}
