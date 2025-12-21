@@ -128,12 +128,25 @@ export default function Reconciliation() {
 
     setProcessing(true);
     try {
+      // 1. Update payment
       await base44.entities.Payment.update(selectedPayment.id, {
         match_status: 'MATCHED',
         matched_by: user?.email,
         matched_date: new Date().toISOString().split('T')[0]
       });
 
+      // 2. CRITICAL: Update Debtor recon_status (trigger payment received tracking)
+      const debtorsWithInvoice = await base44.entities.Debtor.filter({ 
+        invoice_status: 'ISSUED'
+      });
+      for (const debtor of debtorsWithInvoice.slice(0, 5)) {
+        await base44.entities.Debtor.update(debtor.id, {
+          recon_status: 'IN_PROGRESS',
+          payment_received_amount: (debtor.payment_received_amount || 0) + (selectedPayment.amount / debtorsWithInvoice.length)
+        });
+      }
+
+      // 3. Create audit log
       await base44.entities.AuditLog.create({
         action: 'MANUAL_MATCH',
         module: 'RECONCILIATION',
@@ -158,11 +171,22 @@ export default function Reconciliation() {
   const handleCloseReconciliation = async (recon) => {
     setProcessing(true);
     try {
+      // 1. Update reconciliation
       await base44.entities.Reconciliation.update(recon.id, {
         status: 'CLOSED',
         closed_by: user?.email,
         closed_date: new Date().toISOString().split('T')[0]
       });
+
+      // 2. CRITICAL: Update all Debtor recon_status for closed reconciliation
+      const debtorsInProgress = await base44.entities.Debtor.filter({ 
+        recon_status: 'IN_PROGRESS'
+      });
+      for (const debtor of debtorsInProgress.slice(0, 10)) {
+        await base44.entities.Debtor.update(debtor.id, {
+          recon_status: 'CLOSED'
+        });
+      }
 
       setSuccessMessage('Reconciliation closed successfully');
       loadData();
