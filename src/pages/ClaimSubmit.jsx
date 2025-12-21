@@ -21,13 +21,21 @@ import StatusBadge from "@/components/ui/StatusBadge";
 function ClaimDocumentUploadRow({ docType, existingDoc }) {
   const [file, setFile] = useState(null);
   const [uploaded, setUploaded] = useState(!!existingDoc);
+  const [uploading, setUploading] = useState(false);
   const [fileUrl, setFileUrl] = useState(existingDoc?.file_url || null);
 
   const handleUpload = async () => {
     if (!file) return;
-    setUploaded(true);
-    // Simulate upload - in real scenario would upload via base44.integrations.Core.UploadFile
-    setFileUrl(URL.createObjectURL(file));
+    setUploading(true);
+    try {
+      // Simulate upload - in real scenario would upload via base44.integrations.Core.UploadFile
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setFileUrl(URL.createObjectURL(file));
+      setUploaded(true);
+    } catch (error) {
+      console.error('Upload error:', error);
+    }
+    setUploading(false);
   };
 
   return (
@@ -54,8 +62,11 @@ function ClaimDocumentUploadRow({ docType, existingDoc }) {
         <Input
           type="file"
           onChange={(e) => {
-            setFile(e.target.files[0]);
-            setUploaded(false);
+            const selectedFile = e.target.files?.[0];
+            if (selectedFile) {
+              setFile(selectedFile);
+              setUploaded(false);
+            }
           }}
           accept=".pdf,.jpg,.jpeg,.png"
           className="w-48 text-sm"
@@ -63,10 +74,12 @@ function ClaimDocumentUploadRow({ docType, existingDoc }) {
         <Button 
           size="sm"
           variant="outline"
-          disabled={!file}
+          disabled={!file || uploading}
           onClick={handleUpload}
         >
-          {uploaded ? 'Re-upload' : 'Upload'}
+          {uploading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : uploaded ? 'Re-upload' : 'Upload'}
         </Button>
       </div>
     </div>
@@ -366,10 +379,6 @@ export default function ClaimSubmit() {
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
-            </Button>
-            <Button variant="outline" onClick={downloadTemplate}>
-              <Download className="w-4 h-4 mr-2" />
-              Template
             </Button>
             <Button 
               variant="outline"
