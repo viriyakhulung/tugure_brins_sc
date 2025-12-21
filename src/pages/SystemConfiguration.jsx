@@ -90,26 +90,29 @@ export default function SystemConfiguration() {
       // Create sample data if any is empty
       const needsSampleData = !configData || configData.length === 0 || 
                               !notifData || notifData.length === 0 ||
-                              !templates || templates.length === 0;
+                              !templates || templates.length === 0 ||
+                              !rules || rules.length === 0;
       
       if (needsSampleData) {
         await createSampleConfigs();
         // Reload all data after creating samples
-        const [newConfigData, newNotifData, newTemplateData] = await Promise.all([
+        const [newConfigData, newNotifData, newTemplateData, newRules] = await Promise.all([
           base44.entities.SystemConfig.list(),
           base44.entities.Notification.list(),
-          base44.entities.EmailTemplate.list()
+          base44.entities.EmailTemplate.list(),
+          base44.entities.SlaRule.list()
         ]);
         setSystemConfigs(newConfigData || []);
         setNotifications(newNotifData || []);
         setEmailTemplates(newTemplateData || []);
+        setSlaRules(newRules || []);
       } else {
         setSystemConfigs(configData || []);
         setNotifications(notifData || []);
         setEmailTemplates(templates || []);
+        setSlaRules(rules || []);
       }
       
-      setSlaRules(rules || []);
       setNotificationSettings(settingsData || []);
       
       const userSetting = settingsData.find(s => s.user_email === currentUser.email);
@@ -1488,9 +1491,14 @@ export default function SystemConfiguration() {
           <Alert className="bg-blue-50 border-blue-200">
             <AlertCircle className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-700">
-              <strong>SLA & Auto Notification Rules:</strong> Atur notifikasi otomatis berdasarkan durasi status, due date, atau kondisi tertentu. 
-              Sistem akan memantau entitas dan mengirim notifikasi secara otomatis ketika kondisi terpenuhi.
-              <br/><strong>Note:</strong> Fitur ini memerlukan backend functions untuk auto-trigger. Saat ini hanya menyimpan konfigurasi.
+              <strong>SLA & Auto Notification Rules:</strong> Atur notifikasi otomatis berdasarkan durasi status, due date, atau kondisi tertentu.
+              <br/><br/>
+              <strong>⚙️ Cara Kerja:</strong>
+              <br/>• <strong>Konfigurasi Rules:</strong> Anda dapat setup rules lengkap di sini (sudah tersedia 21 contoh real)
+              <br/>• <strong>Auto-Trigger Engine:</strong> Memerlukan backend scheduler yang monitoring entities setiap periode dan auto-trigger notifikasi berdasarkan rules
+              <br/>• <strong>Status Saat Ini:</strong> Rules tersimpan di database dan siap digunakan. Untuk auto-trigger otomatis, perlu aktivasi backend functions di app settings
+              <br/><br/>
+              <strong>💡 Alternatif Tanpa Backend:</strong> Notifikasi manual saat workflow action (sudah terintegrasi di Batch Processing, Claim Review, dll)
             </AlertDescription>
           </Alert>
 
