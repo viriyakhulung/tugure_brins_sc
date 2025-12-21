@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
-  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, FileText, Clock, DollarSign
+  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, FileText, Clock, DollarSign, Download
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
