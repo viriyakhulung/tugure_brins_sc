@@ -526,6 +526,328 @@ export default function SystemConfiguration() {
         console.error('Failed to create sample template:', error);
       }
     }
+
+    // Create sample SLA rules - Real business scenarios
+    const sampleSlaRules = [
+      // === DEBTOR WORKFLOW SLA ===
+      {
+        rule_name: 'Debtor Pending Review - 48h SLA',
+        entity_type: 'Debtor',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'SUBMITTED',
+        duration_value: 48,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[SLA Alert] Debtor {entity_id} Pending Review for 48 Hours',
+        email_body: 'Dear TUGURE Team,\n\nDebtor {entity_id} has been pending review for {duration} hours.\n\nCurrent Status: {status}\nSubmission Date: {date}\n\nPlease review and approve/reject to meet SLA requirements.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Debtor Conditional Status - Follow Up Reminder',
+        entity_type: 'Debtor',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'CONDITIONAL',
+        duration_value: 72,
+        duration_unit: 'HOURS',
+        notification_type: 'EMAIL',
+        recipient_role: 'BRINS',
+        email_subject: '[Action Required] Debtor {entity_id} - Additional Documentation Required',
+        email_body: 'Dear BRINS Team,\n\nDebtor {entity_id} has been in CONDITIONAL status for {duration} hours.\n\nPlease submit the required additional documents to proceed with approval.\n\nPending Items:\n- Complete documentation as per conditional approval\n- Submit within 7 days to avoid rejection\n\nBest regards,\nTUGURE Reinsurance System',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 48
+      },
+      {
+        rule_name: 'Document Incomplete - Urgent Reminder',
+        entity_type: 'Debtor',
+        trigger_condition: 'CREATED_DURATION',
+        duration_value: 120,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'BRINS',
+        email_subject: '[Urgent] Debtor {entity_id} - Documentation Incomplete for 5 Days',
+        email_body: 'Dear BRINS Team,\n\nDebtor {entity_id} has incomplete documentation for {duration} hours (5 days).\n\nAction Required:\n- Upload all required documents immediately\n- Risk of rejection if not completed within 2 days\n\nRequired Documents:\n- Check Document Eligibility page for details\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'CRITICAL',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 24
+      },
+
+      // === BATCH WORKFLOW SLA ===
+      {
+        rule_name: 'Batch Uploaded - Validation SLA 24h',
+        entity_type: 'Batch',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Uploaded',
+        duration_value: 24,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[SLA Alert] Batch {entity_id} Awaiting Validation for 24 Hours',
+        email_body: 'Dear TUGURE Team,\n\nBatch {entity_id} has been uploaded and awaiting validation for {duration} hours.\n\nBatch Details:\n- Total Records: Check batch processing page\n- Submission Date: {date}\n\nPlease validate the batch to proceed with matching.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Batch Matched - Approval Required 48h',
+        entity_type: 'Batch',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Matched',
+        duration_value: 48,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[Action Required] Batch {entity_id} - Approval Pending for 48 Hours',
+        email_body: 'Dear TUGURE Team,\n\nBatch {entity_id} has been matched and pending approval for {duration} hours.\n\nAction Required:\n- Review batch details\n- Approve or reject batch\n- SLA target: 48 hours\n\nPlease complete approval to proceed with Nota issuance.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Nota Issued - Branch Confirmation Overdue',
+        entity_type: 'Batch',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Nota Issued',
+        duration_value: 72,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'BRINS',
+        email_subject: '[Urgent] Batch {entity_id} - Nota Confirmation Overdue',
+        email_body: 'Dear BRINS Team,\n\nNota for Batch {entity_id} has been issued {duration} hours ago but not yet confirmed by branch.\n\nAction Required:\n- Confirm Nota receipt at branch\n- SLA target: 3 business days (72 hours)\n- Overdue status may affect payment processing\n\nPlease confirm immediately to avoid delays.\n\nBest regards,\nTUGURE Reinsurance System',
+        priority: 'CRITICAL',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 24
+      },
+      {
+        rule_name: 'Batch Branch Confirmed - Payment Reminder',
+        entity_type: 'Batch',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Branch Confirmed',
+        duration_value: 168,
+        duration_unit: 'HOURS',
+        notification_type: 'EMAIL',
+        recipient_role: 'TUGURE',
+        email_subject: '[Payment Reminder] Batch {entity_id} - Payment Pending for 7 Days',
+        email_body: 'Dear TUGURE Team,\n\nBatch {entity_id} has been confirmed by branch {duration} hours ago (7 days) but payment not yet received.\n\nPayment Status:\n- Nota Amount: Check payment page\n- Branch Confirmation Date: {date}\n\nPlease follow up on payment status with accounting team.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 72
+      },
+
+      // === CLAIM WORKFLOW SLA ===
+      {
+        rule_name: 'Claim Submitted - Eligibility Check 48h SLA',
+        entity_type: 'Claim',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Draft',
+        duration_value: 48,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[SLA Alert] Claim {entity_id} - Eligibility Check Required',
+        email_body: 'Dear TUGURE Team,\n\nClaim {entity_id} has been submitted {duration} hours ago and requires eligibility verification.\n\nClaim Details:\n- Claimant: Check claim details\n- Claim Amount: Check claim page\n- Submission Date: {date}\n\nSLA Target: 48 hours for initial eligibility check\n\nPlease review and proceed with eligibility verification.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Claim Doc Verification - 7 Days SLA',
+        entity_type: 'Claim',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Checked',
+        duration_value: 168,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[Urgent] Claim {entity_id} - Document Verification Overdue',
+        email_body: 'Dear TUGURE Team,\n\nClaim {entity_id} has been checked but document verification is pending for {duration} hours (7 days).\n\nAction Required:\n- Verify all supporting documents\n- Complete verification within SLA\n- SLA Target: 7 days from eligibility check\n\nOverdue status may impact claim settlement timeline.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'CRITICAL',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 48
+      },
+      {
+        rule_name: 'Claim Invoiced - Payment 14 Days SLA',
+        entity_type: 'Claim',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Invoiced',
+        duration_value: 336,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[Payment Alert] Claim {entity_id} - Settlement Due in 14 Days',
+        email_body: 'Dear TUGURE Team,\n\nClaim {entity_id} has been invoiced {duration} hours ago (14 days).\n\nSettlement Details:\n- Invoice Amount: Check claim page\n- Invoice Date: {date}\n- SLA Target: 14 days for claim settlement\n\nPlease process payment to meet SLA commitment.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 72
+      },
+
+      // === INVOICE & PAYMENT SLA ===
+      {
+        rule_name: 'Invoice Overdue - 7 Days Past Due Date',
+        entity_type: 'Invoice',
+        trigger_condition: 'DUE_DATE_PASSED',
+        duration_value: 168,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'BRINS',
+        email_subject: '[Overdue Invoice] {entity_id} - Payment 7 Days Overdue',
+        email_body: 'Dear BRINS Team,\n\nInvoice {entity_id} is now {duration} hours (7 days) overdue.\n\nInvoice Details:\n- Amount: Check invoice page\n- Due Date: {date}\n- Overdue Period: 7 days\n\nLate Payment Penalty:\n- Penalty may apply as per contract terms\n- Please process payment immediately\n\nBest regards,\nTUGURE Reinsurance System',
+        priority: 'CRITICAL',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 72
+      },
+      {
+        rule_name: 'Invoice Due Date Approaching - 3 Days Reminder',
+        entity_type: 'Invoice',
+        trigger_condition: 'DUE_DATE_APPROACHING',
+        duration_value: 72,
+        duration_unit: 'HOURS',
+        notification_type: 'EMAIL',
+        recipient_role: 'BRINS',
+        email_subject: '[Payment Reminder] Invoice {entity_id} Due in 3 Days',
+        email_body: 'Dear BRINS Team,\n\nInvoice {entity_id} is due in {duration} hours (3 days).\n\nInvoice Summary:\n- Amount: Check invoice page\n- Due Date: {date}\n- Payment Method: As per contract\n\nPlease arrange payment before due date to avoid late payment penalties.\n\nBest regards,\nTUGURE Reinsurance System',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Payment Intent Pending - Approval Required',
+        entity_type: 'PaymentIntent',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'SUBMITTED',
+        duration_value: 48,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[Action Required] Payment Intent {entity_id} - Approval Pending',
+        email_body: 'Dear TUGURE Team,\n\nPayment Intent {entity_id} has been submitted {duration} hours ago and requires approval.\n\nPayment Details:\n- Planned Amount: Check payment intent page\n- Planned Date: {date}\n\nPlease review and approve/reject payment intent.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: false
+      },
+
+      // === RECONCILIATION SLA ===
+      {
+        rule_name: 'Reconciliation Exception - Resolution Required',
+        entity_type: 'Reconciliation',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'EXCEPTION',
+        duration_value: 72,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[Urgent] Reconciliation {entity_id} - Exception for 3 Days',
+        email_body: 'Dear TUGURE Team,\n\nReconciliation {entity_id} has been in EXCEPTION status for {duration} hours (3 days).\n\nAction Required:\n- Review exception details\n- Resolve discrepancies\n- Mark as Ready to Close or provide resolution notes\n\nUnresolved exceptions may impact financial reporting.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 48
+      },
+      {
+        rule_name: 'Reconciliation Ready to Close - Pending Closure',
+        entity_type: 'Reconciliation',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'READY_TO_CLOSE',
+        duration_value: 120,
+        duration_unit: 'HOURS',
+        notification_type: 'EMAIL',
+        recipient_role: 'TUGURE',
+        email_subject: '[Reminder] Reconciliation {entity_id} - Ready to Close for 5 Days',
+        email_body: 'Dear TUGURE Team,\n\nReconciliation {entity_id} has been ready to close for {duration} hours (5 days).\n\nAction Required:\n- Final review of reconciliation\n- Close reconciliation to complete financial period\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Reconciliation In Progress - 14 Days Alert',
+        entity_type: 'Reconciliation',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'IN_PROGRESS',
+        duration_value: 336,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'ALL',
+        email_subject: '[Alert] Reconciliation {entity_id} - In Progress for 14 Days',
+        email_body: 'Dear Team,\n\nReconciliation {entity_id} has been in progress for {duration} hours (14 days).\n\nStatus Review:\n- Check for unmatched payments\n- Review exception cases\n- Target closure: Within 30 days from start\n\nPlease expedite reconciliation process.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 168
+      },
+
+      // === NOTA WORKFLOW SLA ===
+      {
+        rule_name: 'Nota Draft - Issuance Required',
+        entity_type: 'Nota',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Draft',
+        duration_value: 24,
+        duration_unit: 'HOURS',
+        notification_type: 'SYSTEM',
+        recipient_role: 'TUGURE',
+        email_subject: '[Reminder] Nota {entity_id} - Ready for Issuance',
+        email_body: 'Dear TUGURE Team,\n\nNota {entity_id} has been in draft status for {duration} hours.\n\nAction Required:\n- Review Nota details\n- Issue Nota to BRINS\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'LOW',
+        is_active: true,
+        is_recurring: false
+      },
+
+      // === SUBROGATION SLA ===
+      {
+        rule_name: 'Subrogation Recovery - Follow Up Required',
+        entity_type: 'Subrogation',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Invoiced',
+        duration_value: 240,
+        duration_unit: 'HOURS',
+        notification_type: 'EMAIL',
+        recipient_role: 'TUGURE',
+        email_subject: '[Follow Up] Subrogation {entity_id} - Recovery Payment Pending',
+        email_body: 'Dear TUGURE Team,\n\nSubrogation {entity_id} has been invoiced {duration} hours ago (10 days) but recovery payment not received.\n\nRecovery Details:\n- Recovery Amount: Check subrogation page\n- Invoice Date: {date}\n\nPlease follow up with BRINS for recovery payment.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: true,
+        recurrence_interval: 120
+      },
+
+      // === DOCUMENT VERIFICATION SLA ===
+      {
+        rule_name: 'Document Pending Verification - 48h SLA',
+        entity_type: 'Document',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'PENDING',
+        duration_value: 48,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[SLA Alert] Document Verification Pending for 48 Hours',
+        email_body: 'Dear TUGURE Team,\n\nDocument for entity {entity_id} has been pending verification for {duration} hours.\n\nAction Required:\n- Verify document authenticity\n- Approve or reject document\n- SLA Target: 48 hours\n\nPlease complete verification to proceed with debtor approval.\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: false
+      }
+    ];
+
+    for (const rule of sampleSlaRules) {
+      try {
+        await base44.entities.SlaRule.create({
+          ...rule,
+          trigger_count: 0
+        });
+      } catch (error) {
+        console.error('Failed to create sample SLA rule:', error);
+      }
+    }
   };
 
   const handleSaveUserSettings = async () => {
