@@ -109,6 +109,7 @@ export default function SystemConfiguration() {
         setEmailTemplates(templates || []);
       }
       
+      setSlaRules(rules || []);
       setNotificationSettings(settingsData || []);
       
       const userSetting = settingsData.find(s => s.user_email === currentUser.email);
