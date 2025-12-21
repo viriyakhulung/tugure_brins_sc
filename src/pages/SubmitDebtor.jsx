@@ -182,13 +182,13 @@ export default function SubmitDebtor() {
         status: 'Uploaded'
       });
 
-      // 2. Create Debtors
+      // 2. Create Debtors with synchronized status
       const debtorsToCreate = previewData.map(d => ({
         ...d,
         contract_id: selectedContract,
         batch_id: batchId,
         underwriting_status: 'SUBMITTED',
-        batch_status: 'SUBMITTED',
+        batch_status: 'Uploaded', // Sync with Batch.status
         record_status: 'ACTIVE',
         bordero_status: 'PENDING',
         invoice_status: 'NOT_ISSUED',
@@ -260,7 +260,7 @@ export default function SubmitDebtor() {
         coverage_start_date: d.coverage_start || coverageStart,
         coverage_end_date: d.coverage_end || coverageEnd,
         underwriting_status: 'SUBMITTED',
-        batch_status: 'SUBMITTED',
+        batch_status: 'Uploaded', // Sync with Batch.status
         record_status: 'ACTIVE',
         bordero_status: 'PENDING',
         invoice_status: 'NOT_ISSUED',
@@ -287,7 +287,7 @@ export default function SubmitDebtor() {
         status: 'Uploaded'
       });
 
-      // 2. Create Debtors
+      // 2. Create Debtors with synchronized status
       await base44.entities.Debtor.bulkCreate(debtorsToCreate);
 
       // 3. Create notification

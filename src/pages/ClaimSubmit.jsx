@@ -153,9 +153,9 @@ export default function ClaimSubmit() {
     try {
       const debtor = debtors.find(d => d.id === selectedDebtor);
       
-      // Check eligibility
-      if (debtor?.batch_status !== 'VALIDATED' && debtor?.batch_status !== 'COMPLETED') {
-        setErrorMessage('Cannot submit claim: Document eligibility is not complete');
+      // Check eligibility - must be APPROVED
+      if (debtor?.underwriting_status !== 'APPROVED') {
+        setErrorMessage('Cannot submit claim: Debtor must be approved first');
         setProcessing(false);
         return;
       }
@@ -184,6 +184,13 @@ export default function ClaimSubmit() {
         share_tugure_amount: shareTugure,
         claim_status: 'Draft',
         eligibility_status: 'ELIGIBLE'
+      });
+
+      // CRITICAL: Update Debtor claim_status
+      await base44.entities.Debtor.update(selectedDebtor, {
+        claim_status: 'Draft',
+        claim_id: claimId,
+        claim_amount: shareTugure
       });
 
       // Send email notifications
