@@ -95,7 +95,8 @@ export default function PaymentIntent() {
         return;
       }
       
-      await base44.entities.PaymentIntent.create({
+      // 1. Create Payment Intent
+      const paymentIntent = await base44.entities.PaymentIntent.create({
         intent_id: intentId,
         invoice_id: selectedDebtorsList[0]?.invoice_no || intentId,
         contract_id: selectedDebtorsList[0]?.contract_id || 'contract_1',
@@ -105,6 +106,14 @@ export default function PaymentIntent() {
         remarks: remarks,
         status: 'SUBMITTED'
       });
+
+      // 2. CRITICAL: Update selected Debtors with payment intent reference
+      for (const debtor of selectedDebtorsList) {
+        await base44.entities.Debtor.update(debtor.id, {
+          recon_status: 'IN_PROGRESS',
+          invoice_status: debtor.invoice_status === 'NOT_ISSUED' ? 'ISSUED' : debtor.invoice_status
+        });
+      }
 
       // Send email notifications
       const notifSettings = await base44.entities.NotificationSetting.list();

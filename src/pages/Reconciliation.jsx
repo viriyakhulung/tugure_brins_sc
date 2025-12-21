@@ -135,15 +135,32 @@ export default function Reconciliation() {
         matched_date: new Date().toISOString().split('T')[0]
       });
 
-      // 2. CRITICAL: Update Debtor recon_status (trigger payment received tracking)
-      const debtorsWithInvoice = await base44.entities.Debtor.filter({ 
-        invoice_status: 'ISSUED'
-      });
-      for (const debtor of debtorsWithInvoice.slice(0, 5)) {
-        await base44.entities.Debtor.update(debtor.id, {
-          recon_status: 'IN_PROGRESS',
-          payment_received_amount: (debtor.payment_received_amount || 0) + (selectedPayment.amount / debtorsWithInvoice.length)
-        });
+      // 2. CRITICAL: Get associated PaymentIntent and update Invoice
+      const matchedIntent = paymentIntents.find(pi => pi.id === selectedPayment.intent_id);
+      if (matchedIntent && matchedIntent.invoice_id) {
+        // Update Invoice paid amount
+        const invoices = await base44.entities.Invoice.filter({ invoice_number: matchedIntent.invoice_id });
+        if (invoices.length > 0) {
+          const invoice = invoices[0];
+          const newPaidAmount = (invoice.paid_amount || 0) + selectedPayment.amount;
+          const newOutstanding = invoice.total_amount - newPaidAmount;
+          await base44.entities.Invoice.update(invoice.id, {
+            paid_amount: newPaidAmount,
+            outstanding_amount: newOutstanding,
+            status: newOutstanding <= 0 ? 'PAID' : 'PARTIALLY_PAID'
+          });
+
+          // Update all Debtors with this invoice
+          const relatedDebtors = await base44.entities.Debtor.filter({ invoice_no: matchedIntent.invoice_id });
+          for (const debtor of relatedDebtors) {
+            const debtorPayment = selectedPayment.amount / relatedDebtors.length; // distribute evenly
+            await base44.entities.Debtor.update(debtor.id, {
+              payment_received_amount: (debtor.payment_received_amount || 0) + debtorPayment,
+              invoice_status: newOutstanding <= 0 ? 'PAID' : 'PARTIALLY_PAID',
+              recon_status: newOutstanding <= 0 ? 'CLOSED' : 'IN_PROGRESS'
+            });
+          }
+        }
       }
 
       // 3. Create audit log

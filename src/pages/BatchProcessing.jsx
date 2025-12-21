@@ -116,9 +116,12 @@ export default function BatchProcessing() {
 
       await base44.entities.Batch.update(selectedBatch.id, updateData);
 
-      // Create Nota when status changes to Nota Issued
+      // 3. Create Nota AND Invoice when status changes to Nota Issued
       if (nextStatus === 'Nota Issued') {
         const notaNumber = `NOTA-${selectedBatch.batch_id}-${Date.now()}`;
+        const invoiceNumber = `INV-${selectedBatch.batch_id}-${Date.now()}`;
+        
+        // Create Nota
         await base44.entities.Nota.create({
           nota_number: notaNumber,
           nota_type: 'Batch',
@@ -128,6 +131,40 @@ export default function BatchProcessing() {
           currency: 'IDR',
           status: 'Draft'
         });
+
+        // Create Invoice
+        const invoice = await base44.entities.Invoice.create({
+          invoice_number: invoiceNumber,
+          contract_id: selectedBatch.contract_id,
+          period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`,
+          total_amount: selectedBatch.total_premium || 0,
+          outstanding_amount: selectedBatch.total_premium || 0,
+          currency: 'IDR',
+          status: 'ISSUED',
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        });
+
+        // Create Reconciliation record
+        await base44.entities.Reconciliation.create({
+          recon_id: `RECON-${selectedBatch.batch_id}-${Date.now()}`,
+          contract_id: selectedBatch.contract_id,
+          period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`,
+          total_invoiced: selectedBatch.total_premium || 0,
+          total_paid: 0,
+          difference: selectedBatch.total_premium || 0,
+          currency: 'IDR',
+          status: 'IN_PROGRESS'
+        });
+
+        // Update all debtors with invoice info
+        const batchDebtorsForInvoice = await base44.entities.Debtor.filter({ batch_id: selectedBatch.batch_id });
+        for (const debtor of batchDebtorsForInvoice) {
+          await base44.entities.Debtor.update(debtor.id, {
+            invoice_no: invoiceNumber,
+            invoice_amount: debtor.net_premium || 0,
+            invoice_status: 'ISSUED'
+          });
+        }
       }
 
       // Send templated emails based on user preferences

@@ -106,13 +106,51 @@ export default function NotaManagement() {
       // 2. CRITICAL: Sync Debtor invoice_status if Nota is for Batch
       if (selectedNota.nota_type === 'Batch' && selectedNota.reference_id) {
         const batchDebtors = await base44.entities.Debtor.filter({ batch_id: selectedNota.reference_id });
-        const invoiceStatus = nextStatus === 'Paid' ? 'PAID' : nextStatus === 'Issued' ? 'ISSUED' : 'NOT_ISSUED';
-        for (const debtor of batchDebtors) {
-          await base44.entities.Debtor.update(debtor.id, {
-            invoice_status: invoiceStatus,
-            invoice_no: selectedNota.nota_number,
-            invoice_amount: selectedNota.amount
-          });
+        
+        // When Nota is marked as Paid - this triggers reconciliation completion
+        if (nextStatus === 'Paid') {
+          // Update Invoice to PAID
+          const invoices = await base44.entities.Invoice.filter({ contract_id: selectedNota.contract_id });
+          const relatedInvoice = invoices.find(inv => 
+            batchDebtors.some(d => d.invoice_no === inv.invoice_number)
+          );
+          
+          if (relatedInvoice) {
+            await base44.entities.Invoice.update(relatedInvoice.id, {
+              paid_amount: relatedInvoice.total_amount,
+              outstanding_amount: 0,
+              status: 'PAID'
+            });
+
+            // Create Payment record
+            await base44.entities.Payment.create({
+              payment_ref: `PAY-${selectedNota.nota_number}-${Date.now()}`,
+              invoice_id: relatedInvoice.id,
+              contract_id: selectedNota.contract_id,
+              amount: selectedNota.amount,
+              payment_date: new Date().toISOString().split('T')[0],
+              currency: 'IDR',
+              match_status: 'MATCHED',
+              exception_type: 'NONE'
+            });
+          }
+
+          // Update all debtors to PAID and CLOSED recon
+          for (const debtor of batchDebtors) {
+            await base44.entities.Debtor.update(debtor.id, {
+              invoice_status: 'PAID',
+              payment_received_amount: debtor.invoice_amount || debtor.net_premium || 0,
+              recon_status: 'CLOSED'
+            });
+          }
+        } else {
+          // For other status changes, just update invoice_status
+          const invoiceStatus = nextStatus === 'Issued' ? 'ISSUED' : 'NOT_ISSUED';
+          for (const debtor of batchDebtors) {
+            await base44.entities.Debtor.update(debtor.id, {
+              invoice_status: invoiceStatus
+            });
+          }
         }
       }
 
