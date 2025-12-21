@@ -118,6 +118,10 @@ export default function ClaimSubmit() {
   const [lossDate, setLossDate] = useState('');
   const [claimAmount, setClaimAmount] = useState('');
   const [claimDocuments, setClaimDocuments] = useState([]);
+  
+  // Upload state
+  const [uploadFile, setUploadFile] = useState(null);
+  const [parsedClaims, setParsedClaims] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -268,6 +272,109 @@ export default function ClaimSubmit() {
     a.href = url;
     a.download = 'claim_upload_template.csv';
     a.click();
+  };
+
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    
+    setProcessing(true);
+    setErrorMessage('');
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',');
+      
+      const parsed = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        if (values.length !== headers.length) continue;
+        
+        const claim = {
+          claim_no: values[0]?.trim(),
+          policy_no: values[1]?.trim(),
+          certificate_no: values[2]?.trim(),
+          participant_no: values[3]?.trim(),
+          nama_tertanggung: values[4]?.trim(),
+          no_ktp_npwp: values[5]?.trim(),
+          no_fasilitas_kredit: values[6]?.trim(),
+          tanggal_realisasi_kredit: values[7]?.trim(),
+          nilai_klaim: parseFloat(values[8]) || 0,
+          dol: values[9]?.trim(),
+          kol_debitur: values[10]?.trim(),
+          plafond: parseFloat(values[11]) || 0,
+          max_coverage: parseFloat(values[12]) || 0,
+          share_tugure_pct: parseFloat(values[13]) || 75,
+          share_tugure_amount: parseFloat(values[14]) || 0,
+          bdo_premi_period: values[15]?.trim(),
+          check_bdo_premi: values[16]?.trim().toUpperCase() === 'TRUE'
+        };
+        parsed.push(claim);
+      }
+      
+      setParsedClaims(parsed);
+      setSuccessMessage(`Parsed ${parsed.length} claims from file`);
+    } catch (error) {
+      console.error('Parse error:', error);
+      setErrorMessage('Failed to parse file. Please check format.');
+    }
+    setProcessing(false);
+  };
+
+  const handleBulkUpload = async () => {
+    if (parsedClaims.length === 0) {
+      setErrorMessage('No claims to upload');
+      return;
+    }
+
+    setProcessing(true);
+    setErrorMessage('');
+    try {
+      for (const claimData of parsedClaims) {
+        const debtor = debtors.find(d => d.participant_no === claimData.participant_no);
+        
+        await base44.entities.Claim.create({
+          claim_no: claimData.claim_no,
+          policy_no: claimData.policy_no,
+          certificate_no: claimData.certificate_no,
+          participant_no: claimData.participant_no,
+          debtor_id: debtor?.id || '',
+          contract_id: debtor?.contract_id || '',
+          nama_tertanggung: claimData.nama_tertanggung,
+          no_ktp_npwp: claimData.no_ktp_npwp,
+          no_fasilitas_kredit: claimData.no_fasilitas_kredit,
+          tanggal_realisasi_kredit: claimData.tanggal_realisasi_kredit,
+          plafond: claimData.plafond,
+          max_coverage: claimData.max_coverage,
+          kol_debitur: claimData.kol_debitur,
+          dol: claimData.dol,
+          nilai_klaim: claimData.nilai_klaim,
+          share_tugure_pct: claimData.share_tugure_pct,
+          share_tugure_amount: claimData.share_tugure_amount,
+          bdo_premi_period: claimData.bdo_premi_period,
+          check_bdo_premi: claimData.check_bdo_premi,
+          claim_status: 'Draft',
+          eligibility_status: 'PENDING'
+        });
+        
+        if (debtor) {
+          await base44.entities.Debtor.update(debtor.id, {
+            claim_status: 'Draft',
+            claim_id: claimData.claim_no,
+            claim_amount: claimData.share_tugure_amount
+          });
+        }
+      }
+      
+      setSuccessMessage(`Successfully uploaded ${parsedClaims.length} claims`);
+      setShowUploadDialog(false);
+      setUploadFile(null);
+      setParsedClaims([]);
+      loadData();
+    } catch (error) {
+      console.error('Upload error:', error);
+      setErrorMessage('Failed to upload claims');
+    }
+    setProcessing(false);
   };
 
   const approvedDebtors = debtors.filter(d => d.underwriting_status === 'APPROVED');
@@ -756,19 +863,27 @@ export default function ClaimSubmit() {
               <Label>Upload File</Label>
               <Input
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".csv"
                 onChange={(e) => {
-                  const file = e.target.files[0];
+                  const file = e.target.files?.[0];
                   if (file) {
-                    console.log('File selected:', file.name);
-                    // Handle file upload and processing
+                    setUploadFile(file);
+                    handleFileUpload(file);
                   }
                 }}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Supported formats: Excel (.xlsx, .xls) or CSV (.csv)
+                Supported formats: CSV (.csv)
               </p>
             </div>
+            {parsedClaims.length > 0 && (
+              <Alert className="bg-green-50 border-green-200">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-700">
+                  Successfully parsed {parsedClaims.length} claims from file
+                </AlertDescription>
+              </Alert>
+            )}
             <Alert>
               <AlertDescription>
                 Make sure your file follows the template format. Download the template if needed.
@@ -776,12 +891,29 @@ export default function ClaimSubmit() {
             </Alert>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowUploadDialog(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowUploadDialog(false);
+              setUploadFile(null);
+              setParsedClaims([]);
+            }}>
               Cancel
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Upload className="w-4 h-4 mr-2" />
-              Upload
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={parsedClaims.length === 0 || processing}
+              onClick={handleBulkUpload}
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload {parsedClaims.length} Claims
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
