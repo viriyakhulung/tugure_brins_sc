@@ -27,11 +27,14 @@ export default function SystemConfiguration() {
   const [notificationSettings, setNotificationSettings] = useState([]);
   const [selectedSettings, setSelectedSettings] = useState([]);
   const [systemConfigs, setSystemConfigs] = useState([]);
+  const [slaRules, setSlaRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('notifications');
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [selectedRule, setSelectedRule] = useState(null);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [showRuleDialog, setShowRuleDialog] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [showSettingDialog, setShowSettingDialog] = useState(false);
   const [editingConfig, setEditingConfig] = useState(null);
@@ -76,11 +79,12 @@ export default function SystemConfiguration() {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
       
-      const [configData, notifData, settingsData, templates] = await Promise.all([
+      const [configData, notifData, settingsData, templates, rules] = await Promise.all([
         base44.entities.SystemConfig.list(),
         base44.entities.Notification.list(),
         base44.entities.NotificationSetting.list(),
-        base44.entities.EmailTemplate.list()
+        base44.entities.EmailTemplate.list(),
+        base44.entities.SlaRule.list()
       ]);
       
       // Create sample data if any is empty
@@ -871,7 +875,7 @@ export default function SystemConfiguration() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="notifications">
             <Bell className="w-4 h-4 mr-2" />
             Notifications ({unreadNotifications.length})
@@ -884,13 +888,9 @@ export default function SystemConfiguration() {
             <Settings className="w-4 h-4 mr-2" />
             Notif Engine
           </TabsTrigger>
-          <TabsTrigger value="rules">
-            <Shield className="w-4 h-4 mr-2" />
-            Business Rules
-          </TabsTrigger>
-          <TabsTrigger value="thresholds">
-            <DollarSign className="w-4 h-4 mr-2" />
-            Thresholds
+          <TabsTrigger value="notification-rules">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            Notification by Rules
           </TabsTrigger>
           <TabsTrigger value="testing">
             <TestTube className="w-4 h-4 mr-2" />
@@ -1160,16 +1160,42 @@ export default function SystemConfiguration() {
           </Card>
         </TabsContent>
 
-        {/* Business Rules Tab */}
-        <TabsContent value="rules" className="mt-4">
+        {/* Notification by Rules Tab */}
+        <TabsContent value="notification-rules" className="mt-4 space-y-6">
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-700">
+              <strong>SLA & Auto Notification Rules:</strong> Atur notifikasi otomatis berdasarkan durasi status, due date, atau kondisi tertentu. 
+              Sistem akan memantau entitas dan mengirim notifikasi secara otomatis ketika kondisi terpenuhi.
+              <br/><strong>Note:</strong> Fitur ini memerlukan backend functions untuk auto-trigger. Saat ini hanya menyimpan konfigurasi.
+            </AlertDescription>
+          </Alert>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Business Rules</CardTitle>
-                  <p className="text-sm text-gray-500 mt-1">Configure eligibility criteria and requirements</p>
+                  <CardTitle>SLA & Notification Rules</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">Configure automatic notifications based on time, status, or conditions</p>
                 </div>
-                <Button onClick={() => { resetForm(); setShowDialog(true); }}>
+                <Button onClick={() => { 
+                  setSelectedRule({
+                    rule_name: '',
+                    entity_type: 'Debtor',
+                    trigger_condition: 'STATUS_DURATION',
+                    status_value: 'DRAFT',
+                    duration_value: 48,
+                    duration_unit: 'HOURS',
+                    notification_type: 'BOTH',
+                    recipient_role: 'BRINS',
+                    email_subject: '',
+                    email_body: '',
+                    priority: 'MEDIUM',
+                    is_active: true,
+                    is_recurring: false
+                  });
+                  setShowRuleDialog(true); 
+                }}>
                   <Plus className="w-4 h-4 mr-2" />
                   Add Rule
                 </Button>
@@ -1177,37 +1203,131 @@ export default function SystemConfiguration() {
             </CardHeader>
             <CardContent className="p-0">
               <DataTable
-                columns={configColumns}
-                data={getConfigsByType('rules')}
+                columns={[
+                  {
+                    header: 'Rule Name',
+                    cell: (row) => (
+                      <div>
+                        <p className="font-medium">{row.rule_name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs">{row.entity_type}</Badge>
+                          <Badge className={`text-xs ${row.priority === 'CRITICAL' ? 'bg-red-500' : row.priority === 'HIGH' ? 'bg-orange-500' : row.priority === 'MEDIUM' ? 'bg-yellow-500' : 'bg-blue-500'}`}>
+                            {row.priority}
+                          </Badge>
+                        </div>
+                      </div>
+                    )
+                  },
+                  {
+                    header: 'Trigger Condition',
+                    cell: (row) => (
+                      <div>
+                        <p className="text-sm font-medium">{row.trigger_condition.replace(/_/g, ' ')}</p>
+                        {row.status_value && <p className="text-xs text-gray-500">Status: {row.status_value}</p>}
+                        {row.duration_value && (
+                          <p className="text-xs text-gray-500">
+                            Duration: {row.duration_value} {row.duration_unit?.toLowerCase()}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  },
+                  {
+                    header: 'Notification',
+                    cell: (row) => (
+                      <div className="space-y-1">
+                        <Badge variant="outline">{row.notification_type}</Badge>
+                        <p className="text-xs text-gray-500">To: {row.recipient_role}</p>
+                        {row.is_recurring && (
+                          <Badge variant="outline" className="bg-orange-50 text-xs">
+                            Recurring: {row.recurrence_interval}h
+                          </Badge>
+                        )}
+                      </div>
+                    )
+                  },
+                  {
+                    header: 'Status',
+                    cell: (row) => (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${row.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
+                          <span className="text-sm">{row.is_active ? 'Active' : 'Inactive'}</span>
+                        </div>
+                        {row.trigger_count > 0 && (
+                          <p className="text-xs text-gray-500">Triggered: {row.trigger_count}x</p>
+                        )}
+                      </div>
+                    )
+                  },
+                  {
+                    header: 'Actions',
+                    cell: (row) => (
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedRule(row);
+                            setShowRuleDialog(true);
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={async () => {
+                            if (window.confirm('Delete this rule?')) {
+                              await base44.entities.SlaRule.delete(row.id);
+                              loadData();
+                              setSuccessMessage('Rule deleted');
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
+                    )
+                  }
+                ]}
+                data={slaRules}
                 isLoading={loading}
-                emptyMessage="No rules configured"
+                emptyMessage="No SLA rules configured. Click 'Add Rule' to create automatic notifications."
               />
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Thresholds Tab */}
-        <TabsContent value="thresholds" className="mt-4">
-          <Card>
+          {/* Rule Examples */}
+          <Card className="bg-gray-50">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Financial Thresholds</CardTitle>
-                  <p className="text-sm text-gray-500 mt-1">Set coverage percentages, premium rates, and limits</p>
-                </div>
-                <Button onClick={() => { resetForm(); setShowDialog(true); }}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Threshold
-                </Button>
-              </div>
+              <CardTitle className="text-base">Example Use Cases</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <DataTable
-                columns={configColumns}
-                data={getConfigsByType('thresholds')}
-                isLoading={loading}
-                emptyMessage="No thresholds configured"
-              />
+            <CardContent className="space-y-3">
+              <div className="p-3 bg-white rounded-lg border">
+                <p className="text-sm font-medium">📋 Debtor Pending SLA</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  "IF Debtor status = 'PENDING' for more than 48 hours, THEN send email reminder to TUGURE"
+                </p>
+              </div>
+              <div className="p-3 bg-white rounded-lg border">
+                <p className="text-sm font-medium">⏰ Claim Review SLA</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  "IF Claim status = 'Draft' for more than 7 days, THEN send HIGH priority notification to TUGURE"
+                </p>
+              </div>
+              <div className="p-3 bg-white rounded-lg border">
+                <p className="text-sm font-medium">💰 Invoice Due Date Alert</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  "IF Invoice due_date approaching (3 days before), THEN send reminder to BRINS"
+                </p>
+              </div>
+              <div className="p-3 bg-white rounded-lg border">
+                <p className="text-sm font-medium">🔄 Payment Overdue</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  "IF Invoice due_date passed AND status != 'PAID', THEN send CRITICAL alert every 24h to BRINS"
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1331,6 +1451,227 @@ export default function SystemConfiguration() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* SLA Rule Dialog */}
+      <Dialog open={showRuleDialog} onOpenChange={setShowRuleDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedRule?.id ? 'Edit SLA Rule' : 'Add SLA Rule'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Rule Name *</Label>
+                <Input
+                  value={selectedRule?.rule_name || ''}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, rule_name: e.target.value })}
+                  placeholder="e.g., Debtor Pending 48h Alert"
+                />
+              </div>
+              <div>
+                <Label>Entity Type *</Label>
+                <select
+                  value={selectedRule?.entity_type || 'Debtor'}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, entity_type: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                >
+                  <option value="Debtor">Debtor</option>
+                  <option value="Batch">Batch</option>
+                  <option value="Claim">Claim</option>
+                  <option value="Subrogation">Subrogation</option>
+                  <option value="Nota">Nota</option>
+                  <option value="Invoice">Invoice</option>
+                  <option value="Payment">Payment</option>
+                  <option value="Reconciliation">Reconciliation</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Trigger Condition *</Label>
+                <select
+                  value={selectedRule?.trigger_condition || 'STATUS_DURATION'}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, trigger_condition: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                >
+                  <option value="STATUS_DURATION">Status Duration (time in specific status)</option>
+                  <option value="CREATED_DURATION">Created Duration (time since created)</option>
+                  <option value="UPDATED_DURATION">Updated Duration (time since last update)</option>
+                  <option value="DUE_DATE_APPROACHING">Due Date Approaching</option>
+                  <option value="DUE_DATE_PASSED">Due Date Passed</option>
+                </select>
+              </div>
+              <div>
+                <Label>Priority *</Label>
+                <select
+                  value={selectedRule?.priority || 'MEDIUM'}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, priority: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                >
+                  <option value="LOW">Low</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HIGH">High</option>
+                  <option value="CRITICAL">Critical</option>
+                </select>
+              </div>
+            </div>
+
+            {(selectedRule?.trigger_condition === 'STATUS_DURATION') && (
+              <div>
+                <Label>Status Value *</Label>
+                <Input
+                  value={selectedRule?.status_value || ''}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, status_value: e.target.value })}
+                  placeholder="e.g., PENDING, DRAFT, etc"
+                />
+              </div>
+            )}
+
+            {(selectedRule?.trigger_condition?.includes('DURATION')) && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2">
+                  <Label>Duration Value *</Label>
+                  <Input
+                    type="number"
+                    value={selectedRule?.duration_value || ''}
+                    onChange={(e) => setSelectedRule({ ...selectedRule, duration_value: parseInt(e.target.value) })}
+                    placeholder="e.g., 48"
+                  />
+                </div>
+                <div>
+                  <Label>Unit *</Label>
+                  <select
+                    value={selectedRule?.duration_unit || 'HOURS'}
+                    onChange={(e) => setSelectedRule({ ...selectedRule, duration_unit: e.target.value })}
+                    className="w-full border rounded-md px-3 py-2"
+                  >
+                    <option value="HOURS">Hours</option>
+                    <option value="DAYS">Days</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Notification Type *</Label>
+                <select
+                  value={selectedRule?.notification_type || 'BOTH'}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, notification_type: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                >
+                  <option value="EMAIL">Email Only</option>
+                  <option value="SYSTEM">System Notification Only</option>
+                  <option value="BOTH">Both Email & System</option>
+                </select>
+              </div>
+              <div>
+                <Label>Recipient Role *</Label>
+                <select
+                  value={selectedRule?.recipient_role || 'BRINS'}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, recipient_role: e.target.value })}
+                  className="w-full border rounded-md px-3 py-2"
+                >
+                  <option value="BRINS">BRINS</option>
+                  <option value="TUGURE">TUGURE</option>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="ALL">ALL</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <Label>Email Subject *</Label>
+              <Input
+                value={selectedRule?.email_subject || ''}
+                onChange={(e) => setSelectedRule({ ...selectedRule, email_subject: e.target.value })}
+                placeholder="e.g., [SLA Alert] {entity_type} {entity_id} - {status}"
+              />
+            </div>
+
+            <div>
+              <Label>Email Body *</Label>
+              <Textarea
+                value={selectedRule?.email_body || ''}
+                onChange={(e) => setSelectedRule({ ...selectedRule, email_body: e.target.value })}
+                rows={6}
+                placeholder="Dear Team,&#10;&#10;{entity_type} {entity_id} has been in status {status} for {duration} hours.&#10;&#10;Please take action."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Available variables: {'{entity_id}, {entity_type}, {status}, {duration}, {date}'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <Label>Active Rule</Label>
+                <Switch
+                  checked={selectedRule?.is_active !== false}
+                  onCheckedChange={(checked) => setSelectedRule({ ...selectedRule, is_active: checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>Recurring Notification</Label>
+                <Switch
+                  checked={selectedRule?.is_recurring || false}
+                  onCheckedChange={(checked) => setSelectedRule({ ...selectedRule, is_recurring: checked })}
+                />
+              </div>
+            </div>
+
+            {selectedRule?.is_recurring && (
+              <div>
+                <Label>Recurrence Interval (hours)</Label>
+                <Input
+                  type="number"
+                  value={selectedRule?.recurrence_interval || 24}
+                  onChange={(e) => setSelectedRule({ ...selectedRule, recurrence_interval: parseInt(e.target.value) })}
+                  placeholder="e.g., 24 (send notification every 24 hours)"
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRuleDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={async () => {
+                setProcessing(true);
+                try {
+                  if (selectedRule?.id) {
+                    await base44.entities.SlaRule.update(selectedRule.id, selectedRule);
+                  } else {
+                    await base44.entities.SlaRule.create({
+                      ...selectedRule,
+                      trigger_count: 0
+                    });
+                  }
+                  await loadData();
+                  setShowRuleDialog(false);
+                  setSuccessMessage('SLA rule saved successfully');
+                } catch (error) {
+                  console.error('Failed to save rule:', error);
+                }
+                setProcessing(false);
+              }}
+              disabled={processing || !selectedRule?.rule_name || !selectedRule?.email_subject}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Save Rule
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Email Template Dialog */}
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
