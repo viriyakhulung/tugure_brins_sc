@@ -134,11 +134,11 @@ export default function Dashboard() {
   ];
 
   const claimStatusData = [
-    { name: 'Submitted', value: claims.filter(c => c.claim_status === 'SUBMITTED').length },
-    { name: 'Under Review', value: claims.filter(c => c.claim_status === 'UNDER_REVIEW').length },
-    { name: 'Approved', value: claims.filter(c => c.claim_status === 'APPROVED').length },
-    { name: 'Settled', value: claims.filter(c => c.claim_status === 'SETTLED').length },
-    { name: 'Rejected', value: claims.filter(c => c.claim_status === 'REJECTED').length }
+    { name: 'Draft', value: claims.filter(c => c.claim_status === 'Draft').length },
+    { name: 'Checked', value: claims.filter(c => c.claim_status === 'Checked').length },
+    { name: 'Doc Verified', value: claims.filter(c => c.claim_status === 'Doc Verified').length },
+    { name: 'Invoiced', value: claims.filter(c => c.claim_status === 'Invoiced').length },
+    { name: 'Paid', value: claims.filter(c => c.claim_status === 'Paid').length }
   ].filter(d => d.value > 0);
 
   const formatCurrency = (value) => {
