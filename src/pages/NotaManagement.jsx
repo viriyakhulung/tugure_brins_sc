@@ -39,8 +39,11 @@ export default function NotaManagement() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        const demoUser = JSON.parse(demoUserStr);
+        setUser(demoUser);
+      }
     } catch (error) {
       console.error('Failed to load user:', error);
     }
