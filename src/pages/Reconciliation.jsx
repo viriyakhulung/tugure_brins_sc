@@ -530,12 +530,6 @@ export default function Reconciliation() {
     { header: 'Payment Date', accessorKey: 'payment_date' },
     { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
     { header: 'Match Status', cell: (row) => <StatusBadge status={row.match_status} /> },
-    { 
-      header: 'Exception', 
-      cell: (row) => row.exception_type !== 'NONE' ? (
-        <StatusBadge status={row.exception_type} />
-      ) : '-'
-    },
     {
       header: 'Actions',
       cell: (row) => (
@@ -551,32 +545,35 @@ export default function Reconciliation() {
             <Eye className="w-4 h-4 mr-1" />
             View
           </Button>
-          {isTugure && (row.match_status === 'RECEIVED' || (row.match_status === 'UNMATCHED' && row.exception_type === 'NONE')) && (
-            <Button 
-              size="sm" 
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => {
-                setSelectedPayment(row);
-                setShowMatchDialog(true);
-              }}
-            >
-              <Link className="w-4 h-4 mr-1" />
-              Match
-            </Button>
+          {isTugure && row.match_status === 'RECEIVED' && (
+            <>
+              <Button 
+                size="sm" 
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => {
+                  setSelectedPayment(row);
+                  setShowMatchDialog(true);
+                }}
+              >
+                <Link className="w-4 h-4 mr-1" />
+                Match
+              </Button>
+              <Button 
+                size="sm"
+                variant="outline"
+                className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                onClick={() => {
+                  setSelectedPayment(row);
+                  setShowExceptionDialog(true);
+                }}
+              >
+                <AlertTriangle className="w-4 h-4 mr-1" />
+                Exception
+              </Button>
+            </>
           )}
-          {isTugure && row.match_status === 'RECEIVED' && row.exception_type === 'NONE' && (
-            <Button 
-              size="sm"
-              variant="outline"
-              className="border-orange-500 text-orange-600 hover:bg-orange-50"
-              onClick={() => {
-                setSelectedPayment(row);
-                setShowExceptionDialog(true);
-              }}
-            >
-              <AlertTriangle className="w-4 h-4 mr-1" />
-              Mark Exception
-            </Button>
+          {row.match_status === 'MATCHED' && (
+            <span className="text-xs text-green-600 font-medium">✓ Matched</span>
           )}
         </div>
       )
@@ -609,43 +606,66 @@ export default function Reconciliation() {
     { header: 'Period', accessorKey: 'period' },
     { header: 'Total Invoiced', cell: (row) => `IDR ${(row.total_invoiced || 0).toLocaleString()}` },
     { header: 'Total Paid', cell: (row) => `IDR ${(row.total_paid || 0).toLocaleString()}` },
-    { header: 'Difference', cell: (row) => `IDR ${(row.difference || 0).toLocaleString()}` },
+    { 
+      header: 'Difference', 
+      cell: (row) => {
+        const diff = row.difference || 0;
+        const canClose = Math.abs(diff) <= 100000;
+        return (
+          <div className="flex items-center gap-2">
+            <span className={canClose ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+              IDR {diff.toLocaleString()}
+            </span>
+            {canClose && row.status === 'IN_PROGRESS' && (
+              <span className="text-xs text-green-600">✓</span>
+            )}
+          </div>
+        );
+      }
+    },
     { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     {
       header: 'Actions',
       cell: (row) => {
-        const getActionButton = () => {
+        const getActionButtons = () => {
           if (!isTugure) return null;
+          
+          const diff = Math.abs(row.difference || 0);
+          const canClose = diff <= 100000; // Threshold 100K
           
           switch (row.status) {
             case 'IN_PROGRESS':
               return (
                 <>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                    onClick={() => {
-                      setSelectedRecon(row);
-                      setReconAction('MARK_EXCEPTION');
-                      setShowReconActionDialog(true);
-                    }}
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-1" />
-                    Mark Exception
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    className="bg-green-600 hover:bg-green-700"
-                    onClick={() => {
-                      setSelectedRecon(row);
-                      setReconAction('READY_TO_CLOSE');
-                      setShowReconActionDialog(true);
-                    }}
-                  >
-                    <CheckCircle2 className="w-4 h-4 mr-1" />
-                    Ready to Close
-                  </Button>
+                  {!canClose && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                      onClick={() => {
+                        setSelectedRecon(row);
+                        setReconAction('MARK_EXCEPTION');
+                        setShowReconActionDialog(true);
+                      }}
+                    >
+                      <AlertTriangle className="w-4 h-4 mr-1" />
+                      Mark Exception
+                    </Button>
+                  )}
+                  {canClose && (
+                    <Button 
+                      size="sm" 
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => {
+                        setSelectedRecon(row);
+                        setReconAction('READY_TO_CLOSE');
+                        setShowReconActionDialog(true);
+                      }}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-1" />
+                      Ready to Close
+                    </Button>
+                  )}
                 </>
               );
             case 'EXCEPTION':
@@ -678,6 +698,10 @@ export default function Reconciliation() {
                   Close Recon
                 </Button>
               );
+            case 'CLOSED':
+              return (
+                <span className="text-xs text-green-600 font-medium">✓ Closed</span>
+              );
             default:
               return null;
           }
@@ -696,7 +720,7 @@ export default function Reconciliation() {
               <Eye className="w-4 h-4 mr-1" />
               Details
             </Button>
-            {getActionButton()}
+            {getActionButtons()}
           </div>
         );
       }
@@ -828,7 +852,7 @@ export default function Reconciliation() {
         <TabsContent value="payments" className="mt-4">
           <Alert className="mb-4 bg-blue-50 border-blue-200">
             <AlertDescription className="text-blue-700">
-              Regular payments (RECEIVED & MATCHED). Mark as exception to move to Exceptions tab.
+              <strong>Workflow:</strong> RECEIVED → Match to Intent OR Mark Exception → MATCHED (complete)
             </AlertDescription>
           </Alert>
           <DataTable
@@ -840,6 +864,11 @@ export default function Reconciliation() {
         </TabsContent>
 
         <TabsContent value="reconciliations" className="mt-4">
+          <Alert className="mb-4 bg-purple-50 border-purple-200">
+            <AlertDescription className="text-purple-700">
+              <strong>Recon Workflow:</strong> IN_PROGRESS → (if difference ≤100K) Ready to Close → CLOSE | (if difference &gt;100K) Mark Exception → Resolve → Close
+            </AlertDescription>
+          </Alert>
           <DataTable
             columns={reconColumns}
             data={reconciliations}
@@ -852,7 +881,7 @@ export default function Reconciliation() {
           <Alert className="mb-4 bg-orange-50 border-orange-200">
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertDescription className="text-orange-700">
-              Payments marked as exceptions (UNMATCHED with exception type). Match or clear exception to resolve.
+              <strong>Exception Workflow:</strong> Review → Match to Intent OR Clear Exception → Back to Payments tab
             </AlertDescription>
           </Alert>
           <DataTable
