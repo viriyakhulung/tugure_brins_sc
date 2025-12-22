@@ -757,22 +757,15 @@ export default function Reconciliation() {
               variant="outline"
               className="bg-green-600 hover:bg-green-700 text-white"
               onClick={() => {
-                let data = activeTab === 'payments' ? regularPayments : activeTab === 'reconciliations' ? reconciliations : exceptionPayments;
-                let headers = [];
-                let rows = [];
-                if (activeTab === 'payments' || activeTab === 'exceptions') {
-                  headers = ['Payment Ref', 'Date', 'Amount', 'Match Status', 'Exception'];
-                  rows = data.map(p => [p.payment_ref, p.payment_date, p.amount, p.match_status, p.exception_type]);
-                } else {
-                  headers = ['Recon ID', 'Period', 'Total Invoiced', 'Total Paid', 'Difference', 'Status'];
-                  rows = data.map(r => [r.recon_id, r.period, r.total_invoiced, r.total_paid, r.difference, r.status]);
-                }
+                let data = reconciliations;
+                const headers = ['Nota ID', 'Batch ID', 'Period', 'Invoice Amount', 'Payment Received', 'Difference', 'Status'];
+                const rows = data.map(r => [r.nota_id, r.batch_id, r.period, r.invoice_amount, r.payment_received, r.difference, r.status]);
                 const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `reconciliation-${activeTab}.csv`;
+                a.download = `reconciliation.csv`;
                 a.click();
               }}
             >
@@ -960,90 +953,7 @@ export default function Reconciliation() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Detail Dialog (View only) */}
-      <Dialog open={showViewPaymentDialog} onOpenChange={setShowViewPaymentDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {reconAction === 'MARK_EXCEPTION' && 'Mark as Exception'}
-              {reconAction === 'READY_TO_CLOSE' && 'Ready to Close'}
-              {reconAction === 'CLOSE' && 'Close Reconciliation'}
-              {reconAction === 'RESOLVE_EXCEPTION' && 'Resolve Exception'}
-            </DialogTitle>
-            <DialogDescription>
-              Recon ID: {selectedRecon?.recon_id} | Period: {selectedRecon?.period}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Total Invoiced:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_invoiced || 0).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Total Paid:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_paid || 0).toLocaleString()}</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-gray-500">Difference:</span>
-                  <span className={`ml-2 font-bold ${Math.abs(selectedRecon?.difference || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    IDR {(selectedRecon?.difference || 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {reconAction === 'READY_TO_CLOSE' && Math.abs(selectedRecon?.difference || 0) > 100000 && (
-              <Alert className="bg-red-50 border-red-200">
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-700">
-                  Warning: Difference exceeds acceptable threshold (IDR 100K). Please resolve exceptions first.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div>
-              <label className="text-sm font-medium">Remarks *</label>
-              <Textarea
-                value={reconRemarks}
-                onChange={(e) => setReconRemarks(e.target.value)}
-                placeholder="Enter reason for this action..."
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowReconActionDialog(false);
-              setReconRemarks('');
-            }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleReconAction}
-              disabled={processing || !reconRemarks || (reconAction === 'READY_TO_CLOSE' && Math.abs(selectedRecon?.difference || 0) > 100000)}
-              className={
-                reconAction === 'MARK_EXCEPTION' ? 'bg-orange-600 hover:bg-orange-700' :
-                reconAction === 'RESOLVE_EXCEPTION' ? 'bg-blue-600 hover:bg-blue-700' :
-                'bg-green-600 hover:bg-green-700'
-              }
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Confirm
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Recon Detail Dialog */}
       <Dialog open={showReconDetailDialog} onOpenChange={setShowReconDetailDialog}>
@@ -1148,67 +1058,18 @@ export default function Reconciliation() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Manual Match Dialog */}
+      <Dialog open={showMatchDialog} onOpenChange={setShowMatchDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Payment Detail</DialogTitle>
+            <DialogTitle>Manual Payment Match</DialogTitle>
             <DialogDescription>
-              Payment Reference: {selectedPayment?.payment_ref}
+              Match payment {selectedPayment?.payment_ref}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Payment Reference:</span>
-                  <span className="ml-2 font-medium">{selectedPayment?.payment_ref}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Amount:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedPayment?.amount || 0).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Payment Date:</span>
-                  <span className="ml-2 font-medium">{selectedPayment?.payment_date}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Currency:</span>
-                  <span className="ml-2 font-medium">{selectedPayment?.currency}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Match Status:</span>
-                  <span className="ml-2"><StatusBadge status={selectedPayment?.match_status} /></span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Exception Type:</span>
-                  <span className="ml-2"><StatusBadge status={selectedPayment?.exception_type} /></span>
-                </div>
-                {selectedPayment?.matched_by && (
-                  <div className="col-span-2">
-                    <span className="text-gray-500">Matched By:</span>
-                    <span className="ml-2 font-medium">{selectedPayment?.matched_by} on {selectedPayment?.matched_date}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewPaymentDialog(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Mark Payment as Exception</DialogTitle>
-            <DialogDescription>
-              Payment {selectedPayment?.payment_ref}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
+            <div className="p-4 bg-gray-50 rounded-lg mb-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-500">Amount:</span>
@@ -1273,7 +1134,8 @@ export default function Reconciliation() {
         </DialogContent>
       </Dialog>
 
-      {/* Manual Match Dialog */}
+      {/* Payment View Dialog */}
+      <Dialog open={showViewPaymentDialog} onOpenChange={setShowViewPaymentDialog}>
       <Dialog open={showMatchDialog} onOpenChange={setShowMatchDialog}>
         <DialogContent>
           <DialogHeader>
@@ -1293,10 +1155,7 @@ export default function Reconciliation() {
                   <span className="text-gray-500">Date:</span>
                   <span className="ml-2 font-medium">{selectedPayment?.payment_date}</span>
                 </div>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Match To Payment Intent *</label>
+
               <Select value={selectedIntentId} onValueChange={setSelectedIntentId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select payment intent" />
