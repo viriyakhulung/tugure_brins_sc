@@ -35,6 +35,7 @@ export default function Reconciliation() {
   const [showExceptionDialog, setShowExceptionDialog] = useState(false);
   const [showReconActionDialog, setShowReconActionDialog] = useState(false);
   const [showReconDetailDialog, setShowReconDetailDialog] = useState(false);
+  const [showApproveCloseDialog, setShowApproveCloseDialog] = useState(false);
   const [selectedRecon, setSelectedRecon] = useState(null);
   const [reconAction, setReconAction] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -42,6 +43,7 @@ export default function Reconciliation() {
   const [matchRemarks, setMatchRemarks] = useState('');
   const [exceptionRemarks, setExceptionRemarks] = useState('');
   const [reconRemarks, setReconRemarks] = useState('');
+  const [approveCloseRemarks, setApproveCloseRemarks] = useState('');
   const [selectedIntentId, setSelectedIntentId] = useState('');
   const [filters, setFilters] = useState({
     contract: 'all',
@@ -363,6 +365,16 @@ export default function Reconciliation() {
         match_status: 'UNMATCHED',
         exception_type: exceptionType || 'PARTIAL'
       });
+      
+      await base44.entities.Notification.create({
+        title: 'Payment Marked as Exception',
+        message: `Payment ${payment.payment_ref} marked as ${exceptionType}`,
+        type: 'WARNING',
+        module: 'RECONCILIATION',
+        reference_id: payment.payment_ref,
+        target_role: 'TUGURE'
+      });
+
       await base44.entities.AuditLog.create({
         action: 'MARK_EXCEPTION',
         module: 'RECONCILIATION',
@@ -372,10 +384,13 @@ export default function Reconciliation() {
         user_role: user?.role,
         reason: exceptionRemarks
       });
-      setSuccessMessage('Payment marked as exception');
+      
+      setSuccessMessage('Payment marked as exception - moved to Exceptions tab');
       setShowExceptionDialog(false);
+      setSelectedPayment(null);
       setExceptionRemarks('');
-      loadData();
+      setActiveTab('exceptions'); // AUTO SWITCH TO EXCEPTIONS TAB
+      await loadData();
     } catch (error) {
       console.error('Exception error:', error);
     }
@@ -389,6 +404,16 @@ export default function Reconciliation() {
         match_status: 'RECEIVED',
         exception_type: 'NONE'
       });
+      
+      await base44.entities.Notification.create({
+        title: 'Exception Cleared',
+        message: `Payment ${payment.payment_ref} exception cleared`,
+        type: 'INFO',
+        module: 'RECONCILIATION',
+        reference_id: payment.payment_ref,
+        target_role: 'TUGURE'
+      });
+
       await base44.entities.AuditLog.create({
         action: 'CLEAR_EXCEPTION',
         module: 'RECONCILIATION',
@@ -397,8 +422,10 @@ export default function Reconciliation() {
         user_email: user?.email,
         user_role: user?.role
       });
-      setSuccessMessage('Exception cleared - payment ready for matching');
-      loadData();
+      
+      setSuccessMessage('Exception cleared - moved to Payments tab');
+      setActiveTab('payments'); // AUTO SWITCH TO PAYMENTS TAB
+      await loadData();
     } catch (error) {
       console.error('Clear exception error:', error);
     }
@@ -435,27 +462,6 @@ export default function Reconciliation() {
   };
 
   const exceptionColumns = [
-    {
-      header: (
-        <Checkbox
-          checked={selectedPayments.length === exceptionPayments.length && exceptionPayments.length > 0}
-          onCheckedChange={(checked) => {
-            if (checked) {
-              setSelectedPayments(exceptionPayments.map(p => p.id));
-            } else {
-              setSelectedPayments([]);
-            }
-          }}
-        />
-      ),
-      cell: (row) => (
-        <Checkbox
-          checked={selectedPayments.includes(row.id)}
-          onCheckedChange={() => togglePaymentSelection(row.id)}
-        />
-      ),
-      width: '50px'
-    },
     { header: 'Payment Ref', accessorKey: 'payment_ref' },
     { header: 'Payment Date', accessorKey: 'payment_date' },
     { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
@@ -505,27 +511,6 @@ export default function Reconciliation() {
   ];
 
   const paymentColumns = [
-    {
-      header: (
-        <Checkbox
-          checked={selectedPayments.length === regularPayments.length && regularPayments.length > 0}
-          onCheckedChange={(checked) => {
-            if (checked) {
-              setSelectedPayments(regularPayments.map(p => p.id));
-            } else {
-              setSelectedPayments([]);
-            }
-          }}
-        />
-      ),
-      cell: (row) => (
-        <Checkbox
-          checked={selectedPayments.includes(row.id)}
-          onCheckedChange={() => togglePaymentSelection(row.id)}
-        />
-      ),
-      width: '50px'
-    },
     { header: 'Payment Ref', accessorKey: 'payment_ref' },
     { header: 'Payment Date', accessorKey: 'payment_date' },
     { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
@@ -581,27 +566,6 @@ export default function Reconciliation() {
   ];
 
   const reconColumns = [
-    {
-      header: (
-        <Checkbox
-          checked={selectedReconciliations.length === reconciliations.length && reconciliations.length > 0}
-          onCheckedChange={(checked) => {
-            if (checked) {
-              setSelectedReconciliations(reconciliations.map(r => r.id));
-            } else {
-              setSelectedReconciliations([]);
-            }
-          }}
-        />
-      ),
-      cell: (row) => (
-        <Checkbox
-          checked={selectedReconciliations.includes(row.id)}
-          onCheckedChange={() => toggleReconciliationSelection(row.id)}
-        />
-      ),
-      width: '50px'
-    },
     { header: 'Recon ID', accessorKey: 'recon_id' },
     { header: 'Period', accessorKey: 'period' },
     { header: 'Total Invoiced', cell: (row) => `IDR ${(row.total_invoiced || 0).toLocaleString()}` },
@@ -690,12 +654,11 @@ export default function Reconciliation() {
                   className="bg-green-600 hover:bg-green-700"
                   onClick={() => {
                     setSelectedRecon(row);
-                    setReconAction('CLOSE');
-                    setShowReconActionDialog(true);
+                    setShowApproveCloseDialog(true);
                   }}
                 >
                   <Check className="w-4 h-4 mr-1" />
-                  Close Recon
+                  Approve & Close
                 </Button>
               );
             case 'CLOSED':
@@ -850,11 +813,6 @@ export default function Reconciliation() {
         </TabsList>
 
         <TabsContent value="payments" className="mt-4">
-          <Alert className="mb-4 bg-blue-50 border-blue-200">
-            <AlertDescription className="text-blue-700">
-              <strong>Workflow:</strong> RECEIVED → Match to Intent OR Mark Exception → MATCHED (complete)
-            </AlertDescription>
-          </Alert>
           <DataTable
             columns={paymentColumns}
             data={regularPayments}
@@ -864,11 +822,6 @@ export default function Reconciliation() {
         </TabsContent>
 
         <TabsContent value="reconciliations" className="mt-4">
-          <Alert className="mb-4 bg-purple-50 border-purple-200">
-            <AlertDescription className="text-purple-700">
-              <strong>Recon Workflow:</strong> IN_PROGRESS → (if difference ≤100K) Ready to Close → CLOSE | (if difference &gt;100K) Mark Exception → Resolve → Close
-            </AlertDescription>
-          </Alert>
           <DataTable
             columns={reconColumns}
             data={reconciliations}
@@ -878,12 +831,6 @@ export default function Reconciliation() {
         </TabsContent>
 
         <TabsContent value="exceptions" className="mt-4">
-          <Alert className="mb-4 bg-orange-50 border-orange-200">
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-            <AlertDescription className="text-orange-700">
-              <strong>Exception Workflow:</strong> Review → Match to Intent OR Clear Exception → Back to Payments tab
-            </AlertDescription>
-          </Alert>
           <DataTable
             columns={exceptionColumns}
             data={exceptionPayments}
@@ -1182,6 +1129,95 @@ export default function Reconciliation() {
                 <>
                   <AlertTriangle className="w-4 h-4 mr-2" />
                   Mark as Exception
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve Close Dialog */}
+      <Dialog open={showApproveCloseDialog} onOpenChange={setShowApproveCloseDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve & Close Reconciliation</DialogTitle>
+            <DialogDescription>
+              Final approval to close {selectedRecon?.recon_id}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Period:</span>
+                  <span className="ml-2 font-medium">{selectedRecon?.period}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Total Invoiced:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_invoiced || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Total Paid:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_paid || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Difference:</span>
+                  <span className={`ml-2 font-bold ${Math.abs(selectedRecon?.difference || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    IDR {(selectedRecon?.difference || 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <Alert className="bg-green-50 border-green-200">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-700">
+                This action will close the reconciliation and update all related Invoice, Debtor, and Nota records to PAID status.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <label className="text-sm font-medium">Approval Remarks *</label>
+              <Textarea
+                value={approveCloseRemarks}
+                onChange={(e) => setApproveCloseRemarks(e.target.value)}
+                placeholder="Enter approval remarks and confirmation..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowApproveCloseDialog(false);
+              setApproveCloseRemarks('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setProcessing(true);
+                try {
+                  // Execute close with approval
+                  setReconAction('CLOSE');
+                  setReconRemarks(approveCloseRemarks);
+                  await handleReconAction();
+                  setShowApproveCloseDialog(false);
+                  setApproveCloseRemarks('');
+                } catch (error) {
+                  console.error('Approve close error:', error);
+                }
+                setProcessing(false);
+              }}
+              disabled={processing || !approveCloseRemarks}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Closing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Approve & Close
                 </>
               )}
             </Button>
