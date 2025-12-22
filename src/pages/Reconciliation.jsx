@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Scale, CheckCircle2, AlertTriangle, Clock, Eye, 
-  RefreshCw, Check, X, Loader2, FileText, Link, Split, Download, Badge
+  RefreshCw, Check, X, Loader2, FileText, Link, Split, Download
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
