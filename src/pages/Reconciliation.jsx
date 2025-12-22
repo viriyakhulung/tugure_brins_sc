@@ -103,26 +103,39 @@ export default function Reconciliation() {
   const handleAutoMatch = async () => {
     setProcessing(true);
     try {
-      // Simulate auto-matching logic
-      const unmatchedPayments = payments.filter(p => p.match_status === 'RECEIVED');
+      const unmatchedPayments = payments.filter(p => p.match_status === 'RECEIVED' || p.match_status === 'UNMATCHED');
+      let matchCount = 0;
       
       for (const payment of unmatchedPayments) {
-        // Try to find matching intent
-        const matchingIntent = paymentIntents.find(i => 
-          i.planned_amount === payment.amount && i.status === 'APPROVED'
-        );
+        // Find matching intent with tolerance of 1% or IDR 100K
+        const matchingIntent = paymentIntents.find(i => {
+          if (i.status !== 'APPROVED') return false;
+          if (i.contract_id !== payment.contract_id) return false;
+          
+          const amountDiff = Math.abs(i.planned_amount - payment.amount);
+          const tolerance = Math.max(i.planned_amount * 0.01, 100000); // 1% or 100K
+          
+          return amountDiff <= tolerance;
+        });
 
         if (matchingIntent) {
           await base44.entities.Payment.update(payment.id, {
             match_status: 'MATCHED',
-            intent_id: matchingIntent.id,
+            intent_id: matchingIntent.intent_id,
             matched_by: user?.email,
             matched_date: new Date().toISOString().split('T')[0]
           });
+
+          // Update Payment Intent to COMPLETED
+          await base44.entities.PaymentIntent.update(matchingIntent.id, {
+            status: 'COMPLETED'
+          });
+
+          matchCount++;
         }
       }
 
-      setSuccessMessage('Auto-matching completed');
+      setSuccessMessage(`Auto-matching completed: ${matchCount} payments matched`);
       loadData();
     } catch (error) {
       console.error('Auto-match error:', error);
@@ -135,33 +148,50 @@ export default function Reconciliation() {
 
     setProcessing(true);
     try {
-      // 1. Update payment with selected intent
+      // 1. Get PaymentIntent (use entity ID, not intent_id string)
+      const matchedIntent = paymentIntents.find(pi => pi.id === selectedIntentId);
+      if (!matchedIntent) {
+        alert('Payment intent not found');
+        setProcessing(false);
+        return;
+      }
+
+      // 2. Update payment with selected intent
       await base44.entities.Payment.update(selectedPayment.id, {
         match_status: 'MATCHED',
-        intent_id: selectedIntentId,
+        intent_id: matchedIntent.intent_id,
+        invoice_id: matchedIntent.invoice_id,
         matched_by: user?.email,
         matched_date: new Date().toISOString().split('T')[0]
       });
 
-      // 2. CRITICAL: Get associated PaymentIntent and update Invoice
-      const matchedIntent = paymentIntents.find(pi => pi.id === selectedIntentId);
-      if (matchedIntent && matchedIntent.invoice_id) {
-        // Update Invoice paid amount
-        const invoices = await base44.entities.Invoice.filter({ invoice_number: matchedIntent.invoice_id });
-        if (invoices.length > 0) {
-          const invoice = invoices[0];
-          const newPaidAmount = (invoice.paid_amount || 0) + selectedPayment.amount;
-          const newOutstanding = invoice.total_amount - newPaidAmount;
-          await base44.entities.Invoice.update(invoice.id, {
+      // 3. Update Payment Intent to COMPLETED
+      await base44.entities.PaymentIntent.update(matchedIntent.id, {
+        status: 'COMPLETED'
+      });
+
+      // 4. Update Invoice if exists (use Invoice entity ID)
+      if (matchedIntent.invoice_id) {
+        const invoice = await base44.entities.Invoice.filter({ id: matchedIntent.invoice_id });
+        if (invoice.length > 0) {
+          const inv = invoice[0];
+          const newPaidAmount = (inv.paid_amount || 0) + selectedPayment.amount;
+          const newOutstanding = inv.total_amount - newPaidAmount;
+          
+          await base44.entities.Invoice.update(inv.id, {
             paid_amount: newPaidAmount,
             outstanding_amount: newOutstanding,
             status: newOutstanding <= 0 ? 'PAID' : 'PARTIALLY_PAID'
           });
 
-          // Update all Debtors with this invoice
-          const relatedDebtors = await base44.entities.Debtor.filter({ invoice_no: matchedIntent.invoice_id });
+          // 5. Update Debtors - PROPORTIONAL distribution
+          const relatedDebtors = await base44.entities.Debtor.filter({ invoice_no: inv.invoice_number });
+          const totalInvoiceAmount = relatedDebtors.reduce((sum, d) => sum + (d.invoice_amount || d.net_premium || 0), 0);
+          
           for (const debtor of relatedDebtors) {
-            const debtorPayment = selectedPayment.amount / relatedDebtors.length; // distribute evenly
+            const debtorInvoice = debtor.invoice_amount || debtor.net_premium || 0;
+            const debtorPayment = totalInvoiceAmount > 0 ? (debtorInvoice / totalInvoiceAmount) * selectedPayment.amount : 0;
+            
             await base44.entities.Debtor.update(debtor.id, {
               payment_received_amount: (debtor.payment_received_amount || 0) + debtorPayment,
               invoice_status: newOutstanding <= 0 ? 'PAID' : 'PARTIALLY_PAID',
@@ -171,7 +201,7 @@ export default function Reconciliation() {
         }
       }
 
-      // 3. Create audit log
+      // 6. Create audit log
       await base44.entities.AuditLog.create({
         action: 'MANUAL_MATCH',
         module: 'RECONCILIATION',
@@ -231,6 +261,23 @@ export default function Reconciliation() {
           await base44.entities.Debtor.update(debtor.id, {
             recon_status: 'CLOSED'
           });
+        }
+
+        // CRITICAL: Update related Nota to Paid if not already
+        const batchIds = [...new Set(relatedDebtors.map(d => d.batch_id))];
+        for (const batchId of batchIds) {
+          const notas = await base44.entities.Nota.filter({ 
+            reference_id: batchId,
+            nota_type: 'Batch'
+          });
+          for (const nota of notas) {
+            if (nota.status !== 'Paid') {
+              await base44.entities.Nota.update(nota.id, {
+                status: 'Paid',
+                paid_date: new Date().toISOString().split('T')[0]
+              });
+            }
+          }
         }
       }
 

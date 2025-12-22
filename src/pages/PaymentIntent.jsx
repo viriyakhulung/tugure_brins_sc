@@ -95,23 +95,31 @@ export default function PaymentIntent() {
         return;
       }
       
-      // 1. Create Payment Intent
+      // Get proper Invoice entity (not just invoice_no string)
+      const firstDebtor = selectedDebtorsList[0];
+      const invoicesList = await base44.entities.Invoice.filter({ 
+        contract_id: firstDebtor.contract_id 
+      });
+      const relatedInvoice = invoicesList.find(inv => 
+        selectedDebtorsList.some(d => d.invoice_no === inv.invoice_number)
+      );
+
+      // 1. Create Payment Intent with proper Invoice entity ID
       const paymentIntent = await base44.entities.PaymentIntent.create({
         intent_id: intentId,
-        invoice_id: selectedDebtorsList[0]?.invoice_no || intentId,
-        contract_id: selectedDebtorsList[0]?.contract_id || 'contract_1',
+        invoice_id: relatedInvoice?.id || null,
+        contract_id: firstDebtor.contract_id,
         payment_type: paymentType,
         planned_amount: parseFloat(plannedAmount),
         planned_date: plannedDate,
         remarks: remarks,
-        status: 'SUBMITTED'
+        status: 'DRAFT'
       });
 
-      // 2. CRITICAL: Update selected Debtors with payment intent reference
+      // 2. Update selected Debtors - DO NOT create Payment yet
       for (const debtor of selectedDebtorsList) {
         await base44.entities.Debtor.update(debtor.id, {
-          recon_status: 'IN_PROGRESS',
-          invoice_status: debtor.invoice_status === 'NOT_ISSUED' ? 'ISSUED' : debtor.invoice_status
+          recon_status: 'IN_PROGRESS'
         });
       }
 
@@ -211,9 +219,30 @@ export default function PaymentIntent() {
     { header: 'Recon Status', cell: (row) => <StatusBadge status={row.recon_status} /> }
   ];
 
+  const handleApproveIntent = async (intent) => {
+    setProcessing(true);
+    try {
+      await base44.entities.PaymentIntent.update(intent.id, {
+        status: 'APPROVED'
+      });
+      await base44.entities.Notification.create({
+        title: 'Payment Intent Approved',
+        message: `Payment intent ${intent.intent_id} approved - IDR ${(intent.planned_amount || 0).toLocaleString()}`,
+        type: 'INFO',
+        module: 'PAYMENT',
+        reference_id: intent.intent_id,
+        target_role: 'BRINS'
+      });
+      setSuccessMessage('Payment intent approved');
+      loadData();
+    } catch (error) {
+      console.error('Approve error:', error);
+    }
+    setProcessing(false);
+  };
+
   const intentColumns = [
     { header: 'Intent ID', accessorKey: 'intent_id' },
-    { header: 'Invoice', accessorKey: 'invoice_id', cell: (row) => row.invoice_id?.slice(0, 10) },
     { header: 'Payment Type', cell: (row) => <StatusBadge status={row.payment_type} /> },
     { header: 'Planned Amount', cell: (row) => `IDR ${(row.planned_amount || 0).toLocaleString()}` },
     { header: 'Planned Date', accessorKey: 'planned_date' },
@@ -221,9 +250,20 @@ export default function PaymentIntent() {
     {
       header: 'Actions',
       cell: (row) => (
-        <Button variant="outline" size="sm">
-          <Eye className="w-4 h-4" />
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm">
+            <Eye className="w-4 h-4" />
+          </Button>
+          {row.status === 'DRAFT' && (
+            <Button 
+              size="sm"
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => handleApproveIntent(row)}
+            >
+              Approve
+            </Button>
+          )}
+        </div>
       )
     }
   ];
