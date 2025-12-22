@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Scale, CheckCircle2, AlertTriangle, Clock, Eye, 
-  RefreshCw, Check, X, Loader2, FileText, Link, Split, Download
+  RefreshCw, Check, X, Loader2, FileText, Link, Split, Download, Badge
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
@@ -26,7 +27,11 @@ export default function Reconciliation() {
   const [paymentIntents, setPaymentIntents] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('payments');
+  const [showDnDialog, setShowDnDialog] = useState(false);
+  const [showCnDialog, setShowCnDialog] = useState(false);
+  const [dnAmount, setDnAmount] = useState(0);
+  const [cnAmount, setCnAmount] = useState(0);
+  const [selectedNota, setSelectedNota] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [selectedPayments, setSelectedPayments] = useState([]);
   const [selectedReconciliations, setSelectedReconciliations] = useState([]);
@@ -74,16 +79,58 @@ export default function Reconciliation() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [paymentData, reconData, intentData, contractData] = await Promise.all([
+      const [paymentData, reconData, intentData, contractData, notaData, invoiceData] = await Promise.all([
         base44.entities.Payment.list(),
         base44.entities.Reconciliation.list(),
         base44.entities.PaymentIntent.list(),
-        base44.entities.Contract.list()
+        base44.entities.Contract.list(),
+        base44.entities.Nota.list(),
+        base44.entities.Invoice.list()
       ]);
       setPayments(paymentData || []);
       setReconciliations(reconData || []);
       setPaymentIntents(intentData || []);
       setContracts(contractData || []);
+      
+      // Build reconciliation items from Notas
+      const items = [];
+      for (const nota of notaData || []) {
+        if (nota.nota_type !== 'Batch') continue;
+        
+        // Get related invoice
+        const invoice = (invoiceData || []).find(inv => inv.invoice_number === nota.reference_id);
+        
+        // Get related payments
+        const relatedPayments = (paymentData || []).filter(p => 
+          p.invoice_id === nota.reference_id || p.contract_id === nota.contract_id
+        );
+        
+        const invoiceAmount = nota.amount || 0;
+        const paymentReceived = relatedPayments
+          .filter(p => p.match_status === 'MATCHED')
+          .reduce((sum, p) => sum + (p.amount || 0), 0);
+        const difference = invoiceAmount - paymentReceived;
+        
+        items.push({
+          id: nota.id,
+          nota_id: nota.nota_number,
+          batch_id: nota.reference_id,
+          period: nota.reference_id?.split('-')[1] || '-',
+          invoice_amount: invoiceAmount,
+          payment_received: paymentReceived,
+          difference: difference,
+          status: nota.status,
+          contract_id: nota.contract_id,
+          issued_date: nota.issued_date,
+          nota: nota,
+          invoice: invoice,
+          payments: relatedPayments,
+          has_exception: Math.abs(difference) > 0 && nota.status !== 'Paid',
+          is_overdue: nota.status === 'Issued' && new Date() > new Date(nota.issued_date).setDate(new Date(nota.issued_date).getDate() + 30)
+        });
+      }
+      
+      setReconciliations(items);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -432,246 +479,183 @@ export default function Reconciliation() {
     setProcessing(false);
   };
 
-  // Stats - CLEAR SEPARATION
-  const totalReceived = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
-  const matchedAmount = payments.filter(p => p.match_status === 'MATCHED').reduce((sum, p) => sum + (p.amount || 0), 0);
-  
-  // Exceptions: UNMATCHED + exception_type set
-  const exceptionPayments = payments.filter(p => p.match_status === 'UNMATCHED' && p.exception_type !== 'NONE');
-  
-  // Regular Payments: RECEIVED or MATCHED only (exclude exceptions)
-  const regularPayments = payments.filter(p => 
-    (p.match_status === 'RECEIVED') || 
-    (p.match_status === 'MATCHED')
-  );
+  // Stats
+  const totalInvoiced = reconciliations.reduce((sum, r) => sum + (r.invoice_amount || 0), 0);
+  const totalPaid = reconciliations.reduce((sum, r) => sum + (r.payment_received || 0), 0);
+  const totalDifference = totalInvoiced - totalPaid;
+  const itemsWithException = reconciliations.filter(r => r.has_exception).length;
+  const closedItems = reconciliations.filter(r => r.status === 'Paid').length;
 
-  const togglePaymentSelection = (paymentId) => {
-    if (selectedPayments.includes(paymentId)) {
-      setSelectedPayments(selectedPayments.filter(id => id !== paymentId));
-    } else {
-      setSelectedPayments([...selectedPayments, paymentId]);
+  const handleCloseReconciliation = async (item) => {
+    setProcessing(true);
+    try {
+      // Update Nota to Paid
+      await base44.entities.Nota.update(item.nota.id, {
+        status: 'Paid',
+        paid_date: new Date().toISOString().split('T')[0],
+        payment_reference: `Reconciliation Closed`
+      });
+
+      // Update Batch to Paid
+      const batch = await base44.entities.Batch.filter({ batch_id: item.batch_id });
+      if (batch.length > 0) {
+        await base44.entities.Batch.update(batch[0].id, {
+          status: 'Paid',
+          paid_by: user?.email,
+          paid_date: new Date().toISOString().split('T')[0]
+        });
+      }
+
+      // Update related Debtors
+      const debtors = await base44.entities.Debtor.filter({ batch_id: item.batch_id });
+      for (const debtor of debtors) {
+        await base44.entities.Debtor.update(debtor.id, {
+          invoice_status: 'PAID',
+          recon_status: 'CLOSED'
+        });
+      }
+
+      await base44.entities.AuditLog.create({
+        action: 'CLOSE_RECONCILIATION',
+        module: 'RECONCILIATION',
+        entity_type: 'Nota',
+        entity_id: item.nota.id,
+        user_email: user?.email,
+        user_role: user?.role
+      });
+
+      setSuccessMessage('Reconciliation closed successfully');
+      loadData();
+    } catch (error) {
+      console.error('Close recon error:', error);
     }
+    setProcessing(false);
   };
 
-  const toggleReconciliationSelection = (reconId) => {
-    if (selectedReconciliations.includes(reconId)) {
-      setSelectedReconciliations(selectedReconciliations.filter(id => id !== reconId));
-    } else {
-      setSelectedReconciliations([...selectedReconciliations, reconId]);
+  const handleCreateDN = async () => {
+    setProcessing(true);
+    try {
+      // Create Debit Note as new Nota
+      await base44.entities.Nota.create({
+        nota_number: `DN-${selectedNota?.nota_id}-${Date.now()}`,
+        nota_type: 'Batch',
+        reference_id: selectedNota?.batch_id,
+        contract_id: selectedNota?.contract_id,
+        amount: dnAmount,
+        currency: 'IDR',
+        status: 'Draft'
+      });
+
+      await base44.entities.AuditLog.create({
+        action: 'CREATE_DEBIT_NOTE',
+        module: 'RECONCILIATION',
+        entity_type: 'Nota',
+        entity_id: selectedNota?.id,
+        user_email: user?.email,
+        user_role: user?.role,
+        reason: `Debit Note created: IDR ${dnAmount}`
+      });
+
+      setSuccessMessage('Debit Note created');
+      setShowDnDialog(false);
+      setDnAmount(0);
+      loadData();
+    } catch (error) {
+      console.error('DN error:', error);
     }
+    setProcessing(false);
   };
 
-  const exceptionColumns = [
-    { header: 'Payment Ref', accessorKey: 'payment_ref' },
-    { header: 'Payment Date', accessorKey: 'payment_date' },
-    { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
-    { header: 'Exception Type', cell: (row) => <StatusBadge status={row.exception_type} /> },
-    {
-      header: 'Actions',
-      cell: (row) => (
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => {
-              setSelectedPayment(row);
-              setShowViewPaymentDialog(true);
-            }}
-          >
-            <Eye className="w-4 h-4 mr-1" />
-            View
-          </Button>
-          {isTugure && (
-            <>
-              <Button 
-                size="sm" 
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
-                  setSelectedPayment(row);
-                  setShowMatchDialog(true);
-                }}
-              >
-                <Link className="w-4 h-4 mr-1" />
-                Match
-              </Button>
-              <Button 
-                size="sm"
-                variant="outline"
-                className="border-green-500 text-green-600 hover:bg-green-50"
-                onClick={() => handleClearException(row)}
-              >
-                <Check className="w-4 h-4 mr-1" />
-                Clear Exception
-              </Button>
-            </>
-          )}
-        </div>
-      )
-    }
-  ];
+  const handleCreateCN = async () => {
+    setProcessing(true);
+    try {
+      // Create Credit Note as new Nota
+      await base44.entities.Nota.create({
+        nota_number: `CN-${selectedNota?.nota_id}-${Date.now()}`,
+        nota_type: 'Batch',
+        reference_id: selectedNota?.batch_id,
+        contract_id: selectedNota?.contract_id,
+        amount: -cnAmount,
+        currency: 'IDR',
+        status: 'Draft'
+      });
 
-  const paymentColumns = [
-    { header: 'Payment Ref', accessorKey: 'payment_ref' },
-    { header: 'Payment Date', accessorKey: 'payment_date' },
-    { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
-    { header: 'Match Status', cell: (row) => <StatusBadge status={row.match_status} /> },
-    {
-      header: 'Actions',
-      cell: (row) => (
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => {
-              setSelectedPayment(row);
-              setShowViewPaymentDialog(true);
-            }}
-          >
-            <Eye className="w-4 h-4 mr-1" />
-            View
-          </Button>
-          {isTugure && row.match_status === 'RECEIVED' && (
-            <>
-              <Button 
-                size="sm" 
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
-                  setSelectedPayment(row);
-                  setShowMatchDialog(true);
-                }}
-              >
-                <Link className="w-4 h-4 mr-1" />
-                Match
-              </Button>
-              <Button 
-                size="sm"
-                variant="outline"
-                className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                onClick={() => {
-                  setSelectedPayment(row);
-                  setShowExceptionDialog(true);
-                }}
-              >
-                <AlertTriangle className="w-4 h-4 mr-1" />
-                Exception
-              </Button>
-            </>
-          )}
-          {row.match_status === 'MATCHED' && (
-            <span className="text-xs text-green-600 font-medium">✓ Matched</span>
-          )}
-        </div>
-      )
+      await base44.entities.AuditLog.create({
+        action: 'CREATE_CREDIT_NOTE',
+        module: 'RECONCILIATION',
+        entity_type: 'Nota',
+        entity_id: selectedNota?.id,
+        user_email: user?.email,
+        user_role: user?.role,
+        reason: `Credit Note created: IDR ${cnAmount}`
+      });
+
+      setSuccessMessage('Credit Note created');
+      setShowCnDialog(false);
+      setCnAmount(0);
+      loadData();
+    } catch (error) {
+      console.error('CN error:', error);
     }
-  ];
+    setProcessing(false);
+  };
 
   const reconColumns = [
-    { header: 'Recon ID', accessorKey: 'recon_id' },
+    { 
+      header: 'Nota ID', 
+      accessorKey: 'nota_id',
+      cell: (row) => (
+        <div>
+          <div className="font-medium">{row.nota_id}</div>
+          <div className="text-xs text-gray-500">{row.batch_id}</div>
+        </div>
+      )
+    },
     { header: 'Period', accessorKey: 'period' },
-    { header: 'Total Invoiced', cell: (row) => `IDR ${(row.total_invoiced || 0).toLocaleString()}` },
-    { header: 'Total Paid', cell: (row) => `IDR ${(row.total_paid || 0).toLocaleString()}` },
+    { 
+      header: 'Invoice Amount', 
+      cell: (row) => `IDR ${((row.invoice_amount || 0) / 1000000).toFixed(2)}M` 
+    },
+    { 
+      header: 'Payment Received', 
+      cell: (row) => (
+        <div>
+          <div className="font-medium text-green-600">IDR {((row.payment_received || 0) / 1000000).toFixed(2)}M</div>
+          <div className="text-xs text-gray-500">{row.payments?.filter(p => p.match_status === 'MATCHED').length || 0} payments</div>
+        </div>
+      )
+    },
     { 
       header: 'Difference', 
       cell: (row) => {
         const diff = row.difference || 0;
-        const canClose = Math.abs(diff) <= 100000;
+        const hasDiff = Math.abs(diff) > 0;
         return (
           <div className="flex items-center gap-2">
-            <span className={canClose ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-              IDR {diff.toLocaleString()}
+            <span className={hasDiff ? 'text-red-600 font-bold' : 'text-green-600 font-medium'}>
+              IDR {(diff / 1000000).toFixed(2)}M
             </span>
-            {canClose && row.status === 'IN_PROGRESS' && (
-              <span className="text-xs text-green-600">✓</span>
-            )}
+            {hasDiff && <AlertTriangle className="w-4 h-4 text-orange-500" />}
           </div>
         );
       }
     },
-    { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+    { 
+      header: 'Status', 
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={row.status} />
+          {row.is_overdue && (
+            <Badge className="bg-red-500 text-white text-xs">Overdue</Badge>
+          )}
+        </div>
+      )
+    },
     {
       header: 'Actions',
       cell: (row) => {
-        const getActionButtons = () => {
-          if (!isTugure) return null;
-          
-          const diff = Math.abs(row.difference || 0);
-          const canClose = diff <= 100000; // Threshold 100K
-          
-          switch (row.status) {
-            case 'IN_PROGRESS':
-              return (
-                <>
-                  {!canClose && (
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                      onClick={() => {
-                        setSelectedRecon(row);
-                        setReconAction('MARK_EXCEPTION');
-                        setShowReconActionDialog(true);
-                      }}
-                    >
-                      <AlertTriangle className="w-4 h-4 mr-1" />
-                      Mark Exception
-                    </Button>
-                  )}
-                  {canClose && (
-                    <Button 
-                      size="sm" 
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={() => {
-                        setSelectedRecon(row);
-                        setReconAction('READY_TO_CLOSE');
-                        setShowReconActionDialog(true);
-                      }}
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-1" />
-                      Ready to Close
-                    </Button>
-                  )}
-                </>
-              );
-            case 'EXCEPTION':
-              return (
-                <Button 
-                  size="sm" 
-                  className="bg-blue-600 hover:bg-blue-700"
-                  onClick={() => {
-                    setSelectedRecon(row);
-                    setReconAction('RESOLVE_EXCEPTION');
-                    setShowReconActionDialog(true);
-                  }}
-                >
-                  <Check className="w-4 h-4 mr-1" />
-                  Resolve Exception
-                </Button>
-              );
-            case 'READY_TO_CLOSE':
-              return (
-                <Button 
-                  size="sm" 
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={() => {
-                    setSelectedRecon(row);
-                    setShowApproveCloseDialog(true);
-                  }}
-                >
-                  <Check className="w-4 h-4 mr-1" />
-                  Approve & Close
-                </Button>
-              );
-            case 'CLOSED':
-              return (
-                <span className="text-xs text-green-600 font-medium">✓ Closed</span>
-              );
-            default:
-              return null;
-          }
-        };
-
-        return (
-          <div className="flex gap-2">
+        if (!isTugure) {
+          return (
             <Button 
               variant="outline" 
               size="sm"
@@ -681,9 +665,73 @@ export default function Reconciliation() {
               }}
             >
               <Eye className="w-4 h-4 mr-1" />
-              Details
+              View
             </Button>
-            {getActionButtons()}
+          );
+        }
+
+        const hasDifference = Math.abs(row.difference || 0) > 0;
+        const canClose = row.status !== 'Paid' && !hasDifference;
+
+        return (
+          <div className="flex gap-1">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                setSelectedRecon(row);
+                setShowReconDetailDialog(true);
+              }}
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+            
+            {row.status === 'Issued' && hasDifference && (
+              <>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="border-red-500 text-red-600"
+                  onClick={() => {
+                    setSelectedNota(row);
+                    setDnAmount(Math.abs(row.difference));
+                    setShowDnDialog(true);
+                  }}
+                  title="Create Debit Note"
+                >
+                  DN
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  className="border-blue-500 text-blue-600"
+                  onClick={() => {
+                    setSelectedNota(row);
+                    setCnAmount(Math.abs(row.difference));
+                    setShowCnDialog(true);
+                  }}
+                  title="Create Credit Note"
+                >
+                  CN
+                </Button>
+              </>
+            )}
+
+            {canClose && (
+              <Button 
+                size="sm" 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => handleCloseReconciliation(row)}
+                disabled={processing}
+              >
+                <CheckCircle2 className="w-4 h-4 mr-1" />
+                Close
+              </Button>
+            )}
+
+            {row.status === 'Paid' && (
+              <span className="text-xs text-green-600 font-medium">✓ Closed</span>
+            )}
           </div>
         );
       }
@@ -759,31 +807,32 @@ export default function Reconciliation() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
-          title="Total Received"
-          value={`IDR ${(totalReceived / 1000000).toFixed(1)}M`}
-          icon={Scale}
+          title="Total Invoiced"
+          value={`IDR ${(totalInvoiced / 1000000).toFixed(1)}M`}
+          icon={FileText}
           gradient
           className="from-blue-500 to-blue-600"
         />
         <StatCard
-          title="Matched"
-          value={`IDR ${(matchedAmount / 1000000).toFixed(1)}M`}
+          title="Total Paid"
+          value={`IDR ${(totalPaid / 1000000).toFixed(1)}M`}
           icon={CheckCircle2}
           gradient
           className="from-green-500 to-green-600"
         />
         <StatCard
-          title="Exceptions"
-          value={exceptionPayments.length}
-          subtitle="Require attention"
+          title="Difference"
+          value={`IDR ${(totalDifference / 1000000).toFixed(1)}M`}
+          subtitle={itemsWithException > 0 ? `${itemsWithException} items need review` : 'All balanced'}
           icon={AlertTriangle}
           gradient
           className="from-orange-500 to-orange-600"
         />
         <StatCard
-          title="Open Recons"
-          value={reconciliations.filter(r => r.status !== 'CLOSED').length}
-          icon={Clock}
+          title="Closed"
+          value={`${closedItems}/${reconciliations.length}`}
+          subtitle="Reconciliations"
+          icon={Scale}
           gradient
           className="from-purple-500 to-purple-600"
         />
@@ -796,174 +845,123 @@ export default function Reconciliation() {
         contracts={contracts}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="monitor">
-            <Clock className="w-4 h-4 mr-2" />
-            Monitor Status
-          </TabsTrigger>
-          <TabsTrigger value="matching">
-            <Link className="w-4 h-4 mr-2" />
-            Payment Matching
-          </TabsTrigger>
-          <TabsTrigger value="exceptions">
-            <AlertTriangle className="w-4 h-4 mr-2" />
-            Review Exceptions
-          </TabsTrigger>
-          <TabsTrigger value="identify">
-            <Split className="w-4 h-4 mr-2" />
-            Identify Differences
-          </TabsTrigger>
-          <TabsTrigger value="close">
-            <CheckCircle2 className="w-4 h-4 mr-2" />
-            Close Recon
-          </TabsTrigger>
-        </TabsList>
+      {/* Single Reconciliation Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Scale className="w-5 h-5" />
+              Reconciliation Management
+            </div>
+            <div className="text-sm text-gray-500 font-normal">
+              All reconciliation tasks in one view
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={reconColumns}
+            data={reconciliations}
+            isLoading={loading}
+            emptyMessage="No reconciliation items"
+          />
+        </CardContent>
+      </Card>
 
-        {/* Task 1: Monitor Status Pembayaran Premi */}
-        <TabsContent value="monitor" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Monitor Status Pembayaran Premi
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                Overview semua payment yang masuk dan statusnya (RECEIVED, MATCHED, UNMATCHED)
-              </p>
-              <DataTable
-                columns={[
-                  { header: 'Payment Ref', accessorKey: 'payment_ref' },
-                  { header: 'Invoice', accessorKey: 'invoice_id' },
-                  { header: 'Payment Date', accessorKey: 'payment_date' },
-                  { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
-                  { header: 'Status', cell: (row) => <StatusBadge status={row.match_status} /> },
-                  { 
-                    header: 'Exception', 
-                    cell: (row) => row.exception_type !== 'NONE' ? <StatusBadge status={row.exception_type} /> : '-'
-                  },
-                  {
-                    header: 'Actions',
-                    cell: (row) => (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => {
-                          setSelectedPayment(row);
-                          setShowViewPaymentDialog(true);
-                        }}
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        View
-                      </Button>
-                    )
-                  }
-                ]}
-                data={payments}
-                isLoading={loading}
-                emptyMessage="No payments to monitor"
+      {/* DN Dialog */}
+      <Dialog open={showDnDialog} onOpenChange={setShowDnDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Debit Note</DialogTitle>
+            <DialogDescription>
+              Add additional charges for {selectedNota?.nota_id}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Original Amount:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedNota?.invoice_amount || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Current Difference:</span>
+                  <span className="ml-2 font-bold text-red-600">IDR {(selectedNota?.difference || 0).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Debit Note Amount *</label>
+              <input
+                type="number"
+                className="w-full border rounded-lg px-3 py-2 mt-1"
+                value={dnAmount}
+                onChange={(e) => setDnAmount(parseFloat(e.target.value) || 0)}
               />
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDnDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleCreateDN}
+              disabled={processing || dnAmount <= 0}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Create DN
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* Task 2: Payment Reconciliation (Matching) */}
-        <TabsContent value="matching" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Link className="w-5 h-5" />
-                Payment Reconciliation - Match Payments
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                Match pembayaran yang RECEIVED dengan Payment Intent yang sudah disetujui
-              </p>
-              <DataTable
-                columns={paymentColumns}
-                data={regularPayments}
-                isLoading={loading}
-                emptyMessage="No payments to match"
+      {/* CN Dialog */}
+      <Dialog open={showCnDialog} onOpenChange={setShowCnDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Credit Note</DialogTitle>
+            <DialogDescription>
+              Reduce charges for {selectedNota?.nota_id}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Original Amount:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedNota?.invoice_amount || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Current Difference:</span>
+                  <span className="ml-2 font-bold text-red-600">IDR {(selectedNota?.difference || 0).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Credit Note Amount *</label>
+              <input
+                type="number"
+                className="w-full border rounded-lg px-3 py-2 mt-1"
+                value={cnAmount}
+                onChange={(e) => setCnAmount(parseFloat(e.target.value) || 0)}
               />
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCnDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleCreateCN}
+              disabled={processing || cnAmount <= 0}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Create CN
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* Task 3: Review Exception Pembayaran */}
-        <TabsContent value="exceptions" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-orange-600" />
-                Review Exception Pembayaran
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                Handle pembayaran dengan exception (PARTIAL, OVER, UNDER, LATE, FX) - Match atau Clear
-              </p>
-              <DataTable
-                columns={exceptionColumns}
-                data={exceptionPayments}
-                isLoading={loading}
-                emptyMessage="No exceptions - all good"
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Task 4: Identifikasi Selisih Pembayaran */}
-        <TabsContent value="identify" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Split className="w-5 h-5" />
-                Identifikasi Selisih Pembayaran
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                Review reconciliation dengan status IN_PROGRESS atau EXCEPTION - identifikasi selisih antara invoice vs payment
-              </p>
-              <DataTable
-                columns={reconColumns}
-                data={reconciliations.filter(r => r.status === 'IN_PROGRESS' || r.status === 'EXCEPTION')}
-                isLoading={loading}
-                emptyMessage="No differences to identify"
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Task 5: Close Reconciliation Premi */}
-        <TabsContent value="close" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                Close Reconciliation Premi
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                Final approval dan close reconciliation yang READY_TO_CLOSE (selisih ≤ IDR 100K)
-              </p>
-              <DataTable
-                columns={reconColumns}
-                data={reconciliations.filter(r => r.status === 'READY_TO_CLOSE' || r.status === 'CLOSED')}
-                isLoading={loading}
-                emptyMessage="No reconciliations ready to close"
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Recon Action Dialog */}
-      <Dialog open={showReconActionDialog} onOpenChange={setShowReconActionDialog}>
+      {/* Payment Detail Dialog (View only) */}
+      <Dialog open={showViewPaymentDialog} onOpenChange={setShowViewPaymentDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -1053,25 +1051,25 @@ export default function Reconciliation() {
           <DialogHeader>
             <DialogTitle>Reconciliation Details</DialogTitle>
             <DialogDescription>
-              {selectedRecon?.recon_id} - {selectedRecon?.period}
+              {selectedRecon?.nota_id} - {selectedRecon?.batch_id}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-gray-500">Total Invoiced</CardTitle>
+                  <CardTitle className="text-sm text-gray-500">Invoice Amount</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-2xl font-bold">IDR {((selectedRecon?.total_invoiced || 0) / 1000000).toFixed(1)}M</p>
+                  <p className="text-2xl font-bold">IDR {((selectedRecon?.invoice_amount || 0) / 1000000).toFixed(2)}M</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-gray-500">Total Paid</CardTitle>
+                  <CardTitle className="text-sm text-gray-500">Payment Received</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-2xl font-bold text-green-600">IDR {((selectedRecon?.total_paid || 0) / 1000000).toFixed(1)}M</p>
+                  <p className="text-2xl font-bold text-green-600">IDR {((selectedRecon?.payment_received || 0) / 1000000).toFixed(2)}M</p>
                 </CardContent>
               </Card>
               <Card>
@@ -1080,7 +1078,7 @@ export default function Reconciliation() {
                 </CardHeader>
                 <CardContent>
                   <p className={`text-2xl font-bold ${Math.abs(selectedRecon?.difference || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    IDR {((selectedRecon?.difference || 0) / 1000000).toFixed(1)}M
+                    IDR {((selectedRecon?.difference || 0) / 1000000).toFixed(2)}M
                   </p>
                 </CardContent>
               </Card>
@@ -1088,36 +1086,57 @@ export default function Reconciliation() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-500">Contract ID</p>
-                <p className="font-medium">{selectedRecon?.contract_id}</p>
+                <p className="text-sm text-gray-500">Nota Number</p>
+                <p className="font-medium">{selectedRecon?.nota_id}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Batch ID</p>
+                <p className="font-medium">{selectedRecon?.batch_id}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Status</p>
                 <StatusBadge status={selectedRecon?.status} />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Currency</p>
-                <p className="font-medium">{selectedRecon?.currency || 'IDR'}</p>
+                <p className="text-sm text-gray-500">Issued Date</p>
+                <p className="font-medium">{selectedRecon?.issued_date}</p>
               </div>
-              {selectedRecon?.closed_by && (
-                <>
-                  <div>
-                    <p className="text-sm text-gray-500">Closed By</p>
-                    <p className="font-medium">{selectedRecon?.closed_by}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Closed Date</p>
-                    <p className="font-medium">{selectedRecon?.closed_date}</p>
-                  </div>
-                </>
-              )}
+              <div>
+                <p className="text-sm text-gray-500">Matched Payments</p>
+                <p className="font-medium">{selectedRecon?.payments?.filter(p => p.match_status === 'MATCHED').length || 0}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Exception Status</p>
+                <Badge className={selectedRecon?.has_exception ? 'bg-orange-500' : 'bg-green-500'}>
+                  {selectedRecon?.has_exception ? 'Has Exception' : 'Clear'}
+                </Badge>
+              </div>
             </div>
 
-            {selectedRecon?.remarks && (
+            {selectedRecon?.payments && selectedRecon.payments.length > 0 && (
               <div>
-                <p className="text-sm text-gray-500 mb-1">Remarks</p>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm">{selectedRecon?.remarks}</p>
+                <p className="text-sm text-gray-500 mb-2">Related Payments</p>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Payment Ref</th>
+                        <th className="px-3 py-2 text-left">Date</th>
+                        <th className="px-3 py-2 text-right">Amount</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedRecon.payments.map((payment, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-3 py-2">{payment.payment_ref}</td>
+                          <td className="px-3 py-2">{payment.payment_date}</td>
+                          <td className="px-3 py-2 text-right">IDR {(payment.amount || 0).toLocaleString()}</td>
+                          <td className="px-3 py-2"><StatusBadge status={payment.match_status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
@@ -1129,9 +1148,6 @@ export default function Reconciliation() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Payment Detail Dialog (View only) */}
-      <Dialog open={showViewPaymentDialog} onOpenChange={setShowViewPaymentDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Payment Detail</DialogTitle>
@@ -1183,8 +1199,7 @@ export default function Reconciliation() {
         </DialogContent>
       </Dialog>
 
-      {/* Mark Exception Dialog */}
-      <Dialog open={showExceptionDialog} onOpenChange={setShowExceptionDialog}>
+
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Mark Payment as Exception</DialogTitle>
@@ -1251,95 +1266,6 @@ export default function Reconciliation() {
                 <>
                   <AlertTriangle className="w-4 h-4 mr-2" />
                   Mark as Exception
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approve Close Dialog */}
-      <Dialog open={showApproveCloseDialog} onOpenChange={setShowApproveCloseDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve & Close Reconciliation</DialogTitle>
-            <DialogDescription>
-              Final approval to close {selectedRecon?.recon_id}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Period:</span>
-                  <span className="ml-2 font-medium">{selectedRecon?.period}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Total Invoiced:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_invoiced || 0).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Total Paid:</span>
-                  <span className="ml-2 font-medium">IDR {(selectedRecon?.total_paid || 0).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Difference:</span>
-                  <span className={`ml-2 font-bold ${Math.abs(selectedRecon?.difference || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    IDR {(selectedRecon?.difference || 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <Alert className="bg-green-50 border-green-200">
-              <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-700">
-                This action will close the reconciliation and update all related Invoice, Debtor, and Nota records to PAID status.
-              </AlertDescription>
-            </Alert>
-            <div>
-              <label className="text-sm font-medium">Approval Remarks *</label>
-              <Textarea
-                value={approveCloseRemarks}
-                onChange={(e) => setApproveCloseRemarks(e.target.value)}
-                placeholder="Enter approval remarks and confirmation..."
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowApproveCloseDialog(false);
-              setApproveCloseRemarks('');
-            }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                setProcessing(true);
-                try {
-                  // Execute close with approval
-                  setReconAction('CLOSE');
-                  setReconRemarks(approveCloseRemarks);
-                  await handleReconAction();
-                  setShowApproveCloseDialog(false);
-                  setApproveCloseRemarks('');
-                } catch (error) {
-                  console.error('Approve close error:', error);
-                }
-                setProcessing(false);
-              }}
-              disabled={processing || !approveCloseRemarks}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Closing...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Approve & Close
                 </>
               )}
             </Button>
