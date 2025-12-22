@@ -32,6 +32,7 @@ export default function Reconciliation() {
   const [selectedReconciliations, setSelectedReconciliations] = useState([]);
   const [showViewPaymentDialog, setShowViewPaymentDialog] = useState(false);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
+  const [showExceptionDialog, setShowExceptionDialog] = useState(false);
   const [showReconActionDialog, setShowReconActionDialog] = useState(false);
   const [showReconDetailDialog, setShowReconDetailDialog] = useState(false);
   const [selectedRecon, setSelectedRecon] = useState(null);
@@ -39,6 +40,7 @@ export default function Reconciliation() {
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [matchRemarks, setMatchRemarks] = useState('');
+  const [exceptionRemarks, setExceptionRemarks] = useState('');
   const [reconRemarks, setReconRemarks] = useState('');
   const [selectedIntentId, setSelectedIntentId] = useState('');
   const [filters, setFilters] = useState({
@@ -326,10 +328,60 @@ export default function Reconciliation() {
     setProcessing(false);
   };
 
+  const handleMarkException = async (payment, exceptionType) => {
+    setProcessing(true);
+    try {
+      await base44.entities.Payment.update(payment.id, {
+        match_status: 'UNMATCHED',
+        exception_type: exceptionType || 'PARTIAL'
+      });
+      await base44.entities.AuditLog.create({
+        action: 'MARK_EXCEPTION',
+        module: 'RECONCILIATION',
+        entity_type: 'Payment',
+        entity_id: payment.id,
+        user_email: user?.email,
+        user_role: user?.role,
+        reason: exceptionRemarks
+      });
+      setSuccessMessage('Payment marked as exception');
+      setShowExceptionDialog(false);
+      setExceptionRemarks('');
+      loadData();
+    } catch (error) {
+      console.error('Exception error:', error);
+    }
+    setProcessing(false);
+  };
+
+  const handleClearException = async (payment) => {
+    setProcessing(true);
+    try {
+      await base44.entities.Payment.update(payment.id, {
+        match_status: 'RECEIVED',
+        exception_type: 'NONE'
+      });
+      await base44.entities.AuditLog.create({
+        action: 'CLEAR_EXCEPTION',
+        module: 'RECONCILIATION',
+        entity_type: 'Payment',
+        entity_id: payment.id,
+        user_email: user?.email,
+        user_role: user?.role
+      });
+      setSuccessMessage('Exception cleared - payment ready for matching');
+      loadData();
+    } catch (error) {
+      console.error('Clear exception error:', error);
+    }
+    setProcessing(false);
+  };
+
   // Stats
   const totalReceived = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
   const matchedAmount = payments.filter(p => p.match_status === 'MATCHED').reduce((sum, p) => sum + (p.amount || 0), 0);
-  const unmatchedPayments = payments.filter(p => p.match_status === 'UNMATCHED' || p.match_status === 'RECEIVED');
+  const unmatchedPayments = payments.filter(p => p.match_status === 'UNMATCHED' && p.exception_type !== 'NONE');
+  const receivedPayments = payments.filter(p => p.match_status === 'RECEIVED' || (p.match_status === 'UNMATCHED' && p.exception_type === 'NONE'));
 
   const togglePaymentSelection = (paymentId) => {
     if (selectedPayments.includes(paymentId)) {
@@ -346,6 +398,76 @@ export default function Reconciliation() {
       setSelectedReconciliations([...selectedReconciliations, reconId]);
     }
   };
+
+  const exceptionColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedPayments.length === unmatchedPayments.length && unmatchedPayments.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedPayments(unmatchedPayments.map(p => p.id));
+            } else {
+              setSelectedPayments([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedPayments.includes(row.id)}
+          onCheckedChange={() => togglePaymentSelection(row.id)}
+        />
+      ),
+      width: '50px'
+    },
+    { header: 'Payment Ref', accessorKey: 'payment_ref' },
+    { header: 'Payment Date', accessorKey: 'payment_date' },
+    { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
+    { header: 'Exception Type', cell: (row) => <StatusBadge status={row.exception_type} /> },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              setSelectedPayment(row);
+              setShowViewPaymentDialog(true);
+            }}
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            View
+          </Button>
+          {isTugure && (
+            <>
+              <Button 
+                size="sm" 
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => {
+                  setSelectedPayment(row);
+                  setShowMatchDialog(true);
+                }}
+              >
+                <Link className="w-4 h-4 mr-1" />
+                Match
+              </Button>
+              <Button 
+                size="sm"
+                variant="outline"
+                className="border-green-500 text-green-600 hover:bg-green-50"
+                onClick={() => handleClearException(row)}
+              >
+                <Check className="w-4 h-4 mr-1" />
+                Clear Exception
+              </Button>
+            </>
+          )}
+        </div>
+      )
+    }
+  ];
 
   const paymentColumns = [
     {
@@ -394,7 +516,7 @@ export default function Reconciliation() {
             <Eye className="w-4 h-4 mr-1" />
             View
           </Button>
-          {isTugure && row.match_status !== 'MATCHED' && (
+          {isTugure && (row.match_status === 'RECEIVED' || (row.match_status === 'UNMATCHED' && row.exception_type === 'NONE')) && (
             <Button 
               size="sm" 
               className="bg-blue-600 hover:bg-blue-700"
@@ -405,6 +527,20 @@ export default function Reconciliation() {
             >
               <Link className="w-4 h-4 mr-1" />
               Match
+            </Button>
+          )}
+          {isTugure && row.match_status === 'RECEIVED' && row.exception_type === 'NONE' && (
+            <Button 
+              size="sm"
+              variant="outline"
+              className="border-orange-500 text-orange-600 hover:bg-orange-50"
+              onClick={() => {
+                setSelectedPayment(row);
+                setShowExceptionDialog(true);
+              }}
+            >
+              <AlertTriangle className="w-4 h-4 mr-1" />
+              Mark Exception
             </Button>
           )}
         </div>
@@ -674,10 +810,10 @@ export default function Reconciliation() {
 
         <TabsContent value="exceptions" className="mt-4">
           <DataTable
-            columns={paymentColumns}
+            columns={exceptionColumns}
             data={unmatchedPayments}
             isLoading={loading}
-            emptyMessage="No exceptions"
+            emptyMessage="No exceptions - all payments matched or in good standing"
           />
         </TabsContent>
       </Tabs>
@@ -898,6 +1034,81 @@ export default function Reconciliation() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowViewPaymentDialog(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark Exception Dialog */}
+      <Dialog open={showExceptionDialog} onOpenChange={setShowExceptionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Payment as Exception</DialogTitle>
+            <DialogDescription>
+              Payment {selectedPayment?.payment_ref}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Amount:</span>
+                  <span className="ml-2 font-medium">IDR {(selectedPayment?.amount || 0).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Date:</span>
+                  <span className="ml-2 font-medium">{selectedPayment?.payment_date}</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Exception Type *</label>
+              <Select value={selectedPayment?.exception_type || 'PARTIAL'} onValueChange={(val) => setSelectedPayment({...selectedPayment, exception_type: val})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PARTIAL">Partial Payment</SelectItem>
+                  <SelectItem value="OVER">Over Payment</SelectItem>
+                  <SelectItem value="UNDER">Under Payment</SelectItem>
+                  <SelectItem value="LATE">Late Payment</SelectItem>
+                  <SelectItem value="FX">FX Difference</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Remarks *</label>
+              <Textarea
+                value={exceptionRemarks}
+                onChange={(e) => setExceptionRemarks(e.target.value)}
+                placeholder="Explain why this is an exception..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowExceptionDialog(false);
+              setExceptionRemarks('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleMarkException(selectedPayment, selectedPayment?.exception_type)}
+              disabled={processing || !exceptionRemarks}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Mark as Exception
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
