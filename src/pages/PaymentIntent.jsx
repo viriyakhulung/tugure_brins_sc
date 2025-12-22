@@ -21,12 +21,15 @@ import ExportButton from "@/components/common/ExportButton";
 import { format } from 'date-fns';
 
 export default function PaymentIntent() {
+  const [user, setUser] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [paymentIntents, setPaymentIntents] = useState([]);
   const [debtors, setDebtors] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [selectedIntent, setSelectedIntent] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedDebtors, setSelectedDebtors] = useState([]);
   const [processing, setProcessing] = useState(false);
@@ -46,8 +49,20 @@ export default function PaymentIntent() {
   const [remarks, setRemarks] = useState('');
 
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        setUser(JSON.parse(demoUserStr));
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -219,6 +234,29 @@ export default function PaymentIntent() {
     { header: 'Recon Status', cell: (row) => <StatusBadge status={row.recon_status} /> }
   ];
 
+  const handleSubmitIntent = async (intent) => {
+    setProcessing(true);
+    try {
+      await base44.entities.PaymentIntent.update(intent.id, {
+        status: 'SUBMITTED'
+      });
+      await base44.entities.Notification.create({
+        title: 'Payment Intent Submitted for Approval',
+        message: `Payment intent ${intent.intent_id} submitted - IDR ${(intent.planned_amount || 0).toLocaleString()}`,
+        type: 'ACTION_REQUIRED',
+        module: 'PAYMENT',
+        reference_id: intent.intent_id,
+        target_role: 'TUGURE'
+      });
+      setSuccessMessage('Payment intent submitted for approval');
+      setShowSubmitDialog(false);
+      loadData();
+    } catch (error) {
+      console.error('Submit error:', error);
+    }
+    setProcessing(false);
+  };
+
   const handleApproveIntent = async (intent) => {
     setProcessing(true);
     try {
@@ -233,13 +271,38 @@ export default function PaymentIntent() {
         reference_id: intent.intent_id,
         target_role: 'BRINS'
       });
-      setSuccessMessage('Payment intent approved');
+      setSuccessMessage('Payment intent approved - now available for matching in Reconciliation');
       loadData();
     } catch (error) {
       console.error('Approve error:', error);
     }
     setProcessing(false);
   };
+
+  const handleRejectIntent = async (intent) => {
+    setProcessing(true);
+    try {
+      await base44.entities.PaymentIntent.update(intent.id, {
+        status: 'REJECTED'
+      });
+      await base44.entities.Notification.create({
+        title: 'Payment Intent Rejected',
+        message: `Payment intent ${intent.intent_id} rejected`,
+        type: 'WARNING',
+        module: 'PAYMENT',
+        reference_id: intent.intent_id,
+        target_role: 'BRINS'
+      });
+      setSuccessMessage('Payment intent rejected');
+      loadData();
+    } catch (error) {
+      console.error('Reject error:', error);
+    }
+    setProcessing(false);
+  };
+
+  const isBrins = user?.role === 'BRINS' || user?.role === 'admin';
+  const isTugure = user?.role === 'TUGURE' || user?.role === 'admin';
 
   const intentColumns = [
     { header: 'Intent ID', accessorKey: 'intent_id' },
@@ -254,14 +317,42 @@ export default function PaymentIntent() {
           <Button variant="outline" size="sm">
             <Eye className="w-4 h-4" />
           </Button>
-          {row.status === 'DRAFT' && (
+          {row.status === 'DRAFT' && isBrins && (
             <Button 
               size="sm"
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => handleApproveIntent(row)}
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => {
+                setSelectedIntent(row);
+                setShowSubmitDialog(true);
+              }}
             >
-              Approve
+              Submit
             </Button>
+          )}
+          {row.status === 'SUBMITTED' && isTugure && (
+            <>
+              <Button 
+                size="sm"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => handleApproveIntent(row)}
+              >
+                Approve
+              </Button>
+              <Button 
+                size="sm"
+                variant="outline"
+                className="border-red-500 text-red-600 hover:bg-red-50"
+                onClick={() => handleRejectIntent(row)}
+              >
+                Reject
+              </Button>
+            </>
+          )}
+          {row.status === 'APPROVED' && (
+            <span className="text-xs text-green-600">Ready for Matching</span>
+          )}
+          {row.status === 'COMPLETED' && (
+            <span className="text-xs text-gray-500">Matched</span>
           )}
         </div>
       )
@@ -389,6 +480,50 @@ export default function PaymentIntent() {
           />
         </CardContent>
       </Card>
+
+      {/* Submit Confirmation Dialog */}
+      <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit Payment Intent</DialogTitle>
+            <DialogDescription>
+              Submit {selectedIntent?.intent_id} for approval
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-gray-600">
+              Once submitted, this payment intent will be sent to TUGURE for approval. 
+              After approval, it will be available for matching in the Reconciliation module.
+            </p>
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm"><span className="text-gray-500">Amount:</span> <span className="font-medium">IDR {(selectedIntent?.planned_amount || 0).toLocaleString()}</span></p>
+              <p className="text-sm mt-1"><span className="text-gray-500">Planned Date:</span> <span className="font-medium">{selectedIntent?.planned_date}</span></p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSubmitDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleSubmitIntent(selectedIntent)}
+              disabled={processing}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Submit for Approval
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Payment Intent Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

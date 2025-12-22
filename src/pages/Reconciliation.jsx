@@ -198,10 +198,32 @@ export default function Reconciliation() {
               recon_status: newOutstanding <= 0 ? 'CLOSED' : 'IN_PROGRESS'
             });
           }
+
+          // 6. CRITICAL: Update related Nota to Paid if Invoice fully paid
+          if (newOutstanding <= 0) {
+            const batchIds = [...new Set(relatedDebtors.map(d => d.batch_id))];
+            for (const batchId of batchIds) {
+              if (batchId) {
+                const notas = await base44.entities.Nota.filter({ 
+                  reference_id: batchId,
+                  nota_type: 'Batch'
+                });
+                for (const nota of notas) {
+                  if (nota.status !== 'Paid') {
+                    await base44.entities.Nota.update(nota.id, {
+                      status: 'Paid',
+                      paid_date: new Date().toISOString().split('T')[0],
+                      payment_reference: `Reconciliation Match - ${selectedPayment.payment_ref}`
+                    });
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
-      // 6. Create audit log
+      // 7. Create audit log
       await base44.entities.AuditLog.create({
         action: 'MANUAL_MATCH',
         module: 'RECONCILIATION',

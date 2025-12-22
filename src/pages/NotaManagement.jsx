@@ -111,32 +111,54 @@ export default function NotaManagement() {
       if (selectedNota.nota_type === 'Batch' && selectedNota.reference_id) {
         const batchDebtors = await base44.entities.Debtor.filter({ batch_id: selectedNota.reference_id });
         
-        // When Nota is marked as Paid - this triggers reconciliation completion
+        // When Nota is marked as Paid
         if (nextStatus === 'Paid') {
-          // Update Invoice to PAID
+          // Find related Invoice
           const invoices = await base44.entities.Invoice.filter({ contract_id: selectedNota.contract_id });
           const relatedInvoice = invoices.find(inv => 
             batchDebtors.some(d => d.invoice_no === inv.invoice_number)
           );
           
           if (relatedInvoice) {
+            // Update Invoice to PAID
             await base44.entities.Invoice.update(relatedInvoice.id, {
               paid_amount: relatedInvoice.total_amount,
               outstanding_amount: 0,
               status: 'PAID'
             });
 
-            // Create Payment record
-            await base44.entities.Payment.create({
-              payment_ref: `PAY-${selectedNota.nota_number}-${Date.now()}`,
-              invoice_id: relatedInvoice.id,
-              contract_id: selectedNota.contract_id,
-              amount: selectedNota.amount,
-              payment_date: new Date().toISOString().split('T')[0],
-              currency: 'IDR',
-              match_status: 'MATCHED',
-              exception_type: 'NONE'
+            // CRITICAL: Check if Payment already exists from Reconciliation
+            const existingPayments = await base44.entities.Payment.filter({ invoice_id: relatedInvoice.id });
+            if (existingPayments.length === 0) {
+              // Only create Payment if not already created by Reconciliation
+              await base44.entities.Payment.create({
+                payment_ref: `PAY-NOTA-${selectedNota.nota_number}`,
+                invoice_id: relatedInvoice.id,
+                contract_id: selectedNota.contract_id,
+                amount: selectedNota.amount,
+                payment_date: new Date().toISOString().split('T')[0],
+                currency: 'IDR',
+                match_status: 'MATCHED',
+                exception_type: 'NONE',
+                matched_by: user?.email,
+                matched_date: new Date().toISOString().split('T')[0]
+              });
+            }
+
+            // Update Reconciliation to CLOSED if exists
+            const reconciliations = await base44.entities.Reconciliation.filter({
+              contract_id: selectedNota.contract_id
             });
+            for (const recon of reconciliations) {
+              if (recon.status !== 'CLOSED' && Math.abs(recon.difference || 0) <= 100000) {
+                await base44.entities.Reconciliation.update(recon.id, {
+                  status: 'CLOSED',
+                  closed_by: user?.email,
+                  closed_date: new Date().toISOString().split('T')[0],
+                  remarks: `Auto-closed from Nota ${selectedNota.nota_number} payment`
+                });
+              }
+            }
           }
 
           // Update all debtors to PAID and CLOSED recon
