@@ -53,9 +53,7 @@ export default function Reconciliation() {
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
-    submitStatus: 'all',
-    paymentStatus: 'all',
-    reconStatus: 'all'
+    status: 'all'
   });
 
   const isTugure = user?.role === 'TUGURE' || user?.role === 'admin';
@@ -145,9 +143,7 @@ export default function Reconciliation() {
     setFilters({
       contract: 'all',
       batch: '',
-      submitStatus: 'all',
-      paymentStatus: 'all',
-      reconStatus: 'all'
+      status: 'all'
     });
   };
 
@@ -432,11 +428,10 @@ export default function Reconciliation() {
         reason: exceptionRemarks
       });
       
-      setSuccessMessage('Payment marked as exception - moved to Exceptions tab');
+      setSuccessMessage('Payment marked as exception');
       setShowExceptionDialog(false);
       setSelectedPayment(null);
       setExceptionRemarks('');
-      setActiveTab('exceptions'); // AUTO SWITCH TO EXCEPTIONS TAB
       await loadData();
     } catch (error) {
       console.error('Exception error:', error);
@@ -470,8 +465,7 @@ export default function Reconciliation() {
         user_role: user?.role
       });
       
-      setSuccessMessage('Exception cleared - moved to Payments tab');
-      setActiveTab('payments'); // AUTO SWITCH TO PAYMENTS TAB
+      setSuccessMessage('Exception cleared');
       await loadData();
     } catch (error) {
       console.error('Clear exception error:', error);
@@ -643,10 +637,13 @@ export default function Reconciliation() {
     { 
       header: 'Status', 
       cell: (row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1">
           <StatusBadge status={row.status} />
           {row.is_overdue && (
             <Badge className="bg-red-500 text-white text-xs">Overdue</Badge>
+          )}
+          {row.has_exception && row.status !== 'Paid' && (
+            <Badge className="bg-orange-500 text-white text-xs">Exception</Badge>
           )}
         </div>
       )
@@ -831,12 +828,59 @@ export default function Reconciliation() {
         />
       </div>
 
-      <FilterPanel
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        onClear={clearFilters}
-        contracts={contracts}
-      />
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Contract</label>
+              <Select value={filters.contract} onValueChange={(val) => handleFilterChange('contract', val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Contracts" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Contracts</SelectItem>
+                  {contracts.map(c => (
+                    <SelectItem key={c.id} value={c.contract_id}>{c.contract_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Batch ID</label>
+              <input
+                type="text"
+                className="w-full border rounded-lg px-3 py-2"
+                placeholder="Search batch..."
+                value={filters.batch}
+                onChange={(e) => handleFilterChange('batch', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Status</label>
+              <Select value={filters.status} onValueChange={(val) => handleFilterChange('status', val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Issued">Issued</SelectItem>
+                  <SelectItem value="Confirmed">Confirmed</SelectItem>
+                  <SelectItem value="Paid">Paid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {(filters.contract !== 'all' || filters.batch || filters.status !== 'all') && (
+            <div className="mt-4">
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                <X className="w-4 h-4 mr-2" />
+                Clear Filters
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Single Reconciliation Table */}
       <Card>
@@ -854,7 +898,12 @@ export default function Reconciliation() {
         <CardContent>
           <DataTable
             columns={reconColumns}
-            data={reconciliations}
+            data={reconciliations.filter(r => {
+              if (filters.contract !== 'all' && r.contract_id !== filters.contract) return false;
+              if (filters.batch && !r.batch_id?.toLowerCase().includes(filters.batch.toLowerCase())) return false;
+              if (filters.status !== 'all' && r.status !== filters.status) return false;
+              return true;
+            })}
             isLoading={loading}
             emptyMessage="No reconciliation items"
           />
