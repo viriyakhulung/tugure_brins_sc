@@ -266,6 +266,54 @@ export default function Reconciliation() {
         }
         updates.status = 'READY_TO_CLOSE';
       } else if (reconAction === 'CLOSE') {
+        // CRITICAL: Sync with Invoice, Debtor, and Nota
+        const relatedInvoices = await base44.entities.Invoice.filter({ 
+          contract_id: selectedRecon.contract_id 
+        });
+
+        for (const invoice of relatedInvoices) {
+          if (invoice.status !== 'PAID') {
+            // Update Invoice to PAID
+            await base44.entities.Invoice.update(invoice.id, {
+              paid_amount: invoice.total_amount,
+              outstanding_amount: 0,
+              status: 'PAID'
+            });
+
+            // Update Debtors to PAID and CLOSED
+            const relatedDebtors = await base44.entities.Debtor.filter({ 
+              invoice_no: invoice.invoice_number 
+            });
+            
+            for (const debtor of relatedDebtors) {
+              await base44.entities.Debtor.update(debtor.id, {
+                invoice_status: 'PAID',
+                payment_received_amount: debtor.invoice_amount || debtor.net_premium || 0,
+                recon_status: 'CLOSED'
+              });
+            }
+
+            // Update related Nota to Paid
+            const batchIds = [...new Set(relatedDebtors.map(d => d.batch_id).filter(Boolean))];
+            for (const batchId of batchIds) {
+              const notas = await base44.entities.Nota.filter({ 
+                reference_id: batchId,
+                nota_type: 'Batch'
+              });
+              
+              for (const nota of notas) {
+                if (nota.status !== 'Paid') {
+                  await base44.entities.Nota.update(nota.id, {
+                    status: 'Paid',
+                    paid_date: new Date().toISOString().split('T')[0],
+                    payment_reference: `Reconciliation Closed - ${selectedRecon.recon_id}`
+                  });
+                }
+              }
+            }
+          }
+        }
+
         updates.status = 'CLOSED';
         updates.closed_by = user?.email;
         updates.closed_date = new Date().toISOString().split('T')[0];
@@ -275,35 +323,15 @@ export default function Reconciliation() {
 
       await base44.entities.Reconciliation.update(selectedRecon.id, updates);
 
-      // Update related debtors if closing
-      if (reconAction === 'CLOSE') {
-        const relatedDebtors = await base44.entities.Debtor.filter({ 
-          contract_id: selectedRecon.contract_id,
-          recon_status: 'IN_PROGRESS'
-        });
-        for (const debtor of relatedDebtors.slice(0, 50)) {
-          await base44.entities.Debtor.update(debtor.id, {
-            recon_status: 'CLOSED'
-          });
-        }
-
-        // CRITICAL: Update related Nota to Paid if not already
-        const batchIds = [...new Set(relatedDebtors.map(d => d.batch_id))];
-        for (const batchId of batchIds) {
-          const notas = await base44.entities.Nota.filter({ 
-            reference_id: batchId,
-            nota_type: 'Batch'
-          });
-          for (const nota of notas) {
-            if (nota.status !== 'Paid') {
-              await base44.entities.Nota.update(nota.id, {
-                status: 'Paid',
-                paid_date: new Date().toISOString().split('T')[0]
-              });
-            }
-          }
-        }
-      }
+      // Notification
+      await base44.entities.Notification.create({
+        title: `Reconciliation ${reconAction.replace('_', ' ')}`,
+        message: `Recon ${selectedRecon.recon_id} moved to ${updates.status}`,
+        type: reconAction === 'CLOSE' ? 'INFO' : 'ACTION_REQUIRED',
+        module: 'RECONCILIATION',
+        reference_id: selectedRecon.recon_id,
+        target_role: 'ALL'
+      });
 
       // Audit log
       await base44.entities.AuditLog.create({
@@ -316,7 +344,7 @@ export default function Reconciliation() {
         reason: reconRemarks
       });
 
-      setSuccessMessage(`Reconciliation ${reconAction.toLowerCase().replace('_', ' ')} successfully`);
+      setSuccessMessage(`Reconciliation ${reconAction.toLowerCase().replace(/_/g, ' ')} successfully`);
       setShowReconActionDialog(false);
       setSelectedRecon(null);
       setReconAction('');
