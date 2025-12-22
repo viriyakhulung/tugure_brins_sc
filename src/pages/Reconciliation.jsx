@@ -797,46 +797,168 @@ export default function Reconciliation() {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="payments">
-            <FileText className="w-4 h-4 mr-2" />
-            Payments ({regularPayments.length})
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="monitor">
+            <Clock className="w-4 h-4 mr-2" />
+            Monitor Status
           </TabsTrigger>
-          <TabsTrigger value="reconciliations">
-            <Scale className="w-4 h-4 mr-2" />
-            Reconciliations ({reconciliations.length})
+          <TabsTrigger value="matching">
+            <Link className="w-4 h-4 mr-2" />
+            Payment Matching
           </TabsTrigger>
           <TabsTrigger value="exceptions">
             <AlertTriangle className="w-4 h-4 mr-2" />
-            Exceptions ({exceptionPayments.length})
+            Review Exceptions
+          </TabsTrigger>
+          <TabsTrigger value="identify">
+            <Split className="w-4 h-4 mr-2" />
+            Identify Differences
+          </TabsTrigger>
+          <TabsTrigger value="close">
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            Close Recon
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="payments" className="mt-4">
-          <DataTable
-            columns={paymentColumns}
-            data={regularPayments}
-            isLoading={loading}
-            emptyMessage="No regular payments"
-          />
+        {/* Task 1: Monitor Status Pembayaran Premi */}
+        <TabsContent value="monitor" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Monitor Status Pembayaran Premi
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Overview semua payment yang masuk dan statusnya (RECEIVED, MATCHED, UNMATCHED)
+              </p>
+              <DataTable
+                columns={[
+                  { header: 'Payment Ref', accessorKey: 'payment_ref' },
+                  { header: 'Invoice', accessorKey: 'invoice_id' },
+                  { header: 'Payment Date', accessorKey: 'payment_date' },
+                  { header: 'Amount', cell: (row) => `IDR ${(row.amount || 0).toLocaleString()}` },
+                  { header: 'Status', cell: (row) => <StatusBadge status={row.match_status} /> },
+                  { 
+                    header: 'Exception', 
+                    cell: (row) => row.exception_type !== 'NONE' ? <StatusBadge status={row.exception_type} /> : '-'
+                  },
+                  {
+                    header: 'Actions',
+                    cell: (row) => (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedPayment(row);
+                          setShowViewPaymentDialog(true);
+                        }}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        View
+                      </Button>
+                    )
+                  }
+                ]}
+                data={payments}
+                isLoading={loading}
+                emptyMessage="No payments to monitor"
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="reconciliations" className="mt-4">
-          <DataTable
-            columns={reconColumns}
-            data={reconciliations}
-            isLoading={loading}
-            emptyMessage="No reconciliations"
-          />
+        {/* Task 2: Payment Reconciliation (Matching) */}
+        <TabsContent value="matching" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link className="w-5 h-5" />
+                Payment Reconciliation - Match Payments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Match pembayaran yang RECEIVED dengan Payment Intent yang sudah disetujui
+              </p>
+              <DataTable
+                columns={paymentColumns}
+                data={regularPayments}
+                isLoading={loading}
+                emptyMessage="No payments to match"
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
+        {/* Task 3: Review Exception Pembayaran */}
         <TabsContent value="exceptions" className="mt-4">
-          <DataTable
-            columns={exceptionColumns}
-            data={exceptionPayments}
-            isLoading={loading}
-            emptyMessage="No exceptions - all payments in good standing"
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-orange-600" />
+                Review Exception Pembayaran
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Handle pembayaran dengan exception (PARTIAL, OVER, UNDER, LATE, FX) - Match atau Clear
+              </p>
+              <DataTable
+                columns={exceptionColumns}
+                data={exceptionPayments}
+                isLoading={loading}
+                emptyMessage="No exceptions - all good"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Task 4: Identifikasi Selisih Pembayaran */}
+        <TabsContent value="identify" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Split className="w-5 h-5" />
+                Identifikasi Selisih Pembayaran
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Review reconciliation dengan status IN_PROGRESS atau EXCEPTION - identifikasi selisih antara invoice vs payment
+              </p>
+              <DataTable
+                columns={reconColumns}
+                data={reconciliations.filter(r => r.status === 'IN_PROGRESS' || r.status === 'EXCEPTION')}
+                isLoading={loading}
+                emptyMessage="No differences to identify"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Task 5: Close Reconciliation Premi */}
+        <TabsContent value="close" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                Close Reconciliation Premi
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Final approval dan close reconciliation yang READY_TO_CLOSE (selisih ≤ IDR 100K)
+              </p>
+              <DataTable
+                columns={reconColumns}
+                data={reconciliations.filter(r => r.status === 'READY_TO_CLOSE' || r.status === 'CLOSED')}
+                isLoading={loading}
+                emptyMessage="No reconciliations ready to close"
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
