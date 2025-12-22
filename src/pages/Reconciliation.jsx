@@ -405,11 +405,18 @@ export default function Reconciliation() {
     setProcessing(false);
   };
 
-  // Stats
+  // Stats - CLEAR SEPARATION
   const totalReceived = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
   const matchedAmount = payments.filter(p => p.match_status === 'MATCHED').reduce((sum, p) => sum + (p.amount || 0), 0);
-  const unmatchedPayments = payments.filter(p => p.match_status === 'UNMATCHED' && p.exception_type !== 'NONE');
-  const receivedPayments = payments.filter(p => p.match_status === 'RECEIVED' || (p.match_status === 'UNMATCHED' && p.exception_type === 'NONE'));
+  
+  // Exceptions: UNMATCHED + exception_type set
+  const exceptionPayments = payments.filter(p => p.match_status === 'UNMATCHED' && p.exception_type !== 'NONE');
+  
+  // Regular Payments: RECEIVED or MATCHED only (exclude exceptions)
+  const regularPayments = payments.filter(p => 
+    (p.match_status === 'RECEIVED') || 
+    (p.match_status === 'MATCHED')
+  );
 
   const togglePaymentSelection = (paymentId) => {
     if (selectedPayments.includes(paymentId)) {
@@ -431,10 +438,10 @@ export default function Reconciliation() {
     {
       header: (
         <Checkbox
-          checked={selectedPayments.length === unmatchedPayments.length && unmatchedPayments.length > 0}
+          checked={selectedPayments.length === exceptionPayments.length && exceptionPayments.length > 0}
           onCheckedChange={(checked) => {
             if (checked) {
-              setSelectedPayments(unmatchedPayments.map(p => p.id));
+              setSelectedPayments(exceptionPayments.map(p => p.id));
             } else {
               setSelectedPayments([]);
             }
@@ -501,10 +508,10 @@ export default function Reconciliation() {
     {
       header: (
         <Checkbox
-          checked={selectedPayments.length === payments.length && payments.length > 0}
+          checked={selectedPayments.length === regularPayments.length && regularPayments.length > 0}
           onCheckedChange={(checked) => {
             if (checked) {
-              setSelectedPayments(payments.map(p => p.id));
+              setSelectedPayments(regularPayments.map(p => p.id));
             } else {
               setSelectedPayments([]);
             }
@@ -715,7 +722,7 @@ export default function Reconciliation() {
               variant="outline"
               className="bg-green-600 hover:bg-green-700 text-white"
               onClick={() => {
-                let data = activeTab === 'payments' ? payments : activeTab === 'reconciliations' ? reconciliations : unmatchedPayments;
+                let data = activeTab === 'payments' ? regularPayments : activeTab === 'reconciliations' ? reconciliations : exceptionPayments;
                 let headers = [];
                 let rows = [];
                 if (activeTab === 'payments' || activeTab === 'exceptions') {
@@ -779,9 +786,9 @@ export default function Reconciliation() {
           className="from-green-500 to-green-600"
         />
         <StatCard
-          title="Unmatched"
-          value={unmatchedPayments.length}
-          subtitle="Payments pending"
+          title="Exceptions"
+          value={exceptionPayments.length}
+          subtitle="Require attention"
           icon={AlertTriangle}
           gradient
           className="from-orange-500 to-orange-600"
@@ -806,7 +813,7 @@ export default function Reconciliation() {
         <TabsList>
           <TabsTrigger value="payments">
             <FileText className="w-4 h-4 mr-2" />
-            Payments ({payments.length})
+            Payments ({regularPayments.length})
           </TabsTrigger>
           <TabsTrigger value="reconciliations">
             <Scale className="w-4 h-4 mr-2" />
@@ -814,16 +821,21 @@ export default function Reconciliation() {
           </TabsTrigger>
           <TabsTrigger value="exceptions">
             <AlertTriangle className="w-4 h-4 mr-2" />
-            Exceptions ({unmatchedPayments.length})
+            Exceptions ({exceptionPayments.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payments" className="mt-4">
+          <Alert className="mb-4 bg-blue-50 border-blue-200">
+            <AlertDescription className="text-blue-700">
+              Regular payments (RECEIVED & MATCHED). Mark as exception to move to Exceptions tab.
+            </AlertDescription>
+          </Alert>
           <DataTable
             columns={paymentColumns}
-            data={payments}
+            data={regularPayments}
             isLoading={loading}
-            emptyMessage="No payments recorded"
+            emptyMessage="No regular payments"
           />
         </TabsContent>
 
@@ -837,11 +849,17 @@ export default function Reconciliation() {
         </TabsContent>
 
         <TabsContent value="exceptions" className="mt-4">
+          <Alert className="mb-4 bg-orange-50 border-orange-200">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-700">
+              Payments marked as exceptions (UNMATCHED with exception type). Match or clear exception to resolve.
+            </AlertDescription>
+          </Alert>
           <DataTable
             columns={exceptionColumns}
-            data={unmatchedPayments}
+            data={exceptionPayments}
             isLoading={loading}
-            emptyMessage="No exceptions - all payments matched or in good standing"
+            emptyMessage="No exceptions - all payments in good standing"
           />
         </TabsContent>
       </Tabs>
