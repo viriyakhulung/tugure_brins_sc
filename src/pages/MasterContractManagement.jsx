@@ -7,10 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  FileText, Upload, Plus, RefreshCw, CheckCircle2, 
-  XCircle, Eye, Clock, Download, History, AlertCircle
+  FileText, Upload, RefreshCw, CheckCircle2, 
+  Eye, Clock, Download, History, AlertCircle, XCircle
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
@@ -26,6 +25,8 @@ export default function MasterContractManagement() {
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
+  const [uploadMode, setUploadMode] = useState('new'); // 'new' or 'revise'
+  const [selectedContractForRevision, setSelectedContractForRevision] = useState('');
   const [actionType, setActionType] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [filters, setFilters] = useState({
@@ -39,18 +40,6 @@ export default function MasterContractManagement() {
   const [selectedContract, setSelectedContract] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const [formData, setFormData] = useState({
-    contract_id: '',
-    policy_number: '',
-    product_type: 'Treaty',
-    credit_type: 'Individual',
-    coverage_start_date: '',
-    coverage_end_date: '',
-    coverage_limit: 0,
-    reinsurance_share: 0,
-    effective_date: '',
-    remarks: ''
-  });
   const [approvalAction, setApprovalAction] = useState('');
   const [approvalRemarks, setApprovalRemarks] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
@@ -85,30 +74,110 @@ export default function MasterContractManagement() {
     setLoading(false);
   };
 
-  const handleCreateContract = async () => {
+  const handleUploadExcel = async () => {
+    if (!uploadFile) return;
+    
+    if (uploadMode === 'revise' && !selectedContractForRevision) {
+      setErrorMessage('Please select a contract to revise');
+      return;
+    }
+
     setProcessing(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    let uploaded = 0;
+    let errors = [];
+    
     try {
-      await base44.entities.MasterContract.create({
-        ...formData,
-        effective_status: 'Draft',
-        version: 1
-      });
+      const text = await uploadFile.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        setErrorMessage('File is empty or invalid format');
+        setProcessing(false);
+        return;
+      }
+      
+      const headers = lines[0].split(',');
 
-      await base44.entities.AuditLog.create({
-        action: 'CREATE_MASTER_CONTRACT',
-        module: 'CONFIG',
-        entity_type: 'MasterContract',
-        entity_id: formData.contract_id,
-        user_email: user?.email,
-        user_role: user?.role
-      });
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const values = lines[i].split(',');
+          if (values.length !== headers.length) {
+            errors.push(`Row ${i + 1}: Column count mismatch`);
+            continue;
+          }
 
-      setSuccessMessage('Master Contract created successfully');
-      setShowFormDialog(false);
-      resetForm();
+          const contractId = values[0]?.trim();
+          const policyNumber = values[1]?.trim();
+          
+          if (!contractId || !policyNumber) {
+            errors.push(`Row ${i + 1}: Missing contract_id or policy_number`);
+            continue;
+          }
+
+          let latestVersion = 0;
+          let parentId = null;
+          
+          if (uploadMode === 'revise') {
+            // Revise specific contract
+            const existingContracts = await base44.entities.MasterContract.filter({ contract_id: selectedContractForRevision });
+            if (existingContracts.length > 0) {
+              latestVersion = Math.max(...existingContracts.map(c => c.version || 1));
+              const latestContract = existingContracts.find(c => c.version === latestVersion);
+              parentId = latestContract.id;
+              
+              // Archive old version
+              await base44.entities.MasterContract.update(parentId, {
+                effective_status: 'Archived'
+              });
+            }
+          } else {
+            // New contract mode - check if contract_id exists
+            const existingContracts = await base44.entities.MasterContract.filter({ contract_id: contractId });
+            if (existingContracts.length > 0) {
+              errors.push(`Row ${i + 1}: Contract ID ${contractId} already exists. Use revise mode to update.`);
+              continue;
+            }
+          }
+
+          await base44.entities.MasterContract.create({
+            contract_id: uploadMode === 'revise' ? selectedContractForRevision : contractId,
+            policy_number: policyNumber,
+            product_type: values[2]?.trim() || 'Treaty',
+            credit_type: values[3]?.trim() || 'Individual',
+            coverage_start_date: values[4]?.trim(),
+            coverage_end_date: values[5]?.trim(),
+            coverage_limit: parseFloat(values[6]) || 0,
+            reinsurance_share: parseFloat(values[7]) || 0,
+            effective_status: 'Draft',
+            version: latestVersion + 1,
+            parent_contract_id: parentId,
+            effective_date: values[4]?.trim(),
+            remarks: values[8]?.trim() || ''
+          });
+          
+          uploaded++;
+        } catch (rowError) {
+          errors.push(`Row ${i + 1}: ${rowError.message}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        setErrorMessage(`Uploaded ${uploaded} contracts. ${errors.length} errors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`);
+      } else {
+        setSuccessMessage(`Successfully uploaded ${uploaded} contract${uploaded > 1 ? 's' : ''}`);
+      }
+      
+      setShowUploadDialog(false);
+      setUploadFile(null);
+      setUploadMode('new');
+      setSelectedContractForRevision('');
       loadData();
     } catch (error) {
-      console.error('Create error:', error);
+      console.error('Upload error:', error);
+      setErrorMessage(`Upload failed: ${error.message}`);
     }
     setProcessing(false);
   };
@@ -156,162 +225,31 @@ export default function MasterContractManagement() {
     setProcessing(false);
   };
 
-  const handleCreateVersion = async () => {
-    if (!selectedContract) return;
-
-    setProcessing(true);
-    try {
-      const newVersion = {
-        ...formData,
-        version: (selectedContract.version || 1) + 1,
-        parent_contract_id: selectedContract.id,
-        effective_status: 'Draft'
-      };
-
-      await base44.entities.MasterContract.create(newVersion);
-
-      // Archive old version
-      await base44.entities.MasterContract.update(selectedContract.id, {
-        effective_status: 'Archived'
-      });
-
-      await base44.entities.AuditLog.create({
-        action: 'CREATE_CONTRACT_VERSION',
-        module: 'CONFIG',
-        entity_type: 'MasterContract',
-        entity_id: selectedContract.id,
-        user_email: user?.email,
-        user_role: user?.role
-      });
-
-      setSuccessMessage('New contract version created successfully');
-      setShowVersionDialog(false);
-      setSelectedContract(null);
-      resetForm();
-      loadData();
-    } catch (error) {
-      console.error('Version error:', error);
-    }
-    setProcessing(false);
-  };
-
-  const handleUploadExcel = async () => {
-    if (!uploadFile) return;
-
-    setProcessing(true);
-    setErrorMessage('');
-    setSuccessMessage('');
-    
-    let uploaded = 0;
-    let errors = [];
-    
-    try {
-      const text = await uploadFile.text();
-      const lines = text.split('\n').filter(line => line.trim());
-      
-      if (lines.length < 2) {
-        setErrorMessage('File is empty or invalid format');
-        setProcessing(false);
-        return;
-      }
-      
-      const headers = lines[0].split(',');
-
-      for (let i = 1; i < lines.length; i++) {
-        try {
-          const values = lines[i].split(',');
-          if (values.length !== headers.length) {
-            errors.push(`Row ${i + 1}: Column count mismatch`);
-            continue;
-          }
-
-          const contractId = values[0]?.trim();
-          const policyNumber = values[1]?.trim();
-          
-          if (!contractId || !policyNumber) {
-            errors.push(`Row ${i + 1}: Missing contract_id or policy_number`);
-            continue;
-          }
-
-          // Check for existing contract with same contract_id
-          const existingContracts = await base44.entities.MasterContract.filter({ contract_id: contractId });
-          const latestVersion = existingContracts.length > 0 
-            ? Math.max(...existingContracts.map(c => c.version || 1))
-            : 0;
-          
-          // If existing, create new version and archive old
-          if (existingContracts.length > 0 && latestVersion > 0) {
-            // Archive previous version
-            await base44.entities.MasterContract.update(existingContracts[existingContracts.length - 1].id, {
-              effective_status: 'Archived'
-            });
-          }
-
-          await base44.entities.MasterContract.create({
-            contract_id: contractId,
-            policy_number: policyNumber,
-            product_type: values[2]?.trim() || 'Treaty',
-            credit_type: values[3]?.trim() || 'Individual',
-            coverage_start_date: values[4]?.trim(),
-            coverage_end_date: values[5]?.trim(),
-            coverage_limit: parseFloat(values[6]) || 0,
-            reinsurance_share: parseFloat(values[7]) || 0,
-            effective_status: 'Draft',
-            version: latestVersion + 1,
-            parent_contract_id: existingContracts.length > 0 ? existingContracts[existingContracts.length - 1].id : null,
-            effective_date: values[4]?.trim(),
-            remarks: values[8]?.trim() || ''
-          });
-          
-          uploaded++;
-        } catch (rowError) {
-          errors.push(`Row ${i + 1}: ${rowError.message}`);
-        }
-      }
-
-      if (errors.length > 0) {
-        setErrorMessage(`Uploaded ${uploaded} contracts. ${errors.length} errors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`);
-      } else {
-        setSuccessMessage(`Successfully uploaded ${uploaded} contracts`);
-      }
-      
-      setShowUploadDialog(false);
-      setUploadFile(null);
-      loadData();
-    } catch (error) {
-      console.error('Upload error:', error);
-      setErrorMessage(`Upload failed: ${error.message}`);
-    }
-    setProcessing(false);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      contract_id: '',
-      policy_number: '',
-      product_type: 'Treaty',
-      credit_type: 'Individual',
-      coverage_start_date: '',
-      coverage_end_date: '',
-      coverage_limit: 0,
-      reinsurance_share: 0,
-      effective_date: '',
-      remarks: ''
-    });
-  };
-
   const getVersionHistory = (contractId) => {
     return contracts.filter(c => 
       c.contract_id === contractId || c.parent_contract_id === contractId
     ).sort((a, b) => (b.version || 1) - (a.version || 1));
   };
 
+  const activeContracts = contracts.filter(c => c.effective_status === 'Active');
+  const uniqueContractIds = [...new Set(contracts.map(c => c.contract_id))];
+
   const stats = {
     total: contracts.length,
-    active: contracts.filter(c => c.effective_status === 'Active').length,
+    active: activeContracts.length,
     pending: contracts.filter(c => c.effective_status?.includes('Pending')).length,
     draft: contracts.filter(c => c.effective_status === 'Draft').length
   };
+
+  const filteredContracts = contracts.filter(c => {
+    if (filters.status !== 'all' && c.effective_status !== filters.status) return false;
+    if (filters.contractId && !c.contract_id.includes(filters.contractId)) return false;
+    if (filters.productType !== 'all' && c.product_type !== filters.productType) return false;
+    if (filters.creditType !== 'all' && c.credit_type !== filters.creditType) return false;
+    if (filters.startDate && c.coverage_start_date < filters.startDate) return false;
+    if (filters.endDate && c.coverage_end_date > filters.endDate) return false;
+    return true;
+  });
 
   const columns = [
     { 
@@ -394,13 +332,28 @@ export default function MasterContractManagement() {
             <Button
               size="sm"
               variant="outline"
+              className="text-orange-600 hover:text-orange-700"
               onClick={() => {
                 setSelectedContract(row);
-                setFormData({ ...row });
-                setShowVersionDialog(true);
+                setActionType('close');
+                setShowActionDialog(true);
               }}
             >
-              New Version
+              Close
+            </Button>
+          )}
+          
+          {row.effective_status === 'Draft' && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                setSelectedContract(row);
+                setActionType('invalidate');
+                setShowActionDialog(true);
+              }}
+            >
+              Invalidate
             </Button>
           )}
         </div>
@@ -425,9 +378,8 @@ export default function MasterContractManagement() {
             </Button>
             <Button variant="outline" onClick={() => {
               const csv = [
-                ['contract_id', 'policy_number', 'product_type', 'credit_type', 'coverage_start_date', 'coverage_end_date', 'coverage_limit', 'reinsurance_share', 'effective_date', 'remarks'].join(','),
-                ['MC-2025-001', 'POL-12345', 'Treaty', 'Individual', '2025-01-01', '2025-12-31', '1000000000', '75', '2025-01-01', 'Sample contract'].join(','),
-                ['MC-2025-002', 'POL-12346', 'Facultative', 'Corporate', '2025-01-01', '2025-12-31', '5000000000', '80', '2025-01-01', 'Sample corporate'].join(',')
+                ['contract_id', 'policy_number', 'product_type', 'credit_type', 'coverage_start_date', 'coverage_end_date', 'coverage_limit', 'reinsurance_share', 'remarks'].join(','),
+                ['MC-2025-001', 'POL-12345', 'Treaty', 'Individual', '2025-01-01', '2025-12-31', '1000000000', '75', 'Sample contract'].join(',')
               ].join('\n');
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
@@ -439,11 +391,10 @@ export default function MasterContractManagement() {
               <Download className="w-4 h-4 mr-2" />
               Download Template
             </Button>
-            <Button onClick={() => setShowUploadDialog(true)}>
+            <Button onClick={() => setShowUploadDialog(true)} className="bg-blue-600">
               <Upload className="w-4 h-4 mr-2" />
               Upload Excel
             </Button>
-
           </div>
         }
       />
@@ -455,19 +406,19 @@ export default function MasterContractManagement() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Contracts" value={stats.total} icon={FileText} />
-        <StatCard title="Active" value={stats.active} icon={CheckCircle2} className="text-green-600" />
-        <StatCard title="Pending Approval" value={stats.pending} icon={Clock} className="text-orange-600" />
-        <StatCard title="Draft" value={stats.draft} icon={FileText} className="text-gray-600" />
-      </div>
-
       {errorMessage && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="whitespace-pre-wrap">{errorMessage}</AlertDescription>
         </Alert>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard title="Total Contracts" value={stats.total} icon={FileText} />
+        <StatCard title="Active" value={stats.active} icon={CheckCircle2} className="text-green-600" />
+        <StatCard title="Pending Approval" value={stats.pending} icon={Clock} className="text-orange-600" />
+        <StatCard title="Draft" value={stats.draft} icon={FileText} className="text-gray-600" />
+      </div>
 
       {/* Filters */}
       <Card>
@@ -534,6 +485,7 @@ export default function MasterContractManagement() {
         </CardContent>
       </Card>
 
+      {/* Main Table with Version Column */}
       <Card>
         <CardHeader>
           <CardTitle>Master Contracts</CardTitle>
@@ -541,93 +493,14 @@ export default function MasterContractManagement() {
         <CardContent>
           <DataTable
             columns={columns}
-            data={contracts.filter(c => {
-              if (filters.status !== 'all' && c.effective_status !== filters.status) return false;
-              if (filters.contractId && !c.contract_id.includes(filters.contractId)) return false;
-              if (filters.productType !== 'all' && c.product_type !== filters.productType) return false;
-              if (filters.creditType !== 'all' && c.credit_type !== filters.creditType) return false;
-              if (filters.startDate && c.coverage_start_date < filters.startDate) return false;
-              if (filters.endDate && c.coverage_end_date > filters.endDate) return false;
-              return true;
-            })}
+            data={filteredContracts}
             isLoading={loading}
             emptyMessage="No master contracts found"
           />
         </CardContent>
       </Card>
 
-      {/* Contract Versioning Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contract Versioning History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            columns={[
-              { header: 'Contract ID', accessorKey: 'contract_id' },
-              { header: 'Policy Number', accessorKey: 'policy_number' },
-              { header: 'Version', cell: (row) => <Badge>v{row.version}</Badge> },
-              { header: 'Product Type', accessorKey: 'product_type' },
-              { header: 'Credit Type', accessorKey: 'credit_type' },
-              { header: 'Status', cell: (row) => <StatusBadge status={row.effective_status} /> },
-              { header: 'Effective Date', accessorKey: 'effective_date' },
-              { header: 'Coverage End', accessorKey: 'coverage_end_date' },
-              { 
-                header: 'Actions', 
-                cell: (row) => (
-                  <div className="flex gap-1">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        setSelectedContract(row);
-                        setShowVersionDialog(true);
-                      }}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    {(row.effective_status === 'Active' || row.effective_status === 'Inactive') && (
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        className="text-orange-600 hover:text-orange-700"
-                        onClick={() => {
-                          setSelectedContract(row);
-                          setActionType('close');
-                          setShowActionDialog(true);
-                        }}
-                      >
-                        Close
-                      </Button>
-                    )}
-                    {row.effective_status === 'Draft' && (
-                      <Button 
-                        size="sm" 
-                        variant="destructive"
-                        onClick={() => {
-                          setSelectedContract(row);
-                          setActionType('invalidate');
-                          setShowActionDialog(true);
-                        }}
-                      >
-                        Invalidate
-                      </Button>
-                    )}
-                  </div>
-                )
-              }
-            ]}
-            data={contracts.sort((a, b) => {
-              if (a.contract_id !== b.contract_id) return a.contract_id.localeCompare(b.contract_id);
-              return (b.version || 1) - (a.version || 1);
-            })}
-            isLoading={loading}
-            emptyMessage="No contract versions found"
-          />
-        </CardContent>
-      </Card>
-
-      {/* Contract Action Dialog */}
+      {/* Contract Action Dialog (Close/Invalidate) */}
       <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
         <DialogContent>
           <DialogHeader>
@@ -690,6 +563,7 @@ export default function MasterContractManagement() {
                   loadData();
                 } catch (error) {
                   console.error('Action error:', error);
+                  setErrorMessage('Failed to process action');
                 }
                 setProcessing(false);
               }}
@@ -704,120 +578,81 @@ export default function MasterContractManagement() {
 
       {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Create New Master Contract</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div>
-              <label className="text-sm font-medium">Contract ID *</label>
-              <Input
-                value={formData.contract_id}
-                onChange={(e) => setFormData({...formData, contract_id: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Policy Number *</label>
-              <Input
-                value={formData.policy_number}
-                onChange={(e) => setFormData({...formData, policy_number: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Product Type *</label>
-              <Select value={formData.product_type} onValueChange={(val) => setFormData({...formData, product_type: val})}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Treaty">Treaty</SelectItem>
-                  <SelectItem value="Facultative">Facultative</SelectItem>
-                  <SelectItem value="Retro">Retro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Credit Type *</label>
-              <Select value={formData.credit_type} onValueChange={(val) => setFormData({...formData, credit_type: val})}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Individual">Individual</SelectItem>
-                  <SelectItem value="Corporate">Corporate</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Coverage Start Date *</label>
-              <Input
-                type="date"
-                value={formData.coverage_start_date}
-                onChange={(e) => setFormData({...formData, coverage_start_date: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Coverage End Date *</label>
-              <Input
-                type="date"
-                value={formData.coverage_end_date}
-                onChange={(e) => setFormData({...formData, coverage_end_date: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Coverage Limit (IDR) *</label>
-              <Input
-                type="number"
-                value={formData.coverage_limit}
-                onChange={(e) => setFormData({...formData, coverage_limit: parseFloat(e.target.value) || 0})}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Reinsurance Share (%) *</label>
-              <Input
-                type="number"
-                value={formData.reinsurance_share}
-                onChange={(e) => setFormData({...formData, reinsurance_share: parseFloat(e.target.value) || 0})}
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="text-sm font-medium">Remarks</label>
-              <Textarea
-                value={formData.remarks}
-                onChange={(e) => setFormData({...formData, remarks: e.target.value})}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowFormDialog(false)}>Cancel</Button>
-            <Button onClick={handleCreateContract} disabled={processing}>
-              Create Contract
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Upload Dialog */}
-      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Upload Master Contracts (Excel)</DialogTitle>
+            <DialogTitle>Upload Master Contracts</DialogTitle>
+            <DialogDescription>Upload or revise contracts via Excel/CSV</DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={(e) => setUploadFile(e.target.files[0])}
-              className="w-full"
-            />
-            <p className="text-sm text-gray-500 mt-2">
-              Upload Excel file with contract data
-            </p>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium">Upload Mode</label>
+              <Select value={uploadMode} onValueChange={setUploadMode}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">Create New Contracts</SelectItem>
+                  <SelectItem value="revise">Revise Existing Contract</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {uploadMode === 'revise' && (
+              <div>
+                <label className="text-sm font-medium">Select Contract to Revise</label>
+                <Select value={selectedContractForRevision} onValueChange={setSelectedContractForRevision}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select contract" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueContractIds.map(cid => {
+                      const latest = contracts.filter(c => c.contract_id === cid).sort((a,b) => (b.version || 1) - (a.version || 1))[0];
+                      return (
+                        <SelectItem key={cid} value={cid}>
+                          {cid} - v{latest.version || 1} ({latest.effective_status})
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {selectedContractForRevision && (
+                  <Alert className="mt-2 bg-blue-50 border-blue-200">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-700">
+                      Will create new version and archive previous
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm font-medium">Upload File</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => setUploadFile(e.target.files[0])}
+                className="w-full mt-1 text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Excel or CSV format
+              </p>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowUploadDialog(false)}>Cancel</Button>
-            <Button onClick={handleUploadExcel} disabled={processing || !uploadFile}>
-              Upload
+            <Button variant="outline" onClick={() => {
+              setShowUploadDialog(false);
+              setUploadMode('new');
+              setSelectedContractForRevision('');
+              setUploadFile(null);
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUploadExcel} 
+              disabled={processing || !uploadFile || (uploadMode === 'revise' && !selectedContractForRevision)}
+            >
+              {processing ? 'Uploading...' : 'Upload'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -851,6 +686,7 @@ export default function MasterContractManagement() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Contract Version History</DialogTitle>
+            <DialogDescription>{selectedContract?.contract_id}</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             {selectedContract && (
@@ -859,13 +695,19 @@ export default function MasterContractManagement() {
                   <Card key={idx}>
                     <CardContent className="pt-4">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <Badge>Version {version.version || 1}</Badge>
-                          <p className="text-sm mt-2"><strong>Status:</strong> {version.effective_status}</p>
-                          <p className="text-sm"><strong>Effective Date:</strong> {version.effective_date || 'N/A'}</p>
-                          <p className="text-sm"><strong>Coverage:</strong> {version.coverage_start_date} to {version.coverage_end_date}</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Badge>Version {version.version || 1}</Badge>
+                            <StatusBadge status={version.effective_status} />
+                          </div>
+                          <div className="text-sm space-y-1">
+                            <p><strong>Policy:</strong> {version.policy_number}</p>
+                            <p><strong>Coverage:</strong> {version.coverage_start_date} to {version.coverage_end_date}</p>
+                            <p><strong>Limit:</strong> IDR {((version.coverage_limit || 0) / 1000000).toFixed(1)}M</p>
+                            <p><strong>Share:</strong> {version.reinsurance_share}%</p>
+                            {version.remarks && <p><strong>Remarks:</strong> {version.remarks}</p>}
+                          </div>
                         </div>
-                        <StatusBadge status={version.effective_status} />
                       </div>
                     </CardContent>
                   </Card>

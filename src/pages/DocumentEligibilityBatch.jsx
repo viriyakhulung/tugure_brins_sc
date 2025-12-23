@@ -5,51 +5,30 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { 
-  FileText, Upload, Download, RefreshCw, Eye, Folder, File,
-  CheckCircle2, AlertCircle, Clock, Check, X, Plus
+  Upload, RefreshCw, Eye, Folder, File,
+  CheckCircle2, AlertCircle, Plus, Download
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import StatusBadge from "@/components/ui/StatusBadge";
 
-const DEBTOR_DOCUMENT_TYPES_INDIVIDUAL = [
-  'KTP',
-  'NPWP',
-  'Perjanjian Kredit',
-  'Jadwal Angsuran',
-  'Bukti Pencairan'
-];
-
-const DEBTOR_DOCUMENT_TYPES_CORPORATE = [
-  'NPWP Perusahaan',
-  'Akta Pendirian',
-  'SK Kemenkumham',
-  'KTP Direktur',
-  'Perjanjian Kredit',
-  'Jadwal Angsuran',
-  'Bukti Pencairan',
-  'Laporan Keuangan'
-];
-
 export default function DocumentEligibilityBatch() {
   const [user, setUser] = useState(null);
   const [batches, setBatches] = useState([]);
+  const [debtors, setDebtors] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
-  const [showActionDialog, setShowActionDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
-  const [uploadFiles, setUploadFiles] = useState({});
+  const [uploadFiles, setUploadFiles] = useState([]);
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [batchAction, setBatchAction] = useState('');
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
@@ -78,13 +57,15 @@ export default function DocumentEligibilityBatch() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [batchData, docData, contractData] = await Promise.all([
+      const [batchData, debtorData, docData, contractData] = await Promise.all([
         base44.entities.Batch.list(),
+        base44.entities.Debtor.list(),
         base44.entities.Document.list(),
         base44.entities.MasterContract.list()
       ]);
       setBatches(batchData || []);
-      setDocuments((docData || []).filter(d => !d.claim_id)); // Only debtor documents
+      setDebtors(debtorData || []);
+      setDocuments((docData || []).filter(d => !d.claim_id));
       
       const activeContracts = contractData.filter(c => c.effective_status === 'Active');
       setContracts(activeContracts || []);
@@ -98,25 +79,8 @@ export default function DocumentEligibilityBatch() {
     return documents.filter(d => d.batch_id === batchId);
   };
 
-  const getRequiredDocs = (creditType) => {
-    return creditType === 'Corporate' 
-      ? DEBTOR_DOCUMENT_TYPES_CORPORATE 
-      : DEBTOR_DOCUMENT_TYPES_INDIVIDUAL;
-  };
-
-  const calculateDocProgress = (batch) => {
-    const requiredDocs = getRequiredDocs(batch.credit_type);
-    const batchDocs = getBatchDocuments(batch.batch_id);
-    const verifiedDocs = batchDocs.filter(d => d.status === 'VERIFIED');
-    return {
-      completed: verifiedDocs.length,
-      total: requiredDocs.length,
-      percentage: Math.round((verifiedDocs.length / requiredDocs.length) * 100)
-    };
-  };
-
   const handleBulkUpload = async () => {
-    if (!selectedBatch || Object.keys(uploadFiles).length === 0) {
+    if (!selectedBatch || uploadFiles.length === 0) {
       setErrorMessage('Please select files to upload');
       return;
     }
@@ -126,26 +90,22 @@ export default function DocumentEligibilityBatch() {
     try {
       const batch = batches.find(b => b.id === selectedBatch);
       
-      for (const [docType, file] of Object.entries(uploadFiles)) {
-        if (!file) continue;
-
-        // Upload file
+      for (const file of uploadFiles) {
         const { file_url } = await base44.integrations.Core.UploadFile({ file });
 
-        // Check existing versions
+        // Check existing versions for this file name
         const existingDocs = documents.filter(d => 
           d.batch_id === batch.batch_id && 
-          d.document_type === docType &&
+          d.document_name === file.name &&
           !d.claim_id
         );
         const latestVersion = existingDocs.length > 0 
           ? Math.max(...existingDocs.map(d => d.version || 1))
           : 0;
 
-        // Create new document version
         await base44.entities.Document.create({
           batch_id: batch.batch_id,
-          document_type: docType,
+          document_type: 'General Document',
           document_name: file.name,
           file_url: file_url,
           upload_date: new Date().toISOString().split('T')[0],
@@ -158,69 +118,23 @@ export default function DocumentEligibilityBatch() {
 
       await base44.entities.Notification.create({
         title: 'Batch Documents Uploaded',
-        message: `${Object.keys(uploadFiles).length} documents uploaded for batch ${batch.batch_id}`,
+        message: `${uploadFiles.length} documents uploaded for batch ${batch.batch_id}`,
         type: 'INFO',
         module: 'DOCUMENT',
         reference_id: batch.batch_id,
         target_role: 'TUGURE'
       });
 
-      setSuccessMessage('Documents uploaded successfully');
+      setSuccessMessage(`${uploadFiles.length} documents uploaded successfully`);
       setShowUploadDialog(false);
       setSelectedBatch(null);
-      setUploadFiles({});
+      setUploadFiles([]);
       loadData();
     } catch (error) {
       console.error('Upload error:', error);
       setErrorMessage('Failed to upload documents');
     }
     setProcessing(false);
-  };
-
-  const handleBatchAction = async () => {
-    if (!selectedBatch || !batchAction) return;
-
-    setProcessing(true);
-    try {
-      const batch = batches.find(b => b.id === selectedBatch);
-      const batchDocs = getBatchDocuments(batch.batch_id);
-      
-      const newStatus = batchAction === 'approve' ? 'VERIFIED' : 
-                       batchAction === 'waive' ? 'VERIFIED' :
-                       'REJECTED';
-
-      // Update all documents in batch
-      for (const doc of batchDocs) {
-        await base44.entities.Document.update(doc.id, {
-          status: newStatus,
-          remarks: batchAction === 'waive' ? 'Document requirement waived by TUGURE' : doc.remarks
-        });
-      }
-
-      await base44.entities.Notification.create({
-        title: `Batch Documents ${batchAction.toUpperCase()}`,
-        message: `All documents for batch ${batch.batch_id} ${batchAction}d`,
-        type: 'INFO',
-        module: 'DOCUMENT',
-        reference_id: batch.batch_id,
-        target_role: 'BRINS'
-      });
-
-      setSuccessMessage(`Batch documents ${batchAction}d successfully`);
-      setShowActionDialog(false);
-      setSelectedBatch(null);
-      loadData();
-    } catch (error) {
-      console.error('Action error:', error);
-    }
-    setProcessing(false);
-  };
-
-  const handleFileSelect = (docType, file) => {
-    setUploadFiles(prev => ({
-      ...prev,
-      [docType]: file
-    }));
   };
 
   const filteredBatches = batches.filter(b => {
@@ -244,17 +158,6 @@ export default function DocumentEligibilityBatch() {
     return true;
   });
 
-  const groupedDocuments = {};
-  documents.forEach(doc => {
-    if (!groupedDocuments[doc.batch_id]) {
-      groupedDocuments[doc.batch_id] = {};
-    }
-    if (!groupedDocuments[doc.batch_id][doc.document_type]) {
-      groupedDocuments[doc.batch_id][doc.document_type] = [];
-    }
-    groupedDocuments[doc.batch_id][doc.document_type].push(doc);
-  });
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -265,19 +168,10 @@ export default function DocumentEligibilityBatch() {
           { label: 'Document Eligibility' }
         ]}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={loadData}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
-            <Button 
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => setShowUploadDialog(true)}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Bulk Upload
-            </Button>
-          </div>
+          <Button variant="outline" onClick={loadData}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
         }
       />
 
@@ -332,9 +226,9 @@ export default function DocumentEligibilityBatch() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Versions</SelectItem>
-                <SelectItem value="1">Version 1</SelectItem>
-                <SelectItem value="2">Version 2</SelectItem>
-                <SelectItem value="3">Version 3</SelectItem>
+                <SelectItem value="1">v1</SelectItem>
+                <SelectItem value="2">v2</SelectItem>
+                <SelectItem value="3">v3</SelectItem>
               </SelectContent>
             </Select>
             <Input
@@ -359,9 +253,9 @@ export default function DocumentEligibilityBatch() {
       {/* File Manager View */}
       <div className="grid gap-4">
         {filteredBatches.map(batch => {
-          const progress = calculateDocProgress(batch);
-          const batchDocs = groupedDocuments[batch.batch_id] || {};
-          const requiredDocs = getRequiredDocs(batch.credit_type);
+          const batchDocs = getBatchDocuments(batch.batch_id);
+          const debtor = debtors.find(d => d.batch_id === batch.batch_id);
+          const docRemarks = debtor?.validation_remarks || '';
           
           return (
             <Card key={batch.id} className="hover:shadow-lg transition-shadow">
@@ -372,104 +266,65 @@ export default function DocumentEligibilityBatch() {
                     <div>
                       <CardTitle className="text-lg">{batch.batch_id}</CardTitle>
                       <p className="text-sm text-gray-500">
-                        {batch.batch_month}/{batch.batch_year} • {batch.total_records || 0} debtors • {batch.credit_type}
+                        {batch.batch_month}/{batch.batch_year} • {batch.total_records || 0} debtors • v{batch.version || 1}
                       </p>
+                      {docRemarks && (
+                        <p className="text-xs text-orange-600 mt-1">⚠️ {docRemarks}</p>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="text-sm text-gray-500">Document Progress</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Progress value={progress.percentage} className="w-32 h-2" />
-                        <span className="text-sm font-medium">{progress.percentage}%</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        size="sm"
-                        onClick={() => {
-                          setSelectedBatch(batch.id);
-                          setShowUploadDialog(true);
-                        }}
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add Docs
-                      </Button>
-                      {progress.completed >= progress.total && (
-                        <Button 
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={() => {
-                            setSelectedBatch(batch.id);
-                            setBatchAction('approve');
-                            setShowActionDialog(true);
-                          }}
-                        >
-                          <Check className="w-4 h-4 mr-1" />
-                          Approve
-                        </Button>
-                      )}
-                      {getBatchDocuments(batch.batch_id).length > 0 && (
-                        <Button 
-                          size="sm"
-                          variant="outline"
-                          className="text-orange-600"
-                          onClick={() => {
-                            setSelectedBatch(batch.id);
-                            setBatchAction('waive');
-                            setShowActionDialog(true);
-                          }}
-                        >
-                          Waive
-                        </Button>
-                      )}
-                    </div>
+                  <div className="flex gap-2">
+                    <Badge variant="outline">{batchDocs.length} docs</Badge>
+                    <Button 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedBatch(batch.id);
+                        setShowUploadDialog(true);
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Docs
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {requiredDocs.map(docType => {
-                    const versions = batchDocs[docType] || [];
-                    const latestDoc = versions.length > 0 ? versions[versions.length - 1] : null;
-                    
-                    return (
+              {batchDocs.length > 0 && (
+                <CardContent>
+                  <div className="space-y-2">
+                    {batchDocs.map((doc, idx) => (
                       <div 
-                        key={docType}
-                        className={`p-3 rounded-lg border-2 cursor-pointer hover:border-blue-500 transition-colors ${
-                          latestDoc ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
-                        }`}
+                        key={idx}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
                         onClick={() => {
-                          if (latestDoc) {
-                            setSelectedDocument({ ...latestDoc, versions });
-                            setShowViewDialog(true);
-                          }
+                          setSelectedDocument({ 
+                            ...doc, 
+                            versions: batchDocs.filter(d => d.document_name === doc.document_name)
+                          });
+                          setShowViewDialog(true);
                         }}
                       >
-                        <div className="flex items-start gap-2">
-                          <File className={`w-5 h-5 flex-shrink-0 ${latestDoc ? 'text-green-600' : 'text-gray-400'}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm truncate">{docType}</div>
-                            {latestDoc ? (
-                              <div className="mt-1 space-y-1">
-                                <div className="flex items-center gap-1">
-                                  <StatusBadge status={latestDoc.status} />
-                                  <Badge variant="outline" className="text-xs">v{latestDoc.version}</Badge>
-                                </div>
-                                <div className="text-xs text-gray-500 truncate">
-                                  {latestDoc.uploaded_by}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-xs text-gray-500 mt-1">Not uploaded</div>
-                            )}
+                        <div className="flex items-center gap-3">
+                          <File className="w-5 h-5 text-blue-600" />
+                          <div>
+                            <p className="font-medium text-sm">{doc.document_name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <StatusBadge status={doc.status} />
+                              <Badge variant="outline" className="text-xs">v{doc.version}</Badge>
+                              <span className="text-xs text-gray-500">{doc.upload_date}</span>
+                            </div>
                           </div>
                         </div>
+                        <Button variant="ghost" size="sm" onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(doc.file_url, '_blank');
+                        }}>
+                          <Download className="w-4 h-4" />
+                        </Button>
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
+                    ))}
+                  </div>
+                </CardContent>
+              )}
             </Card>
           );
         })}
@@ -483,113 +338,52 @@ export default function DocumentEligibilityBatch() {
         )}
       </div>
 
-      {/* Bulk Upload Dialog */}
+      {/* Upload Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bulk Upload Debtor Documents</DialogTitle>
+            <DialogTitle>Upload Documents for Batch</DialogTitle>
             <DialogDescription>
-              Upload multiple documents for batch: {selectedBatch ? batches.find(b => b.id === selectedBatch)?.batch_id : 'Select batch'}
+              {selectedBatch ? batches.find(b => b.id === selectedBatch)?.batch_id : 'Select batch'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {!selectedBatch && (
-              <div>
-                <label className="text-sm font-medium">Select Batch *</label>
-                <Select value={selectedBatch || ''} onValueChange={setSelectedBatch}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select batch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {batches.map(b => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.batch_id} ({b.batch_month}/{b.batch_year}) - {b.credit_type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {selectedBatch && (() => {
-              const batch = batches.find(b => b.id === selectedBatch);
-              const requiredDocs = getRequiredDocs(batch?.credit_type);
-              
-              return (
-                <div className="space-y-3">
-                  <div className="text-sm font-medium">Upload Documents for {batch?.credit_type} Batch:</div>
-                  {requiredDocs.map(docType => (
-                    <div key={docType} className="flex items-center gap-3 p-3 border rounded-lg">
-                      <File className="w-5 h-5 text-gray-400" />
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">{docType}</div>
-                        {uploadFiles[docType] && (
-                          <div className="text-xs text-gray-500 mt-1">{uploadFiles[docType].name}</div>
-                        )}
-                      </div>
-                      <Input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileSelect(docType, file);
-                        }}
-                        className="w-48"
-                      />
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+          <div className="py-4 space-y-4">
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                Upload multiple files at once. Files can be any name/type - no restrictions.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <label className="text-sm font-medium">Select Files (multiple)</label>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                onChange={(e) => setUploadFiles(Array.from(e.target.files))}
+                className="w-full mt-1"
+              />
+              {uploadFiles.length > 0 && (
+                <p className="text-sm text-green-600 mt-2">
+                  {uploadFiles.length} file(s) selected
+                </p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setShowUploadDialog(false);
               setSelectedBatch(null);
-              setUploadFiles({});
+              setUploadFiles([]);
             }}>
               Cancel
             </Button>
             <Button
               onClick={handleBulkUpload}
-              disabled={processing || !selectedBatch || Object.keys(uploadFiles).length === 0}
-              className="bg-blue-600 hover:bg-blue-700"
+              disabled={processing || !selectedBatch || uploadFiles.length === 0}
+              className="bg-blue-600"
             >
-              {processing ? 'Uploading...' : `Upload ${Object.keys(uploadFiles).length} Documents`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Batch Action Dialog */}
-      <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {batchAction === 'approve' ? 'Approve Batch Documents' : 'Waive Document Requirements'}
-            </DialogTitle>
-            <DialogDescription>
-              {batches.find(b => b.id === selectedBatch)?.batch_id}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {batchAction === 'approve' 
-                  ? 'All documents in this batch will be marked as VERIFIED'
-                  : 'Document requirements for this batch will be waived'}
-              </AlertDescription>
-            </Alert>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowActionDialog(false)}>Cancel</Button>
-            <Button
-              onClick={handleBatchAction}
-              disabled={processing}
-              className={batchAction === 'approve' ? 'bg-green-600' : 'bg-orange-600'}
-            >
-              {processing ? 'Processing...' : 'Confirm'}
+              {processing ? 'Uploading...' : `Upload ${uploadFiles.length} File(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -600,12 +394,12 @@ export default function DocumentEligibilityBatch() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Document Details</DialogTitle>
-            <DialogDescription>{selectedDocument?.document_type}</DialogDescription>
+            <DialogDescription>{selectedDocument?.document_name}</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="p-4 bg-gray-50 rounded-lg space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Document Name:</span>
+                <span className="text-gray-500">File Name:</span>
                 <span className="font-medium">{selectedDocument?.document_name}</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -630,7 +424,7 @@ export default function DocumentEligibilityBatch() {
               <div>
                 <div className="text-sm font-medium mb-2">Version History:</div>
                 <div className="space-y-2">
-                  {selectedDocument.versions.map((doc, idx) => (
+                  {selectedDocument.versions.map((doc) => (
                     <div key={doc.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">v{doc.version}</Badge>

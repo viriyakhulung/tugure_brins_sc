@@ -6,10 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
 import { 
-  FileText, CheckCircle2, XCircle, Clock, Eye, Download, 
-  RefreshCw, Check, X, Loader2, Search, AlertCircle, DollarSign
+  FileText, CheckCircle2, Eye, Download, 
+  RefreshCw, Check, X, Loader2, AlertCircle, DollarSign, Filter
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
@@ -19,23 +18,16 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
-const DOCUMENT_TYPES = [
-  'Perjanjian Kredit',
-  'Jadwal Angsuran',
-  'Bukti Pencairan',
-  'Identitas Debitur'
-];
-
 export default function DebtorReview() {
   const [user, setUser] = useState(null);
   const [debtors, setDebtors] = useState([]);
-  const [documents, setDocuments] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDebtor, setSelectedDebtor] = useState(null);
   const [selectedDebtors, setSelectedDebtors] = useState([]);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showFilterDialog, setShowFilterDialog] = useState(false);
   const [approvalAction, setApprovalAction] = useState('');
   const [approvalRemarks, setApprovalRemarks] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -58,8 +50,7 @@ export default function DebtorReview() {
     try {
       const demoUserStr = localStorage.getItem('demo_user');
       if (demoUserStr) {
-        const demoUser = JSON.parse(demoUserStr);
-        setUser(demoUser);
+        setUser(JSON.parse(demoUserStr));
       }
     } catch (error) {
       console.error('Failed to load user:', error);
@@ -69,32 +60,16 @@ export default function DebtorReview() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [debtorData, docData, contractData] = await Promise.all([
+      const [debtorData, contractData] = await Promise.all([
         base44.entities.Debtor.list(),
-        base44.entities.Document.list(),
-        base44.entities.Contract.list()
+        base44.entities.MasterContract.list()
       ]);
       setDebtors(debtorData || []);
-      setDocuments(docData || []);
       setContracts(contractData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
     setLoading(false);
-  };
-
-  const getDebtorDocuments = (debtorId) => {
-    return documents.filter(d => d.debtor_id === debtorId);
-  };
-
-  const calculateDocProgress = (debtorId) => {
-    const debtorDocs = getDebtorDocuments(debtorId);
-    const verifiedDocs = debtorDocs.filter(d => d.status === 'VERIFIED');
-    return {
-      completed: verifiedDocs.length,
-      total: DOCUMENT_TYPES.length,
-      percentage: Math.round((verifiedDocs.length / DOCUMENT_TYPES.length) * 100)
-    };
   };
 
   const handleApprovalAction = async () => {
@@ -110,13 +85,11 @@ export default function DebtorReview() {
       for (const debtor of debtorsToProcess) {
         if (!debtor || !debtor.id) continue;
         
-        // 1. Update Debtor status
         await base44.entities.Debtor.update(debtor.id, {
           underwriting_status: newStatus,
-          batch_status: newStatus === 'APPROVED' ? 'COMPLETED' : 'REJECTED'
+          rejection_reason: action === 'reject' ? approvalRemarks : null
         });
 
-        // 2. Auto-create Record entity if approved
         if (action === 'approve') {
           await base44.entities.Record.create({
             batch_id: debtor.batch_id,
@@ -130,7 +103,6 @@ export default function DebtorReview() {
           });
         }
 
-        // 3. Create audit log
         await createAuditLog(
           `DEBTOR_${newStatus}`,
           'DEBTOR',
@@ -144,31 +116,11 @@ export default function DebtorReview() {
         );
       }
 
-      // 3. Send templated email based on user preferences
-      // Note: No specific email template for debtor approval, using direct notification
-      const notifSettings = await base44.entities.NotificationSetting.list();
-      const brinsSettings = notifSettings.filter(s => 
-        s.user_role === 'BRINS' && 
-        s.email_enabled && 
-        s.notify_approval_required
-      );
-      
-      for (const setting of brinsSettings) {
-        await base44.integrations.Core.SendEmail({
-          to: setting.notification_email,
-          subject: `Debtor ${newStatus} - ${selectedDebtor.debtor_name}`,
-          body: `Dear BRINS Team,\n\nDebtor ${selectedDebtor.debtor_name} (${selectedDebtor.participant_no}) has been ${newStatus}.\n\nDebtor Details:\n- Plafond: Rp ${(selectedDebtor.credit_plafond || 0).toLocaleString('id-ID')}\n- Premium: Rp ${(selectedDebtor.gross_premium || 0).toLocaleString('id-ID')}\n- Branch: ${selectedDebtor.branch_desc}\n- Batch: ${selectedDebtor.batch_id}\n\nRemarks: ${approvalRemarks}\n\nProcessed by: ${user?.email}\nDate: ${new Date().toLocaleDateString('id-ID')}\n\nBest regards,\nTUGURE Reinsurance System`
-        });
-      }
-
-      // 4. Create notification
-      const notificationMessage = isBulk ? 
-        `${debtorsToProcess.length} debtors ${newStatus.toLowerCase()} in bulk by ${user?.email}` :
-        `${selectedDebtor?.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`;
-      
       await createNotification(
         `Debtor ${newStatus}`,
-        notificationMessage,
+        isBulk ? 
+          `${debtorsToProcess.length} debtors ${newStatus.toLowerCase()}` :
+          `${selectedDebtor?.debtor_name} ${newStatus.toLowerCase()}`,
         newStatus === 'APPROVED' ? 'INFO' : 'WARNING',
         'DEBTOR',
         isBulk ? debtorsToProcess[0]?.batch_id : selectedDebtor?.id,
@@ -187,11 +139,6 @@ export default function DebtorReview() {
       console.error('Approval error:', error);
     }
     setProcessing(false);
-  };
-
-  const handleExport = () => {
-    console.log('Export data');
-    // Export functionality
   };
 
   const clearFilters = () => {
@@ -257,9 +204,16 @@ export default function DebtorReview() {
     { header: 'Batch', accessorKey: 'batch_id', cell: (row) => <span className="font-mono text-sm">{row.batch_id?.slice(0, 15)}</span> },
     { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
     { header: 'Premium', cell: (row) => `Rp ${(row.gross_premium || 0).toLocaleString('id-ID')}` },
-
     { header: 'Underwriting', cell: (row) => <StatusBadge status={row.underwriting_status} /> },
     { header: 'Batch Status', cell: (row) => <StatusBadge status={row.batch_status} /> },
+    { 
+      header: 'Remarks', 
+      cell: (row) => row.validation_remarks ? (
+        <span className="text-xs text-orange-600">⚠️ Issues</span>
+      ) : (
+        <span className="text-xs text-green-600">✓ OK</span>
+      )
+    },
     {
       header: 'Actions',
       cell: (row) => (
@@ -278,7 +232,7 @@ export default function DebtorReview() {
             <>
               <Button 
                 size="sm" 
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-green-600"
                 onClick={() => {
                   setSelectedDebtor(row);
                   setApprovalAction('approve');
@@ -319,7 +273,7 @@ export default function DebtorReview() {
             {selectedDebtors.length > 0 && (
               <>
                 <Button 
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600"
                   onClick={() => {
                     setApprovalAction('bulk_approve');
                     setShowApprovalDialog(true);
@@ -340,13 +294,13 @@ export default function DebtorReview() {
                 </Button>
               </>
             )}
+            <Button variant="outline" onClick={() => setShowFilterDialog(true)}>
+              <Filter className="w-4 h-4 mr-2" />
+              Filters
+            </Button>
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
-            </Button>
-            <Button variant="outline" className="bg-green-600 hover:bg-green-700 text-white" onClick={handleExport}>
-              <Download className="w-4 h-4 mr-2" />
-              Export
             </Button>
           </div>
         }
@@ -359,114 +313,104 @@ export default function DebtorReview() {
         </Alert>
       )}
 
-      {/* KPI Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Debtors"
-          value={debtors.length}
-          subtitle={`${debtors.filter(d => d.credit_type === 'Individual').length} individual / ${debtors.filter(d => d.credit_type === 'Corporate').length} corporate`}
-          icon={FileText}
-          gradient
-          className="from-blue-500 to-blue-600"
-        />
-        <StatCard
-          title="Pending Review"
-          value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length}
-          subtitle="Awaiting approval"
-          icon={Clock}
-          gradient
-          className="from-orange-500 to-orange-600"
-        />
-        <StatCard
-          title="Total Exposure"
-          value={`Rp ${(debtors.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0) / 1000000).toFixed(1)}M`}
-          subtitle="Outstanding amount"
-          icon={DollarSign}
-          gradient
-          className="from-green-500 to-green-600"
-        />
-        <StatCard
-          title="Approved Debtors"
-          value={debtors.filter(d => d.underwriting_status === 'APPROVED').length}
-          subtitle={`${((debtors.filter(d => d.underwriting_status === 'APPROVED').length / (debtors.length || 1)) * 100).toFixed(0)}% approval rate`}
-          icon={CheckCircle2}
-          gradient
-          className="from-purple-500 to-purple-600"
-        />
+        <StatCard title="Total Debtors" value={debtors.length} icon={FileText} />
+        <StatCard title="Pending Review" value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length} icon={Clock} className="text-orange-600" />
+        <StatCard title="Total Exposure" value={`Rp ${(debtors.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} className="text-green-600" />
+        <StatCard title="Approved" value={debtors.filter(d => d.underwriting_status === 'APPROVED').length} icon={CheckCircle2} className="text-purple-600" />
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Contract" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Contracts</SelectItem>
-                {contracts.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.contract_number || c.contract_id}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Batch ID..."
-              value={filters.batch}
-              onChange={(e) => setFilters({...filters, batch: e.target.value})}
-            />
-            <Select value={filters.submitStatus} onValueChange={(val) => setFilters({...filters, submitStatus: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Underwriting" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="DRAFT">Draft</SelectItem>
-                <SelectItem value="SUBMITTED">Submitted</SelectItem>
-                <SelectItem value="APPROVED">Approved</SelectItem>
-                <SelectItem value="REJECTED">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Batch Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Uploaded">Uploaded</SelectItem>
-                <SelectItem value="Validated">Validated</SelectItem>
-                <SelectItem value="Matched">Matched</SelectItem>
-                <SelectItem value="Approved">Approved</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="date"
-              placeholder="Start Date"
-              value={filters.startDate}
-              onChange={(e) => setFilters({...filters, startDate: e.target.value})}
-            />
-            <Input
-              type="date"
-              placeholder="End Date"
-              value={filters.endDate}
-              onChange={(e) => setFilters({...filters, endDate: e.target.value})}
-            />
-          </div>
-          <div className="mt-3 flex justify-end">
-            <Button variant="outline" size="sm" onClick={clearFilters}>
-              Clear Filters
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Data Table */}
       <DataTable
         columns={columns}
         data={filteredDebtors}
         isLoading={loading}
         emptyMessage="No debtors to review"
       />
+
+      {/* Filter Dialog */}
+      <Dialog open={showFilterDialog} onOpenChange={setShowFilterDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Filter Debtors</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium">Contract</label>
+              <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Contracts</SelectItem>
+                  {contracts.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.contract_id}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Batch ID</label>
+              <Input
+                placeholder="Search batch..."
+                value={filters.batch}
+                onChange={(e) => setFilters({...filters, batch: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Start Date</label>
+                <Input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">End Date</label>
+                <Input
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Underwriting Status</label>
+              <Select value={filters.submitStatus} onValueChange={(val) => setFilters({...filters, submitStatus: val})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="DRAFT">Draft</SelectItem>
+                  <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                  <SelectItem value="APPROVED">Approved</SelectItem>
+                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Batch Status</label>
+              <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Uploaded">Uploaded</SelectItem>
+                  <SelectItem value="Validated">Validated</SelectItem>
+                  <SelectItem value="Matched">Matched</SelectItem>
+                  <SelectItem value="Approved">Approved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={clearFilters}>Clear</Button>
+            <Button onClick={() => setShowFilterDialog(false)}>Apply</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
@@ -477,25 +421,18 @@ export default function DebtorReview() {
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500">Participant No:</span>
-                <p className="font-medium">{selectedDebtor?.participant_no}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Batch ID:</span>
-                <p className="font-medium">{selectedDebtor?.batch_id}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Plafond:</span>
-                <p className="font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Premium:</span>
-                <p className="font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</p>
-              </div>
+              <div><span className="text-gray-500">Participant No:</span><p className="font-medium">{selectedDebtor?.participant_no}</p></div>
+              <div><span className="text-gray-500">Batch ID:</span><p className="font-medium">{selectedDebtor?.batch_id}</p></div>
+              <div><span className="text-gray-500">Plafond:</span><p className="font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</p></div>
+              <div><span className="text-gray-500">Premium:</span><p className="font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</p></div>
+              <div><span className="text-gray-500">Status:</span><StatusBadge status={selectedDebtor?.underwriting_status} /></div>
+              {selectedDebtor?.validation_remarks && (
+                <div className="col-span-2 p-3 bg-orange-50 border border-orange-200 rounded">
+                  <p className="text-sm font-medium text-orange-700">Validation Remarks:</p>
+                  <p className="text-sm text-orange-600">{selectedDebtor.validation_remarks}</p>
+                </div>
+              )}
             </div>
-
-
           </div>
           <DialogFooter>
             <Button onClick={() => setShowDetailDialog(false)}>Close</Button>
@@ -521,31 +458,22 @@ export default function DebtorReview() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Plafond:</span>
-                  <span className="ml-2 font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Premium:</span>
-                  <span className="ml-2 font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</span>
-                </div>
-
-                <div>
-                  <span className="text-gray-500">Batch Status:</span>
-                  <span className="ml-2"><StatusBadge status={selectedDebtor?.batch_status} /></span>
+            {!approvalAction?.includes('bulk') && selectedDebtor && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-gray-500">Plafond:</span><span className="ml-2 font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</span></div>
+                  <div><span className="text-gray-500">Premium:</span><span className="ml-2 font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</span></div>
                 </div>
               </div>
-            </div>
+            )}
             
             {(approvalAction === 'reject' || approvalAction === 'bulk_reject') && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   {approvalAction === 'bulk_reject' ? 
-                    `Rejecting ${selectedDebtors.length} debtors will terminate their coverage applications.` :
-                    'Rejecting this debtor will terminate their coverage application.'
+                    `Rejecting ${selectedDebtors.length} debtors will allow them to be revised and resubmitted.` :
+                    'Rejecting will allow revision and resubmission.'
                   }
                 </AlertDescription>
               </Alert>
@@ -556,31 +484,23 @@ export default function DebtorReview() {
               <Textarea
                 value={approvalRemarks}
                 onChange={(e) => setApprovalRemarks(e.target.value)}
-                placeholder={approvalAction === 'approve' ? "Enter approval notes..." : "Enter rejection reason..."}
-                className="mt-1"
+                placeholder={approvalAction === 'approve' || approvalAction === 'bulk_approve' ? "Enter approval notes..." : "Enter rejection reason (for revision)..."}
                 rows={4}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>Cancel</Button>
             <Button
               onClick={handleApprovalAction}
               disabled={processing || !approvalRemarks}
-              className={(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+              className={(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? 'bg-green-600' : 'bg-red-600'}
             >
               {processing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
               ) : (
-                <>
-                  {(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? <Check className="w-4 h-4 mr-2" /> : <X className="w-4 h-4 mr-2" />}
-                  {(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? 'Approve' : 'Reject'}
-                </>
+                <>{(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? <Check className="w-4 h-4 mr-2" /> : <X className="w-4 h-4 mr-2" />}
+                {(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? 'Approve' : 'Reject'}</>
               )}
             </Button>
           </DialogFooter>
