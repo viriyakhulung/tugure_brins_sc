@@ -893,6 +893,38 @@ export default function SystemConfiguration() {
         is_active: true,
         is_recurring: false
       },
+      
+      // === BORDERO SLA ===
+      {
+        rule_name: 'Bordero Generated - Review Required 24h',
+        entity_type: 'Bordero',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'GENERATED',
+        duration_value: 24,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[SLA Alert] Bordero {entity_id} - Review Pending 24h',
+        email_body: 'Dear TUGURE Team,\n\nBordero {entity_id} generated 24 hours ago and awaiting review.\n\nAction Required:\n- Review bordero data\n- Move to UNDER_REVIEW status\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Bordero Under Review - Finalize 48h',
+        entity_type: 'Bordero',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'UNDER_REVIEW',
+        duration_value: 48,
+        duration_unit: 'HOURS',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[SLA Alert] Bordero {entity_id} - Finalize Pending 48h',
+        email_body: 'Dear TUGURE Team,\n\nBordero {entity_id} under review for 48 hours.\n\nAction Required:\n- Complete review\n- Finalize bordero\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
+        is_active: true,
+        is_recurring: false
+      },
 
       // === NOTA WORKFLOW SLA ===
       {
