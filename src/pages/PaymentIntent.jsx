@@ -16,6 +16,7 @@ import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 
 export default function PaymentIntent() {
   const [user, setUser] = useState(null);
@@ -32,6 +33,11 @@ export default function PaymentIntent() {
   const [plannedAmount, setPlannedAmount] = useState('');
   const [plannedDate, setPlannedDate] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [filters, setFilters] = useState({
+    contract: 'all',
+    notaType: 'all',
+    status: 'all'
+  });
 
   const isBrins = user?.role === 'BRINS' || user?.role === 'admin';
   const isTugure = user?.role === 'TUGURE' || user?.role === 'admin';
@@ -303,18 +309,61 @@ export default function PaymentIntent() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Available Notas" value={notas.length} icon={DollarSign} className="text-blue-600" />
-        <StatCard title="Draft Intents" value={paymentIntents.filter(p => p.status === 'DRAFT').length} icon={AlertCircle} className="text-orange-600" />
-        <StatCard title="Approved Intents" value={paymentIntents.filter(p => p.status === 'APPROVED').length} icon={CheckCircle2} className="text-green-600" />
-        <StatCard title="Total Planned" value={`Rp ${(paymentIntents.reduce((s, p) => s + (p.planned_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} />
+        <ModernKPI title="Available Notas" value={notas.length} subtitle="Issued/Confirmed" icon={DollarSign} color="blue" />
+        <ModernKPI title="Draft Intents" value={paymentIntents.filter(p => p.status === 'DRAFT').length} subtitle="Pending submission" icon={Clock} color="orange" />
+        <ModernKPI title="Approved Intents" value={paymentIntents.filter(p => p.status === 'APPROVED').length} subtitle="Ready for matching" icon={CheckCircle2} color="green" />
+        <ModernKPI title="Total Planned" value={`Rp ${(paymentIntents.reduce((s, p) => s + (p.planned_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} color="purple" />
       </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
+              <SelectTrigger><SelectValue placeholder="Contract" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Contracts</SelectItem>
+                {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <Select value={filters.notaType} onValueChange={(val) => setFilters({...filters, notaType: val})}>
+              <SelectTrigger><SelectValue placeholder="Nota Type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Batch">Batch</SelectItem>
+                <SelectItem value="Claim">Claim</SelectItem>
+                <SelectItem value="Subrogation">Subrogation</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
+              <SelectTrigger><SelectValue placeholder="Intent Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="DRAFT">Draft</SelectItem>
+                <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                <SelectItem value="APPROVED">Approved</SelectItem>
+                <SelectItem value="REJECTED">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={() => setFilters({contract: 'all', notaType: 'all', status: 'all'})}>
+              Clear Filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>Payment Intents</CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable columns={intentColumns} data={paymentIntents} isLoading={loading} emptyMessage="No payment intents" />
+          <DataTable columns={intentColumns} data={paymentIntents.filter(p => {
+            if (filters.contract !== 'all' && p.contract_id !== filters.contract) return false;
+            if (filters.status !== 'all' && p.status !== filters.status) return false;
+            const nota = notas.find(n => n.id === p.invoice_id);
+            if (filters.notaType !== 'all' && nota?.nota_type !== filters.notaType) return false;
+            return true;
+          })} isLoading={loading} emptyMessage="No payment intents" />
         </CardContent>
       </Card>
 

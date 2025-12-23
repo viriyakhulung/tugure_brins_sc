@@ -17,6 +17,7 @@ import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function NotaManagement() {
@@ -46,6 +47,16 @@ export default function NotaManagement() {
   const [filters, setFilters] = useState({
     contract: 'all',
     notaType: 'all',
+    status: 'all'
+  });
+  const [reconFilters, setReconFilters] = useState({
+    contract: 'all',
+    status: 'all',
+    hasException: 'all'
+  });
+  const [dnCnFilters, setDnCnFilters] = useState({
+    contract: 'all',
+    noteType: 'all',
     status: 'all'
   });
 
@@ -539,37 +550,33 @@ export default function NotaManagement() {
         <TabsContent value="notas" className="space-y-6">
           {/* KPI Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <StatCard
+            <ModernKPI
               title="Total Notas"
               value={notas.length}
               subtitle={`${notas.filter(n => n.nota_type === 'Batch').length} batch / ${notas.filter(n => n.nota_type === 'Claim').length} claim`}
               icon={FileText}
-              gradient
-              className="from-blue-500 to-blue-600"
+              color="blue"
             />
-            <StatCard
+            <ModernKPI
               title="Pending Confirmation"
               value={notas.filter(n => n.status === 'Issued').length}
               subtitle="Awaiting branch"
               icon={Clock}
-              gradient
-              className="from-orange-500 to-orange-600"
+              color="orange"
             />
-            <StatCard
+            <ModernKPI
               title="Total Amount"
               value={`Rp ${(notas.reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
               subtitle="All notas"
               icon={DollarSign}
-              gradient
-              className="from-green-500 to-green-600"
+              color="green"
             />
-            <StatCard
+            <ModernKPI
               title="Paid Notas"
               value={notas.filter(n => n.status === 'Paid').length}
               subtitle={`Rp ${(notas.filter(n => n.status === 'Paid').reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
               icon={CheckCircle2}
-              gradient
-              className="from-purple-500 to-purple-600"
+              color="purple"
             />
           </div>
 
@@ -678,11 +685,47 @@ export default function NotaManagement() {
 
         <TabsContent value="reconciliation" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <StatCard title="Total Invoiced" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.amount || 0), 0) / 1000000).toFixed(1)}M`} icon={FileText} />
-            <StatCard title="Total Paid" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.payment_received || 0), 0) / 1000000).toFixed(1)}M`} icon={CheckCircle2} className="text-green-600" />
-            <StatCard title="Difference" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.difference || 0), 0) / 1000000).toFixed(1)}M`} icon={AlertTriangle} className="text-orange-600" />
-            <StatCard title="Exceptions" value={reconciliationItems.filter(r => r.has_exception).length} icon={AlertTriangle} className="text-red-600" />
+            <ModernKPI title="Total Invoiced" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.amount || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Nota amounts" icon={FileText} color="blue" />
+            <ModernKPI title="Total Paid" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.payment_received || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Payments received" icon={CheckCircle2} color="green" />
+            <ModernKPI title="Difference" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.difference || 0), 0) / 1000000).toFixed(1)}M`} subtitle="To be reconciled" icon={AlertTriangle} color="orange" />
+            <ModernKPI title="Exceptions" value={reconciliationItems.filter(r => r.has_exception).length} subtitle="Requires DN/CN" icon={AlertTriangle} color="red" />
           </div>
+
+          {/* Recon Filters */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Select value={reconFilters.contract} onValueChange={(val) => setReconFilters({...reconFilters, contract: val})}>
+                  <SelectTrigger><SelectValue placeholder="Contract" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Contracts</SelectItem>
+                    {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                <Select value={reconFilters.status} onValueChange={(val) => setReconFilters({...reconFilters, status: val})}>
+                  <SelectTrigger><SelectValue placeholder="Nota Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="Draft">Draft</SelectItem>
+                    <SelectItem value="Issued">Issued</SelectItem>
+                    <SelectItem value="Confirmed">Confirmed</SelectItem>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={reconFilters.hasException} onValueChange={(val) => setReconFilters({...reconFilters, hasException: val})}>
+                  <SelectTrigger><SelectValue placeholder="Exception" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="yes">Has Exception</SelectItem>
+                    <SelectItem value="no">No Exception</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={() => setReconFilters({contract: 'all', status: 'all', hasException: 'all'})}>
+                  Clear Filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -715,7 +758,13 @@ export default function NotaManagement() {
                     </div>
                   )}
                 ]}
-                data={reconciliationItems}
+                data={reconciliationItems.filter(r => {
+                  if (reconFilters.contract !== 'all' && r.contract_id !== reconFilters.contract) return false;
+                  if (reconFilters.status !== 'all' && r.status !== reconFilters.status) return false;
+                  if (reconFilters.hasException === 'yes' && !r.has_exception) return false;
+                  if (reconFilters.hasException === 'no' && r.has_exception) return false;
+                  return true;
+                })}
                 isLoading={loading}
                 emptyMessage="No reconciliation items"
               />
@@ -725,11 +774,48 @@ export default function NotaManagement() {
 
         <TabsContent value="dncn" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <StatCard title="Total DN/CN" value={dnCnRecords.length} icon={FileText} />
-            <StatCard title="Pending Review" value={dnCnRecords.filter(d => d.status === 'Draft').length} icon={Clock} className="text-orange-600" />
-            <StatCard title="Approved" value={dnCnRecords.filter(d => d.status === 'Approved').length} icon={CheckCircle2} className="text-green-600" />
-            <StatCard title="Total Amount" value={`Rp ${(dnCnRecords.reduce((sum, d) => sum + Math.abs(d.adjustment_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} />
+            <ModernKPI title="Total DN/CN" value={dnCnRecords.length} subtitle={`${dnCnRecords.filter(d => d.note_type === 'Debit Note').length} DN / ${dnCnRecords.filter(d => d.note_type === 'Credit Note').length} CN`} icon={FileText} color="blue" />
+            <ModernKPI title="Pending Review" value={dnCnRecords.filter(d => d.status === 'Draft' || d.status === 'Under Review').length} subtitle="Awaiting action" icon={Clock} color="orange" />
+            <ModernKPI title="Approved" value={dnCnRecords.filter(d => d.status === 'Approved').length} subtitle="Ready for acknowledgment" icon={CheckCircle2} color="green" />
+            <ModernKPI title="Total Adjustment" value={`Rp ${(dnCnRecords.reduce((sum, d) => sum + Math.abs(d.adjustment_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} color="purple" />
           </div>
+
+          {/* DN/CN Filters */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Select value={dnCnFilters.contract} onValueChange={(val) => setDnCnFilters({...dnCnFilters, contract: val})}>
+                  <SelectTrigger><SelectValue placeholder="Contract" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Contracts</SelectItem>
+                    {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                <Select value={dnCnFilters.noteType} onValueChange={(val) => setDnCnFilters({...dnCnFilters, noteType: val})}>
+                  <SelectTrigger><SelectValue placeholder="Note Type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="Debit Note">Debit Note</SelectItem>
+                    <SelectItem value="Credit Note">Credit Note</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={dnCnFilters.status} onValueChange={(val) => setDnCnFilters({...dnCnFilters, status: val})}>
+                  <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="Draft">Draft</SelectItem>
+                    <SelectItem value="Under Review">Under Review</SelectItem>
+                    <SelectItem value="Approved">Approved</SelectItem>
+                    <SelectItem value="Acknowledged">Acknowledged</SelectItem>
+                    <SelectItem value="Rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={() => setDnCnFilters({contract: 'all', noteType: 'all', status: 'all'})}>
+                  Clear Filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -761,7 +847,12 @@ export default function NotaManagement() {
                     </div>
                   )}
                 ]}
-                data={dnCnRecords}
+                data={dnCnRecords.filter(d => {
+                  if (dnCnFilters.contract !== 'all' && d.contract_id !== dnCnFilters.contract) return false;
+                  if (dnCnFilters.noteType !== 'all' && d.note_type !== dnCnFilters.noteType) return false;
+                  if (dnCnFilters.status !== 'all' && d.status !== dnCnFilters.status) return false;
+                  return true;
+                })}
                 isLoading={loading}
                 emptyMessage="No DN/CN records"
               />
