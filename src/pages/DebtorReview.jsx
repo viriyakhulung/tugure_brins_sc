@@ -97,35 +97,50 @@ export default function DebtorReview() {
   };
 
   const handleApprovalAction = async () => {
-    if (!selectedDebtor || !approvalAction) return;
+    if ((!selectedDebtor && selectedDebtors.length === 0) || !approvalAction) return;
 
     setProcessing(true);
     try {
-      const newStatus = approvalAction === 'approve' ? 'APPROVED' : 'REJECTED';
+      const isBulk = approvalAction.startsWith('bulk_');
+      const action = isBulk ? approvalAction.replace('bulk_', '') : approvalAction;
+      const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
+      const debtorsToProcess = isBulk ? debtors.filter(d => selectedDebtors.includes(d.id)) : [selectedDebtor];
       
-      if (!selectedDebtor || !selectedDebtor.id) {
-        setProcessing(false);
-        return;
-      }
-      
-      // 1. Update Debtor status
-      await base44.entities.Debtor.update(selectedDebtor.id, {
-        underwriting_status: newStatus,
-        batch_status: newStatus === 'APPROVED' ? 'COMPLETED' : 'REJECTED'
-      });
-
-      // 2. Auto-create Record entity if approved
-      if (approvalAction === 'approve') {
-        await base44.entities.Record.create({
-          batch_id: selectedDebtor.batch_id,
-          debtor_id: selectedDebtor.id,
-          record_status: 'Accepted',
-          exposure_amount: selectedDebtor.outstanding_amount || 0,
-          premium_amount: selectedDebtor.gross_premium || 0,
-          revision_count: 0,
-          accepted_by: user?.email,
-          accepted_date: new Date().toISOString().split('T')[0]
+      for (const debtor of debtorsToProcess) {
+        if (!debtor || !debtor.id) continue;
+        
+        // 1. Update Debtor status
+        await base44.entities.Debtor.update(debtor.id, {
+          underwriting_status: newStatus,
+          batch_status: newStatus === 'APPROVED' ? 'COMPLETED' : 'REJECTED'
         });
+
+        // 2. Auto-create Record entity if approved
+        if (action === 'approve') {
+          await base44.entities.Record.create({
+            batch_id: debtor.batch_id,
+            debtor_id: debtor.id,
+            record_status: 'Accepted',
+            exposure_amount: debtor.outstanding_amount || 0,
+            premium_amount: debtor.gross_premium || 0,
+            revision_count: 0,
+            accepted_by: user?.email,
+            accepted_date: new Date().toISOString().split('T')[0]
+          });
+        }
+
+        // 3. Create audit log
+        await createAuditLog(
+          `DEBTOR_${newStatus}`,
+          'DEBTOR',
+          'Debtor',
+          debtor.id,
+          { status: debtor.underwriting_status },
+          { status: newStatus, remarks: approvalRemarks },
+          user?.email,
+          user?.role,
+          approvalRemarks
+        );
       }
 
       // 3. Send templated email based on user preferences
@@ -146,31 +161,25 @@ export default function DebtorReview() {
       }
 
       // 4. Create notification
+      const notificationMessage = isBulk ? 
+        `${debtorsToProcess.length} debtors ${newStatus.toLowerCase()} in bulk by ${user?.email}` :
+        `${selectedDebtor?.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`;
+      
       await createNotification(
         `Debtor ${newStatus}`,
-        `${selectedDebtor.debtor_name} has been ${newStatus.toLowerCase()} by ${user?.email}`,
+        notificationMessage,
         newStatus === 'APPROVED' ? 'INFO' : 'WARNING',
         'DEBTOR',
-        selectedDebtor.id,
+        isBulk ? debtorsToProcess[0]?.batch_id : selectedDebtor?.id,
         'BRINS'
       );
 
-      // 5. Create audit log
-      await createAuditLog(
-        `DEBTOR_${newStatus}`,
-        'DEBTOR',
-        'Debtor',
-        selectedDebtor.id,
-        { status: selectedDebtor.underwriting_status },
-        { status: newStatus, remarks: approvalRemarks },
-        user?.email,
-        user?.role,
-        approvalRemarks
-      );
-
-      setSuccessMessage(`Debtor ${approvalAction === 'approve' ? 'approved' : 'rejected'} successfully`);
+      setSuccessMessage(isBulk ? 
+        `${debtorsToProcess.length} debtors ${action}d successfully` : 
+        `Debtor ${action}d successfully`);
       setShowApprovalDialog(false);
       setSelectedDebtor(null);
+      setSelectedDebtors([]);
       setApprovalRemarks('');
       loadData();
     } catch (error) {
@@ -318,6 +327,30 @@ export default function DebtorReview() {
         ]}
         actions={
           <div className="flex gap-2">
+            {selectedDebtors.length > 0 && (
+              <>
+                <Button 
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={() => {
+                    setApprovalAction('bulk_approve');
+                    setShowApprovalDialog(true);
+                  }}
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Approve ({selectedDebtors.length})
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={() => {
+                    setApprovalAction('bulk_reject');
+                    setShowApprovalDialog(true);
+                  }}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Reject ({selectedDebtors.length})
+                </Button>
+              </>
+            )}
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
@@ -496,10 +529,16 @@ export default function DebtorReview() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {approvalAction === 'approve' ? 'Approve Debtor' : 'Reject Debtor'}
+              {approvalAction?.includes('bulk') ? 
+                `Bulk ${approvalAction.includes('approve') ? 'Approve' : 'Reject'} (${selectedDebtors.length} debtors)` :
+                (approvalAction === 'approve' ? 'Approve Debtor' : 'Reject Debtor')
+              }
             </DialogTitle>
             <DialogDescription>
-              {selectedDebtor?.debtor_name}
+              {approvalAction?.includes('bulk') ? 
+                `Processing ${selectedDebtors.length} selected debtors` :
+                selectedDebtor?.debtor_name
+              }
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -524,11 +563,14 @@ export default function DebtorReview() {
               </div>
             </div>
             
-            {approvalAction === 'reject' && (
+            {(approvalAction === 'reject' || approvalAction === 'bulk_reject') && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Rejecting this debtor will terminate their coverage application.
+                  {approvalAction === 'bulk_reject' ? 
+                    `Rejecting ${selectedDebtors.length} debtors will terminate their coverage applications.` :
+                    'Rejecting this debtor will terminate their coverage application.'
+                  }
                 </AlertDescription>
               </Alert>
             )}
@@ -551,7 +593,7 @@ export default function DebtorReview() {
             <Button
               onClick={handleApprovalAction}
               disabled={processing || !approvalRemarks}
-              className={approvalAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+              className={(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
             >
               {processing ? (
                 <>
@@ -560,8 +602,8 @@ export default function DebtorReview() {
                 </>
               ) : (
                 <>
-                  {approvalAction === 'approve' ? <Check className="w-4 h-4 mr-2" /> : <X className="w-4 h-4 mr-2" />}
-                  {approvalAction === 'approve' ? 'Approve' : 'Reject'}
+                  {(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? <Check className="w-4 h-4 mr-2" /> : <X className="w-4 h-4 mr-2" />}
+                  {(approvalAction === 'approve' || approvalAction === 'bulk_approve') ? 'Approve' : 'Reject'}
                 </>
               )}
             </Button>

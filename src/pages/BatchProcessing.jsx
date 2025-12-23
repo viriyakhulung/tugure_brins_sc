@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, FileText, Clock, DollarSign, Download
 } from "lucide-react";
@@ -32,6 +33,10 @@ export default function BatchProcessing() {
     contract: 'all',
     status: 'all'
   });
+  const [selectedBatches, setSelectedBatches] = useState([]);
+  const [showBulkActionDialog, setShowBulkActionDialog] = useState(false);
+  const [bulkActionType, setBulkActionType] = useState('');
+  const [bulkRemarks, setBulkRemarks] = useState('');
 
   useEffect(() => {
     loadUser();
@@ -290,7 +295,86 @@ export default function BatchProcessing() {
     return true;
   });
 
+  const toggleBatchSelection = (batchId) => {
+    if (selectedBatches.includes(batchId)) {
+      setSelectedBatches(selectedBatches.filter(id => id !== batchId));
+    } else {
+      setSelectedBatches([...selectedBatches, batchId]);
+    }
+  };
+
+  const handleBulkBatchAction = async () => {
+    if (selectedBatches.length === 0 || !bulkActionType) return;
+
+    setProcessing(true);
+    try {
+      const batchesToProcess = batches.filter(b => selectedBatches.includes(b.id));
+      
+      for (const batch of batchesToProcess) {
+        const nextStatus = getNextStatus(batch.status);
+        if (!nextStatus) continue;
+
+        const fields = getFieldName(nextStatus);
+        const updateData = {
+          status: nextStatus,
+          [fields.by]: user?.email,
+          [fields.date]: new Date().toISOString().split('T')[0]
+        };
+
+        await base44.entities.Batch.update(batch.id, updateData);
+
+        // Update debtors
+        const batchDebtors = await base44.entities.Debtor.filter({ batch_id: batch.batch_id });
+        for (const debtor of batchDebtors) {
+          await base44.entities.Debtor.update(debtor.id, { batch_status: nextStatus });
+        }
+
+        await createAuditLog(
+          `BATCH_${nextStatus.toUpperCase().replace(/ /g, '_')}`,
+          'DEBTOR',
+          'Batch',
+          batch.id,
+          { status: batch.status },
+          { status: nextStatus },
+          user?.email,
+          user?.role,
+          bulkRemarks
+        );
+      }
+
+      setSuccessMessage(`${batchesToProcess.length} batches processed successfully`);
+      setShowBulkActionDialog(false);
+      setSelectedBatches([]);
+      setBulkRemarks('');
+      loadData();
+    } catch (error) {
+      console.error('Bulk action error:', error);
+    }
+    setProcessing(false);
+  };
+
   const columns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedBatches.length === filteredBatches.length && filteredBatches.length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedBatches(filteredBatches.map(b => b.id));
+            } else {
+              setSelectedBatches([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedBatches.includes(row.id)}
+          onCheckedChange={() => toggleBatchSelection(row.id)}
+        />
+      ),
+      width: '40px'
+    },
     {
       header: 'Batch ID',
       cell: (row) => (
@@ -370,10 +454,25 @@ export default function BatchProcessing() {
           { label: 'Batch Processing' }
         ]}
         actions={
-          <Button variant="outline" onClick={loadData}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            {selectedBatches.length > 0 && (
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => {
+                  const firstBatch = batches.find(b => selectedBatches.includes(b.id));
+                  setBulkActionType(getActionLabel(firstBatch?.status));
+                  setShowBulkActionDialog(true);
+                }}
+              >
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Process ({selectedBatches.length})
+              </Button>
+            )}
+            <Button variant="outline" onClick={loadData}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -507,6 +606,34 @@ export default function BatchProcessing() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Dialog */}
+      <Dialog open={showBulkActionDialog} onOpenChange={setShowBulkActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk {bulkActionType}</DialogTitle>
+            <DialogDescription>
+              Process {selectedBatches.length} selected batches
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium">Remarks</label>
+            <Textarea
+              value={bulkRemarks}
+              onChange={(e) => setBulkRemarks(e.target.value)}
+              placeholder="Enter remarks for bulk action..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkActionDialog(false)}>Cancel</Button>
+            <Button onClick={handleBulkBatchAction} disabled={processing} className="bg-blue-600">
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowRight className="w-4 h-4 mr-2" />}
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

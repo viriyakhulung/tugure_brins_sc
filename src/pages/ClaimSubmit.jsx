@@ -130,16 +130,20 @@ export default function ClaimSubmit() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [claimData, subrogationData, debtorData, contractData] = await Promise.all([
+      const [claimData, subrogationData, debtorData, contractData, masterContractData] = await Promise.all([
         base44.entities.Claim.list(),
         base44.entities.Subrogation.list(),
         base44.entities.Debtor.list(),
-        base44.entities.Contract.list()
+        base44.entities.Contract.list(),
+        base44.entities.MasterContract.list()
       ]);
       setClaims(claimData || []);
       setSubrogations(subrogationData || []);
       setDebtors(debtorData || []);
-      setContracts(contractData || []);
+      
+      // Combine active master contracts with old contracts
+      const activeContracts = masterContractData.filter(c => c.effective_status === 'Active');
+      setContracts([...activeContracts, ...(contractData || [])]);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -328,9 +332,35 @@ export default function ClaimSubmit() {
 
     setProcessing(true);
     setErrorMessage('');
+    
+    let validClaims = 0;
+    let invalidClaims = [];
+    
     try {
       for (const claimData of parsedClaims) {
         const debtor = debtors.find(d => d.participant_no === claimData.participant_no);
+        
+        // Validate against Master Contract
+        if (!debtor) {
+          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'Debtor not found' });
+          continue;
+        }
+        
+        if (!debtor.contract_id) {
+          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'No contract reference' });
+          continue;
+        }
+        
+        const contract = contracts.find(c => c.id === debtor.contract_id);
+        if (!contract || (contract.effective_status && contract.effective_status !== 'Active')) {
+          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'Contract not active' });
+          continue;
+        }
+        
+        if (debtor.underwriting_status !== 'APPROVED') {
+          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'Debtor not approved' });
+          continue;
+        }
         
         await base44.entities.Claim.create({
           claim_no: claimData.claim_no,
@@ -356,16 +386,22 @@ export default function ClaimSubmit() {
           eligibility_status: 'PENDING'
         });
         
-        if (debtor) {
-          await base44.entities.Debtor.update(debtor.id, {
-            claim_status: 'Draft',
-            claim_id: claimData.claim_no,
-            claim_amount: claimData.share_tugure_amount
-          });
-        }
+        await base44.entities.Debtor.update(debtor.id, {
+          claim_status: 'Draft',
+          claim_id: claimData.claim_no,
+          claim_amount: claimData.share_tugure_amount
+        });
+        
+        validClaims++;
       }
       
-      setSuccessMessage(`Successfully uploaded ${parsedClaims.length} claims`);
+      if (invalidClaims.length > 0) {
+        const errorMsg = `${validClaims} claims uploaded. ${invalidClaims.length} failed:\n${invalidClaims.map(e => `${e.participant_no}: ${e.reason}`).join('\n')}`;
+        setErrorMessage(errorMsg);
+      } else {
+        setSuccessMessage(`Successfully uploaded ${validClaims} claims`);
+      }
+      
       setShowUploadDialog(false);
       setUploadFile(null);
       setParsedClaims([]);
