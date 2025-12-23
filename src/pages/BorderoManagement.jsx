@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   FileText, CheckCircle2, Clock, Eye, Download, 
-  Filter, RefreshCw, Check, X, AlertCircle, Loader2, ArrowRight
+  Filter, RefreshCw, Check, X, AlertCircle, Loader2, ArrowRight, DollarSign
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
@@ -423,6 +423,91 @@ export default function BorderoManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium mb-1">Total Debtors</p>
+                <h3 className="text-3xl font-bold">{debtors.filter(d => d.underwriting_status === 'APPROVED').length}</h3>
+                <p className="text-blue-100 text-xs mt-2">Approved only</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                <FileText className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/10 rounded-tl-full"></div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-100 text-sm font-medium mb-1">Borderos</p>
+                <h3 className="text-3xl font-bold">{borderos.length}</h3>
+                <p className="text-purple-100 text-xs mt-2">Generated</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                <FileText className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/10 rounded-tl-full"></div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium mb-1">Total Premium</p>
+                <h3 className="text-2xl font-bold">
+                  {((debtors.reduce((sum, d) => sum + (d.net_premium || 0), 0)) / 1000000000).toFixed(2)}B
+                </h3>
+                <p className="text-green-100 text-xs mt-2">IDR</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/10 rounded-tl-full"></div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-100 text-sm font-medium mb-1">Total Claims</p>
+                <h3 className="text-3xl font-bold">{claims.length}</h3>
+                <p className="text-orange-100 text-xs mt-2">All statuses</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/10 rounded-tl-full"></div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-teal-500 to-teal-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-teal-100 text-sm font-medium mb-1">Subrogations</p>
+                <h3 className="text-3xl font-bold">{subrogations.length}</h3>
+                <p className="text-teal-100 text-xs mt-2">Recovery cases</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                <RefreshCw className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/10 rounded-tl-full"></div>
+        </Card>
+      </div>
 
       <FilterPanel
         filters={filters}

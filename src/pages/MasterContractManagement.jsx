@@ -414,10 +414,69 @@ export default function MasterContractManagement() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Contracts" value={stats.total} icon={FileText} />
-        <StatCard title="Active" value={stats.active} icon={CheckCircle2} className="text-green-600" />
-        <StatCard title="Pending Approval" value={stats.pending} icon={Clock} className="text-orange-600" />
-        <StatCard title="Draft" value={stats.draft} icon={FileText} className="text-gray-600" />
+        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium mb-1">Total Contracts</p>
+                <h3 className="text-3xl font-bold">{stats.total}</h3>
+                <p className="text-blue-100 text-xs mt-2">All versions</p>
+              </div>
+              <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
+                <FileText className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/10 rounded-tl-full"></div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium mb-1">Active Contracts</p>
+                <h3 className="text-3xl font-bold">{stats.active}</h3>
+                <p className="text-green-100 text-xs mt-2">{stats.active > 0 ? ((stats.active / stats.total) * 100).toFixed(0) : 0}% of total</p>
+              </div>
+              <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/10 rounded-tl-full"></div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-100 text-sm font-medium mb-1">Pending Approval</p>
+                <h3 className="text-3xl font-bold">{stats.pending}</h3>
+                <p className="text-orange-100 text-xs mt-2">Requires action</p>
+              </div>
+              <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
+                <Clock className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/10 rounded-tl-full"></div>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-gray-500 to-gray-600 text-white overflow-hidden relative">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-100 text-sm font-medium mb-1">Draft Status</p>
+                <h3 className="text-3xl font-bold">{stats.draft}</h3>
+                <p className="text-gray-100 text-xs mt-2">Not yet submitted</p>
+              </div>
+              <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
+                <FileText className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          </CardContent>
+          <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/10 rounded-tl-full"></div>
+        </Card>
       </div>
 
       {/* Filters */}
