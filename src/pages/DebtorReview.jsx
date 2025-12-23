@@ -16,6 +16,7 @@ import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function DebtorReview() {

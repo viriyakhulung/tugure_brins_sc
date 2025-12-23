@@ -13,6 +13,9 @@ import {
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import StatusBadge from "@/components/ui/StatusBadge";
+import ModernKPI from "@/components/dashboard/ModernKPI";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Trash2 } from "lucide-react";
 
 export default function DocumentEligibilityBatch() {
   const [user, setUser] = useState(null);
@@ -32,11 +35,13 @@ export default function DocumentEligibilityBatch() {
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
-    status: 'all',
+    batchStatus: 'all',
+    docStatus: 'all',
     version: 'all',
     startDate: '',
     endDate: ''
   });
+  const [selectedDocs, setSelectedDocs] = useState([]);
 
   useEffect(() => {
     loadUser();
@@ -137,17 +142,43 @@ export default function DocumentEligibilityBatch() {
     setProcessing(false);
   };
 
+  const handleDeleteDocs = async () => {
+    if (selectedDocs.length === 0) return;
+    if (!window.confirm(`Delete ${selectedDocs.length} document(s)?`)) return;
+
+    setProcessing(true);
+    try {
+      for (const docId of selectedDocs) {
+        await base44.entities.Document.delete(docId);
+      }
+      setSuccessMessage(`${selectedDocs.length} document(s) deleted`);
+      setSelectedDocs([]);
+      loadData();
+    } catch (error) {
+      console.error('Delete error:', error);
+      setErrorMessage('Failed to delete documents');
+    }
+    setProcessing(false);
+  };
+
+  const toggleDocSelection = (docId) => {
+    setSelectedDocs(prev => 
+      prev.includes(docId) ? prev.filter(id => id !== docId) : [...prev, docId]
+    );
+  };
+
   const filteredBatches = batches.filter(b => {
     if (filters.contract !== 'all' && b.contract_id !== filters.contract) return false;
-    if (filters.batch && !b.batch_id.includes(filters.batch)) return false;
+    if (filters.batch && !b.batch_id.toLowerCase().includes(filters.batch.toLowerCase())) return false;
+    if (filters.batchStatus !== 'all' && b.status !== filters.batchStatus) return false;
     if (filters.startDate && b.created_date < filters.startDate) return false;
     if (filters.endDate && b.created_date > filters.endDate) return false;
     
     const batchDocs = getBatchDocuments(b.batch_id);
-    if (filters.status !== 'all') {
-      const hasStatus = batchDocs.some(d => d.status === filters.status);
+    if (filters.docStatus !== 'all') {
+      const hasStatus = batchDocs.some(d => d.status === filters.docStatus);
       if (!hasStatus && batchDocs.length > 0) return false;
-      if (batchDocs.length === 0 && filters.status !== 'all') return false;
+      if (batchDocs.length === 0 && filters.docStatus !== 'all') return false;
     }
     
     if (filters.version !== 'all') {
@@ -168,10 +199,18 @@ export default function DocumentEligibilityBatch() {
           { label: 'Document Eligibility' }
         ]}
         actions={
-          <Button variant="outline" onClick={loadData}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            {selectedDocs.length > 0 && (
+              <Button variant="destructive" onClick={handleDeleteDocs} disabled={processing}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete ({selectedDocs.length})
+              </Button>
+            )}
+            <Button variant="outline" onClick={loadData}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -189,61 +228,94 @@ export default function DocumentEligibilityBatch() {
         </Alert>
       )}
 
+      {/* KPI */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <ModernKPI 
+          title="Total Batches" 
+          value={filteredBatches.length} 
+          subtitle={`${filteredBatches.reduce((sum, b) => sum + (b.total_records || 0), 0)} debtors`}
+          icon={Folder} 
+          color="blue" 
+        />
+        <ModernKPI 
+          title="Total Documents" 
+          value={documents.length}
+          subtitle="All uploaded"
+          icon={File} 
+          color="green" 
+        />
+        <ModernKPI 
+          title="Pending Verification" 
+          value={documents.filter(d => d.status === 'PENDING').length}
+          subtitle="Awaiting review"
+          icon={AlertCircle} 
+          color="orange" 
+        />
+        <ModernKPI 
+          title="Verified" 
+          value={documents.filter(d => d.status === 'VERIFIED').length}
+          subtitle="Approved docs"
+          icon={CheckCircle2} 
+          color="purple" 
+        />
+      </div>
+
       {/* Filters */}
       <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-gray-600">Filter Documents</CardTitle>
+        </CardHeader>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Contract" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Contracts</SelectItem>
-                {contracts.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.contract_id}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Batch ID..."
-              value={filters.batch}
-              onChange={(e) => setFilters({...filters, batch: e.target.value})}
-            />
-            <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="VERIFIED">Verified</SelectItem>
-                <SelectItem value="REJECTED">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filters.version} onValueChange={(val) => setFilters({...filters, version: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Version" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Versions</SelectItem>
-                <SelectItem value="1">v1</SelectItem>
-                <SelectItem value="2">v2</SelectItem>
-                <SelectItem value="3">v3</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="date"
-              value={filters.startDate}
-              onChange={(e) => setFilters({...filters, startDate: e.target.value})}
-            />
-            <Input
-              type="date"
-              value={filters.endDate}
-              onChange={(e) => setFilters({...filters, endDate: e.target.value})}
-            />
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Contract</label>
+              <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
+                <SelectTrigger><SelectValue placeholder="All Contracts" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Contracts</SelectItem>
+                  {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_id}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Batch ID</label>
+              <Input placeholder="Search batch..." value={filters.batch} onChange={(e) => setFilters({...filters, batch: e.target.value})} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Batch Status</label>
+              <Select value={filters.batchStatus} onValueChange={(val) => setFilters({...filters, batchStatus: val})}>
+                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="Uploaded">Uploaded</SelectItem>
+                  <SelectItem value="Validated">Validated</SelectItem>
+                  <SelectItem value="Approved">Approved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Doc Status</label>
+              <Select value={filters.docStatus} onValueChange={(val) => setFilters({...filters, docStatus: val})}>
+                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="VERIFIED">Verified</SelectItem>
+                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Start Date</label>
+              <Input type="date" value={filters.startDate} onChange={(e) => setFilters({...filters, startDate: e.target.value})} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">End Date</label>
+              <Input type="date" value={filters.endDate} onChange={(e) => setFilters({...filters, endDate: e.target.value})} />
+            </div>
           </div>
           <div className="mt-3 flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => setFilters({ contract: 'all', batch: '', status: 'all', version: 'all', startDate: '', endDate: '' })}>
+            <Button variant="outline" size="sm" onClick={() => setFilters({ contract: 'all', batch: '', batchStatus: 'all', docStatus: 'all', version: 'all', startDate: '', endDate: '' })}>
               Clear Filters
             </Button>
           </div>
@@ -294,23 +366,33 @@ export default function DocumentEligibilityBatch() {
                     {batchDocs.map((doc, idx) => (
                       <div 
                         key={idx}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
-                        onClick={() => {
-                          setSelectedDocument({ 
-                            ...doc, 
-                            versions: batchDocs.filter(d => d.document_name === doc.document_name)
-                          });
-                          setShowViewDialog(true);
-                        }}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100"
                       >
                         <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={selectedDocs.includes(doc.id)}
+                            onCheckedChange={() => toggleDocSelection(doc.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
                           <File className="w-5 h-5 text-blue-600" />
-                          <div>
+                          <div
+                            className="cursor-pointer flex-1"
+                            onClick={() => {
+                              setSelectedDocument({ 
+                                ...doc, 
+                                versions: batchDocs.filter(d => d.document_name === doc.document_name)
+                              });
+                              setShowViewDialog(true);
+                            }}
+                          >
                             <p className="font-medium text-sm">{doc.document_name}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <StatusBadge status={doc.status} />
                               <Badge variant="outline" className="text-xs">v{doc.version}</Badge>
                               <span className="text-xs text-gray-500">{doc.upload_date}</span>
+                              {doc.remarks && (
+                                <span className="text-xs text-orange-600">{doc.remarks}</span>
+                              )}
                             </div>
                           </div>
                         </div>

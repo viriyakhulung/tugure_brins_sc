@@ -32,7 +32,12 @@ export default function SystemConfiguration() {
   const [activeTab, setActiveTab] = useState('notifications');
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [selectedTemplates, setSelectedTemplates] = useState([]);
   const [selectedRule, setSelectedRule] = useState(null);
+  const [selectedRules, setSelectedRules] = useState([]);
+  const [templateFilters, setTemplateFilters] = useState({ objectType: 'all' });
+  const [ruleFilters, setRuleFilters] = useState({ triggerCondition: 'all', status: 'all' });
+  const [ruleSearchTerm, setRuleSearchTerm] = useState('');
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showRuleDialog, setShowRuleDialog] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
@@ -1357,14 +1362,78 @@ export default function SystemConfiguration() {
               <h3 className="text-lg font-semibold">Email Notification Templates</h3>
               <p className="text-sm text-gray-500">Configure automated email messages for status transitions</p>
             </div>
-            <Button onClick={() => { setSelectedTemplate(null); setShowTemplateDialog(true); }}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Template
-            </Button>
+            <div className="flex gap-2">
+              {selectedTemplates.length > 0 && (
+                <Button variant="destructive" onClick={async () => {
+                  if (!window.confirm(`Delete ${selectedTemplates.length} template(s)?`)) return;
+                  setProcessing(true);
+                  for (const id of selectedTemplates) {
+                    await base44.entities.EmailTemplate.delete(id);
+                  }
+                  setSuccessMessage(`${selectedTemplates.length} template(s) deleted`);
+                  setSelectedTemplates([]);
+                  loadData();
+                  setProcessing(false);
+                }}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete ({selectedTemplates.length})
+                </Button>
+              )}
+              <Button onClick={() => { setSelectedTemplate(null); setShowTemplateDialog(true); }}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Template
+              </Button>
+            </div>
           </div>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex gap-4">
+                <Select value={templateFilters.objectType} onValueChange={(val) => setTemplateFilters({...templateFilters, objectType: val})}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Object Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Object Types</SelectItem>
+                    <SelectItem value="MasterContract">Master Contract</SelectItem>
+                    <SelectItem value="Batch">Batch</SelectItem>
+                    <SelectItem value="Record">Record</SelectItem>
+                    <SelectItem value="Nota">Nota</SelectItem>
+                    <SelectItem value="Debtor">Debtor</SelectItem>
+                    <SelectItem value="Claim">Claim</SelectItem>
+                    <SelectItem value="Subrogation">Subrogation</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={() => setTemplateFilters({objectType: 'all'})}>
+                  Clear Filter
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           <DataTable
             columns={[
+              {
+                header: (
+                  <Checkbox
+                    checked={selectedTemplates.length === emailTemplates.length && emailTemplates.length > 0}
+                    onCheckedChange={(checked) => {
+                      setSelectedTemplates(checked ? emailTemplates.map(t => t.id) : []);
+                    }}
+                  />
+                ),
+                cell: (row) => (
+                  <Checkbox
+                    checked={selectedTemplates.includes(row.id)}
+                    onCheckedChange={() => {
+                      setSelectedTemplates(prev =>
+                        prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id]
+                      );
+                    }}
+                  />
+                ),
+                width: '40px'
+              },
               {
                 header: 'Object Type',
                 accessorKey: 'object_type',
@@ -1414,7 +1483,10 @@ export default function SystemConfiguration() {
                 )
               }
             ]}
-            data={emailTemplates}
+            data={emailTemplates.filter(t => {
+              if (templateFilters.objectType !== 'all' && t.object_type !== templateFilters.objectType) return false;
+              return true;
+            })}
             isLoading={loading}
           />
         </TabsContent>
@@ -1588,7 +1660,24 @@ export default function SystemConfiguration() {
                   <CardTitle>SLA & Notification Rules</CardTitle>
                   <p className="text-sm text-gray-500 mt-1">Configure automatic notifications based on time, status, or conditions</p>
                 </div>
-                <Button onClick={() => { 
+                <div className="flex gap-2">
+                  {selectedRules.length > 0 && (
+                    <Button variant="destructive" size="sm" onClick={async () => {
+                      if (!window.confirm(`Delete ${selectedRules.length} rule(s)?`)) return;
+                      setProcessing(true);
+                      for (const id of selectedRules) {
+                        await base44.entities.SlaRule.delete(id);
+                      }
+                      setSuccessMessage(`${selectedRules.length} rule(s) deleted`);
+                      setSelectedRules([]);
+                      loadData();
+                      setProcessing(false);
+                    }}>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete ({selectedRules.length})
+                    </Button>
+                  )}
+                  <Button onClick={() => { 
                   setSelectedRule({
                     rule_name: '',
                     entity_type: 'Debtor',
@@ -1609,11 +1698,66 @@ export default function SystemConfiguration() {
                   <Plus className="w-4 h-4 mr-2" />
                   Add Rule
                 </Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="space-y-4">
+              <div className="flex gap-4">
+                <Input 
+                  placeholder="Search rules..." 
+                  value={ruleSearchTerm}
+                  onChange={(e) => setRuleSearchTerm(e.target.value)}
+                  className="flex-1"
+                />
+                <Select value={ruleFilters.triggerCondition} onValueChange={(val) => setRuleFilters({...ruleFilters, triggerCondition: val})}>
+                  <SelectTrigger className="w-64">
+                    <SelectValue placeholder="Trigger Condition" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Conditions</SelectItem>
+                    <SelectItem value="STATUS_DURATION">Status Duration</SelectItem>
+                    <SelectItem value="CREATED_DURATION">Created Duration</SelectItem>
+                    <SelectItem value="DUE_DATE_APPROACHING">Due Date Approaching</SelectItem>
+                    <SelectItem value="DUE_DATE_PASSED">Due Date Passed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={ruleFilters.status} onValueChange={(val) => setRuleFilters({...ruleFilters, status: val})}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={() => { setRuleSearchTerm(''); setRuleFilters({triggerCondition: 'all', status: 'all'}); }}>
+                  Clear
+                </Button>
+              </div>
               <DataTable
                 columns={[
+                  {
+                    header: (
+                      <Checkbox
+                        checked={selectedRules.length === slaRules.length && slaRules.length > 0}
+                        onCheckedChange={(checked) => {
+                          setSelectedRules(checked ? slaRules.map(r => r.id) : []);
+                        }}
+                      />
+                    ),
+                    cell: (row) => (
+                      <Checkbox
+                        checked={selectedRules.includes(row.id)}
+                        onCheckedChange={() => {
+                          setSelectedRules(prev =>
+                            prev.includes(row.id) ? prev.filter(id => id !== row.id) : [...prev, row.id]
+                          );
+                        }}
+                      />
+                    ),
+                    width: '40px'
+                  },
                   {
                     header: 'Rule Name',
                     cell: (row) => (
@@ -1701,7 +1845,14 @@ export default function SystemConfiguration() {
                     )
                   }
                 ]}
-                data={slaRules}
+                data={slaRules.filter(r => {
+                  if (ruleSearchTerm && !r.rule_name.toLowerCase().includes(ruleSearchTerm.toLowerCase()) &&
+                      !r.entity_type.toLowerCase().includes(ruleSearchTerm.toLowerCase())) return false;
+                  if (ruleFilters.triggerCondition !== 'all' && r.trigger_condition !== ruleFilters.triggerCondition) return false;
+                  if (ruleFilters.status === 'active' && !r.is_active) return false;
+                  if (ruleFilters.status === 'inactive' && r.is_active) return false;
+                  return true;
+                })}
                 isLoading={loading}
                 emptyMessage="No SLA rules configured. Click 'Add Rule' to create automatic notifications."
               />
