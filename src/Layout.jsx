@@ -86,18 +86,18 @@ export default function Layout({ children, currentPageName }) {
       { name: 'Batch Processing', icon: FileText, path: 'BatchProcessing', roles: ['TUGURE'] },
       { name: 'Document Eligibility', icon: FileCheck, path: 'DocumentEligibility', roles: ['BRINS'] },
       { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview', roles: ['TUGURE'] },
-      { name: 'Nota Management', icon: FileText, path: 'NotaManagement', roles: ['TUGURE'] },
+      { name: 'Nota & Reconciliation', icon: FileText, path: 'NotaManagement', roles: ['TUGURE'] },
       { name: 'Payment Intent', icon: DollarSign, path: 'PaymentIntent', roles: ['BRINS'] },
-      { name: 'Reconciliation', icon: Scale, path: 'Reconciliation', roles: ['TUGURE'] },
       { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit', roles: ['BRINS'] },
       { name: 'Claim Review', icon: FileText, path: 'ClaimReview', roles: ['TUGURE'] }
     ],
     shared: [
-      { name: 'Bordero Management', icon: BarChart3, path: 'BorderoManagement', roles: [] }, // all users
-      { name: 'Advanced Reports', icon: BarChart3, path: 'AdvancedReports', roles: [] }, // all users
-      { name: 'Audit Log', icon: Activity, path: 'AuditLog', roles: [] }, // all users
-      { name: 'System Configuration', icon: Settings, path: 'SystemConfiguration', badge: unreadNotifications, roles: [] }, // all users
-      { name: 'Profile', icon: User, path: 'Profile', roles: [] } // all users
+      { name: 'Master Contract', icon: FileText, path: 'MasterContractManagement', roles: [] },
+      { name: 'Bordero Management', icon: BarChart3, path: 'BorderoManagement', roles: [] },
+      { name: 'Advanced Reports', icon: BarChart3, path: 'AdvancedReports', roles: [] },
+      { name: 'Audit Log', icon: Activity, path: 'AuditLog', roles: [] },
+      { name: 'System Configuration', icon: Settings, path: 'SystemConfiguration', badge: unreadNotifications, roles: [] },
+      { name: 'Profile', icon: User, path: 'Profile', roles: [] }
     ]
   };
 
