@@ -17,6 +17,7 @@ import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
 import DocumentClaim from './pages/DocumentClaim';
+import DocumentEligibilityBatch from './pages/DocumentEligibilityBatch';
 import __Layout from './Layout.jsx';
 
 
@@ -40,6 +41,7 @@ export const PAGES = {
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
     "DocumentClaim": DocumentClaim,
+    "DocumentEligibilityBatch": DocumentEligibilityBatch,
 }
 
 export const pagesConfig = {
