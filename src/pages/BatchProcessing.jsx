@@ -16,6 +16,7 @@ import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function BatchProcessing() {
@@ -37,7 +38,9 @@ export default function BatchProcessing() {
   const [filters, setFilters] = useState({
     contract: 'all',
     batch: '',
-    status: 'all'
+    status: 'all',
+    startDate: '',
+    endDate: ''
   });
 
   useEffect(() => {
@@ -397,6 +400,8 @@ export default function BatchProcessing() {
     if (filters.contract !== 'all' && b.contract_id !== filters.contract) return false;
     if (filters.batch && !b.batch_id.includes(filters.batch)) return false;
     if (filters.status !== 'all' && b.status !== filters.status) return false;
+    if (filters.startDate && b.created_date < filters.startDate) return false;
+    if (filters.endDate && b.created_date > filters.endDate) return false;
     return true;
   });
 
@@ -528,35 +533,61 @@ export default function BatchProcessing() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Batches" value={batches.length} icon={FileText} />
-        <StatCard title="Validated" value={batches.filter(b => b.status === 'Validated').length} icon={CheckCircle2} className="text-green-600" />
-        <StatCard title="Approved" value={batches.filter(b => b.status === 'Approved').length} icon={CheckCircle2} className="text-blue-600" />
-        <StatCard title="Rejected" value={batches.filter(b => b.status === 'Rejected').length} icon={AlertCircle} className="text-red-600" />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <ModernKPI title="Total Batches" value={batches.length} subtitle="All submissions" icon={FileText} color="blue" />
+        <ModernKPI title="Validated" value={batches.filter(b => b.status === 'Validated').length} subtitle="In processing" icon={CheckCircle2} color="teal" />
+        <ModernKPI title="Approved" value={batches.filter(b => b.status === 'Approved').length} subtitle="Ready for nota" icon={CheckCircle2} color="green" />
+        <ModernKPI title="Paid" value={batches.filter(b => b.status === 'Paid').length} subtitle="Payment completed" icon={DollarSign} color="purple" />
+        <ModernKPI title="Rejected" value={batches.filter(b => b.status === 'Rejected').length} subtitle="Requires revision" icon={AlertCircle} color="red" />
       </div>
 
       <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-gray-600">Filter Batches</CardTitle>
+        </CardHeader>
         <CardContent className="p-4">
-          <div className="grid grid-cols-3 gap-4">
-            <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
-              <SelectTrigger><SelectValue placeholder="Contract" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
-              </SelectContent>
-            </Select>
-            <Input placeholder="Batch..." value={filters.batch} onChange={(e) => setFilters({...filters, batch: e.target.value})} />
-            <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
-              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="Uploaded">Uploaded</SelectItem>
-                <SelectItem value="Validated">Validated</SelectItem>
-                <SelectItem value="Matched">Matched</SelectItem>
-                <SelectItem value="Approved">Approved</SelectItem>
-                <SelectItem value="Rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Contract</label>
+              <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
+                <SelectTrigger><SelectValue placeholder="All Contracts" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Contracts</SelectItem>
+                  {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Batch ID</label>
+              <Input placeholder="Search batch..." value={filters.batch} onChange={(e) => setFilters({...filters, batch: e.target.value})} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Status</label>
+              <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
+                <SelectTrigger><SelectValue placeholder="All Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Uploaded">Uploaded</SelectItem>
+                  <SelectItem value="Validated">Validated</SelectItem>
+                  <SelectItem value="Matched">Matched</SelectItem>
+                  <SelectItem value="Approved">Approved</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Start Date</label>
+              <Input type="date" value={filters.startDate} onChange={(e) => setFilters({...filters, startDate: e.target.value})} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">End Date</label>
+              <Input type="date" value={filters.endDate} onChange={(e) => setFilters({...filters, endDate: e.target.value})} />
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setFilters({contract: 'all', batch: '', status: 'all', startDate: '', endDate: ''})}>
+              Clear Filters
+            </Button>
           </div>
         </CardContent>
       </Card>
