@@ -16,12 +16,15 @@ import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 
 export default function ClaimSubmit() {
+  const [user, setUser] = useState(null);
   const [claims, setClaims] = useState([]);
   const [subrogations, setSubrogations] = useState([]);
   const [debtors, setDebtors] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showSubrogationDialog, setShowSubrogationDialog] = useState(false);
@@ -38,24 +41,44 @@ export default function ClaimSubmit() {
   const [activeTab, setActiveTab] = useState('claims');
   const [uploadFile, setUploadFile] = useState(null);
   const [parsedClaims, setParsedClaims] = useState([]);
+  const [filters, setFilters] = useState({
+    contract: 'all',
+    batch: '',
+    claimStatus: 'all',
+    subrogationStatus: 'all'
+  });
 
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        setUser(JSON.parse(demoUserStr));
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [claimData, subrogationData, debtorData, batchData] = await Promise.all([
+      const [claimData, subrogationData, debtorData, batchData, contractData] = await Promise.all([
         base44.entities.Claim.list(),
         base44.entities.Subrogation.list(),
         base44.entities.Debtor.list(),
-        base44.entities.Batch.list()
+        base44.entities.Batch.list(),
+        base44.entities.Contract.list()
       ]);
       setClaims(claimData || []);
       setSubrogations(subrogationData || []);
       setDebtors(debtorData || []);
       setBatches(batchData || []);
+      setContracts(contractData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -261,6 +284,79 @@ export default function ClaimSubmit() {
         </Card>
       )}
 
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <ModernKPI 
+          title="Total Claims" 
+          value={claims.length} 
+          subtitle={`Rp ${(claims.reduce((s, c) => s + (c.nilai_klaim || 0), 0) / 1000000).toFixed(1)}M`}
+          icon={FileText}
+          color="blue"
+        />
+        <ModernKPI 
+          title="Draft Claims" 
+          value={claims.filter(c => c.claim_status === 'Draft').length}
+          subtitle="Pending check"
+          icon={Clock}
+          color="orange"
+        />
+        <ModernKPI 
+          title="Total Subrogation" 
+          value={subrogations.length}
+          subtitle={`Rp ${(subrogations.reduce((s, sub) => s + (sub.recovery_amount || 0), 0) / 1000000).toFixed(1)}M`}
+          icon={DollarSign}
+          color="green"
+        />
+        <ModernKPI 
+          title="Recovered" 
+          value={subrogations.filter(s => s.status === 'Paid / Closed').length}
+          subtitle="Completed"
+          icon={CheckCircle2}
+          color="purple"
+        />
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Contract" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Contracts</SelectItem>
+                {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <Input placeholder="Batch ID..." value={filters.batch} onChange={(e) => setFilters({...filters, batch: e.target.value})} />
+            <Select value={filters.claimStatus} onValueChange={(val) => setFilters({...filters, claimStatus: val})}>
+              <SelectTrigger><SelectValue placeholder="Claim Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Claim Status</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Checked">Checked</SelectItem>
+                <SelectItem value="Doc Verified">Doc Verified</SelectItem>
+                <SelectItem value="Invoiced">Invoiced</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.subrogationStatus} onValueChange={(val) => setFilters({...filters, subrogationStatus: val})}>
+              <SelectTrigger><SelectValue placeholder="Subrogation" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Subrogation</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Invoiced">Invoiced</SelectItem>
+                <SelectItem value="Paid / Closed">Paid / Closed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={() => setFilters({contract: 'all', batch: '', claimStatus: 'all', subrogationStatus: 'all'})}>
+              Clear Filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="claims">
@@ -282,7 +378,12 @@ export default function ClaimSubmit() {
               { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
               { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> }
             ]}
-            data={claims}
+            data={claims.filter(c => {
+              if (filters.contract !== 'all' && c.contract_id !== filters.contract) return false;
+              if (filters.batch && !c.debtor_id) return false;
+              if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
+              return true;
+            })}
             isLoading={loading}
             emptyMessage="No claims submitted"
           />
@@ -300,9 +401,13 @@ export default function ClaimSubmit() {
               { header: 'Subrogation ID', accessorKey: 'subrogation_id' },
               { header: 'Claim ID', accessorKey: 'claim_id' },
               { header: 'Recovery Amount', cell: (row) => `Rp ${(row.recovery_amount || 0).toLocaleString()}` },
+              { header: 'Recovery Date', accessorKey: 'recovery_date' },
               { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> }
             ]}
-            data={subrogations}
+            data={subrogations.filter(s => {
+              if (filters.subrogationStatus !== 'all' && s.status !== filters.subrogationStatus) return false;
+              return true;
+            })}
             isLoading={loading}
             emptyMessage="No subrogation records"
           />

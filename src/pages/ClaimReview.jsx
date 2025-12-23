@@ -17,6 +17,7 @@ import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function ClaimReview() {
@@ -36,6 +37,12 @@ export default function ClaimReview() {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [filters, setFilters] = useState({
+    contract: 'all',
+    batch: '',
+    claimStatus: 'all',
+    subrogationStatus: 'all'
+  });
 
   useEffect(() => {
     loadUser();
@@ -314,11 +321,50 @@ export default function ClaimReview() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Pending Review" value={pendingClaims.length} icon={FileText} className="text-orange-600" />
-        <StatCard title="Total Claims" value={claims.length} icon={FileText} className="text-blue-600" />
-        <StatCard title="Total Value" value={`Rp ${(claims.reduce((s, c) => s + (c.nilai_klaim || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} />
-        <StatCard title="Invoiced" value={claims.filter(c => c.claim_status === 'Invoiced').length} icon={CheckCircle2} className="text-green-600" />
+        <ModernKPI title="Pending Review" value={pendingClaims.length} subtitle="Awaiting action" icon={FileText} color="orange" />
+        <ModernKPI title="Total Claims" value={claims.length} subtitle={`Rp ${(claims.reduce((s, c) => s + (c.nilai_klaim || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} color="blue" />
+        <ModernKPI title="Invoiced" value={claims.filter(c => c.claim_status === 'Invoiced').length} subtitle="Ready for payment" icon={CheckCircle2} color="purple" />
+        <ModernKPI title="Paid" value={claims.filter(c => c.claim_status === 'Paid').length} subtitle="Completed" icon={CheckCircle2} color="green" />
       </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
+              <SelectTrigger><SelectValue placeholder="Contract" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Contracts</SelectItem>
+                {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <Input placeholder="Batch ID..." value={filters.batch} onChange={(e) => setFilters({...filters, batch: e.target.value})} />
+            <Select value={filters.claimStatus} onValueChange={(val) => setFilters({...filters, claimStatus: val})}>
+              <SelectTrigger><SelectValue placeholder="Claim Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Checked">Checked</SelectItem>
+                <SelectItem value="Doc Verified">Doc Verified</SelectItem>
+                <SelectItem value="Invoiced">Invoiced</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.subrogationStatus} onValueChange={(val) => setFilters({...filters, subrogationStatus: val})}>
+              <SelectTrigger><SelectValue placeholder="Subrogation" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Invoiced">Invoiced</SelectItem>
+                <SelectItem value="Paid / Closed">Paid / Closed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={() => setFilters({contract: 'all', batch: '', claimStatus: 'all', subrogationStatus: 'all'})}>
+              Clear Filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -327,8 +373,16 @@ export default function ClaimReview() {
           <TabsTrigger value="subrogation">Subrogation ({subrogations.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="review"><DataTable columns={claimColumns} data={pendingClaims} isLoading={loading} /></TabsContent>
-        <TabsContent value="all"><DataTable columns={claimColumns} data={claims} isLoading={loading} /></TabsContent>
+        <TabsContent value="review"><DataTable columns={claimColumns} data={pendingClaims.filter(c => {
+          if (filters.contract !== 'all' && c.contract_id !== filters.contract) return false;
+          if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
+          return true;
+        })} isLoading={loading} /></TabsContent>
+        <TabsContent value="all"><DataTable columns={claimColumns} data={claims.filter(c => {
+          if (filters.contract !== 'all' && c.contract_id !== filters.contract) return false;
+          if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
+          return true;
+        })} isLoading={loading} /></TabsContent>
         <TabsContent value="subrogation">
           <DataTable
             columns={[
@@ -337,7 +391,10 @@ export default function ClaimReview() {
               { header: 'Recovery', cell: (row) => `Rp ${(row.recovery_amount || 0).toLocaleString()}` },
               { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> }
             ]}
-            data={subrogations}
+            data={subrogations.filter(s => {
+              if (filters.subrogationStatus !== 'all' && s.status !== filters.subrogationStatus) return false;
+              return true;
+            })}
             isLoading={loading}
           />
         </TabsContent>
