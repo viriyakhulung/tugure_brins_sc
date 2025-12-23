@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { PieChart as RePieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
 import StatCard from "@/components/dashboard/StatCard";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ExportButton from "@/components/common/ExportButton";
 import { base44 } from '@/api/base44Client';
@@ -211,78 +212,42 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
+        <ModernKPI
           title="Total Exposure"
-          value={`IDR ${formatCurrency(stats.totalExposure)}`}
+          value={`Rp ${formatCurrency(stats.totalExposure)}`}
           subtitle={`${stats.approvedDebtors} approved debtors`}
           icon={TrendingUp}
-          gradient
-          className="from-blue-500 to-blue-600"
+          color="blue"
         />
-        <StatCard
+        <ModernKPI
           title="Total Premium"
-          value={`IDR ${formatCurrency(stats.totalPremium)}`}
+          value={`Rp ${formatCurrency(stats.totalPremium)}`}
           subtitle="Net premium collected"
           icon={DollarSign}
-          gradient
-          className="from-emerald-500 to-emerald-600"
+          color="green"
         />
-        <StatCard
+        <ModernKPI
           title="Claims Paid"
-          value={`IDR ${formatCurrency(stats.claimsPaid)}`}
-          subtitle={`${claims.filter(c => c.claim_status === 'SETTLED').length} claims settled`}
+          value={`Rp ${formatCurrency(stats.claimsPaid)}`}
+          subtitle={`${claims.filter(c => c.claim_status === 'Paid' || c.claim_status === 'SETTLED').length} claims settled`}
           icon={FileText}
-          gradient
-          className="from-amber-500 to-orange-500"
+          color="orange"
         />
-        <StatCard
+        <ModernKPI
           title="Loss Ratio"
           value={`${stats.lossRatio}%`}
           subtitle="Claims vs Premium"
           icon={BarChart3}
-          gradient
-          className="from-purple-500 to-indigo-600"
+          color="purple"
         />
       </div>
 
       {/* Secondary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Total Debtors</p>
-              <p className="text-2xl font-bold">{stats.totalDebtors}</p>
-            </div>
-            <Users className="w-8 h-8 text-blue-500" />
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Pending Approval</p>
-              <p className="text-2xl font-bold text-amber-600">{stats.pendingDebtors}</p>
-            </div>
-            <Clock className="w-8 h-8 text-amber-500" />
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">OS Recovery</p>
-              <p className="text-2xl font-bold text-orange-600">IDR {formatCurrency(stats.osRecovery)}</p>
-            </div>
-            <AlertTriangle className="w-8 h-8 text-orange-500" />
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Total Claims</p>
-              <p className="text-2xl font-bold">{stats.totalClaims}</p>
-            </div>
-            <FileText className="w-8 h-8 text-purple-500" />
-          </div>
-        </Card>
+        <ModernKPI title="Total Debtors" value={stats.totalDebtors} icon={Users} color="blue" />
+        <ModernKPI title="Pending Approval" value={stats.pendingDebtors} subtitle="Awaiting review" icon={Clock} color="orange" />
+        <ModernKPI title="OS Recovery" value={`Rp ${formatCurrency(stats.osRecovery)}`} icon={AlertTriangle} color="red" />
+        <ModernKPI title="Total Claims" value={stats.totalClaims} icon={FileText} color="purple" />
       </div>
 
       {/* Charts Row 1 - Debtor & Premium Analysis */}

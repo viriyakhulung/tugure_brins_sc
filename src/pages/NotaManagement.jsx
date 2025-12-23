@@ -33,11 +33,14 @@ export default function NotaManagement() {
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [showDnCnDialog, setShowDnCnDialog] = useState(false);
   const [showDnCnActionDialog, setShowDnCnActionDialog] = useState(false);
+  const [showReconActionDialog, setShowReconActionDialog] = useState(false);
   const [actionType, setActionType] = useState('');
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [remarks, setRemarks] = useState('');
   const [activeTab, setActiveTab] = useState('notas');
+  const [selectedRecon, setSelectedRecon] = useState(null);
+  const [actualPaidAmount, setActualPaidAmount] = useState('');
   const [dnCnFormData, setDnCnFormData] = useState({
     note_type: 'Debit Note',
     adjustment_amount: 0,
@@ -479,18 +482,102 @@ export default function NotaManagement() {
     setProcessing(false);
   };
 
+  const handleReconAction = async () => {
+    if (!selectedRecon || !actualPaidAmount) return;
+
+    setProcessing(true);
+    try {
+      const paidAmount = parseFloat(actualPaidAmount);
+      const notaAmount = selectedRecon.amount || 0;
+      const difference = notaAmount - paidAmount;
+      
+      let matchStatus = 'MATCHED';
+      let exceptionType = 'NONE';
+      
+      if (Math.abs(difference) > 0) {
+        matchStatus = 'PARTIALLY_MATCHED';
+        if (difference > 0) {
+          exceptionType = 'UNDER'; // Underpayment
+        } else {
+          exceptionType = 'OVER'; // Overpayment
+        }
+      }
+
+      // Create Payment record
+      const paymentRef = `PAY-${selectedRecon.nota_number}-${Date.now()}`;
+      await base44.entities.Payment.create({
+        payment_ref: paymentRef,
+        invoice_id: selectedRecon.id,
+        contract_id: selectedRecon.contract_id,
+        amount: paidAmount,
+        payment_date: new Date().toISOString().split('T')[0],
+        currency: 'IDR',
+        match_status: matchStatus,
+        exception_type: exceptionType,
+        matched_by: user?.email,
+        matched_date: new Date().toISOString().split('T')[0]
+      });
+
+      // If matched, auto update Nota to Paid
+      if (matchStatus === 'MATCHED') {
+        await base44.entities.Nota.update(selectedRecon.id, {
+          status: 'Paid',
+          paid_date: new Date().toISOString().split('T')[0],
+          payment_reference: paymentRef
+        });
+
+        await createNotification(
+          'Payment Matched - Nota Paid',
+          `Nota ${selectedRecon.nota_number} fully paid. Amount: Rp ${paidAmount.toLocaleString()}`,
+          'INFO',
+          'DEBTOR',
+          selectedRecon.id,
+          'ALL'
+        );
+      } else {
+        // Exception - need DN/CN
+        await createNotification(
+          'Payment Exception - DN/CN Required',
+          `Nota ${selectedRecon.nota_number} has payment difference of Rp ${Math.abs(difference).toLocaleString()}. ${exceptionType === 'UNDER' ? 'Underpayment' : 'Overpayment'} detected.`,
+          'WARNING',
+          'DEBTOR',
+          selectedRecon.id,
+          'TUGURE'
+        );
+      }
+
+      setSuccessMessage(`Payment recorded: ${matchStatus === 'MATCHED' ? 'Matched' : 'Exception detected'}`);
+      setShowReconActionDialog(false);
+      setSelectedRecon(null);
+      setActualPaidAmount('');
+      loadData();
+    } catch (error) {
+      console.error('Recon action error:', error);
+    }
+    setProcessing(false);
+  };
+
   const reconciliationItems = notas.filter(n => n.nota_type === 'Batch').map(nota => {
     const relatedPayments = payments.filter(p => 
-      p.contract_id === nota.contract_id && p.match_status === 'MATCHED'
+      p.invoice_id === nota.id || 
+      (p.contract_id === nota.contract_id && p.match_status === 'MATCHED')
     );
     const paymentReceived = relatedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
     const difference = (nota.amount || 0) - paymentReceived;
+
+    let reconStatus = 'PENDING';
+    if (Math.abs(difference) <= 1000) {
+      reconStatus = 'MATCHED';
+    } else if (Math.abs(difference) > 0 && nota.status !== 'Paid') {
+      reconStatus = 'UNMATCHED';
+    }
 
     return {
       ...nota,
       payment_received: paymentReceived,
       difference: difference,
-      has_exception: Math.abs(difference) > 0 && nota.status !== 'Paid',
+      recon_status: reconStatus,
+      has_exception: reconStatus === 'UNMATCHED',
       payment_count: relatedPayments.length
     };
   });
@@ -735,24 +822,29 @@ export default function NotaManagement() {
               <DataTable
                 columns={[
                   { header: 'Nota', cell: (row) => <div><div className="font-medium">{row.nota_number}</div><div className="text-xs text-gray-500">{row.reference_id}</div></div> },
-                  { header: 'Invoice Amount', cell: (row) => `Rp ${((row.amount || 0) / 1000000).toFixed(2)}M` },
+                  { header: 'Nota Amount', cell: (row) => `Rp ${((row.amount || 0) / 1000000).toFixed(2)}M` },
                   { header: 'Payment Received', cell: (row) => <div><div className="text-green-600 font-medium">Rp {((row.payment_received || 0) / 1000000).toFixed(2)}M</div><div className="text-xs text-gray-500">{row.payment_count} payments</div></div> },
                   { header: 'Difference', cell: (row) => {
                     const diff = row.difference || 0;
-                    return <div className="flex items-center gap-2"><span className={Math.abs(diff) > 0 ? 'text-red-600 font-bold' : 'text-green-600'}>Rp {(diff / 1000000).toFixed(2)}M</span>{Math.abs(diff) > 0 && <AlertTriangle className="w-4 h-4 text-orange-500" />}</div>;
+                    return <div className="flex items-center gap-2"><span className={Math.abs(diff) > 1000 ? 'text-red-600 font-bold' : 'text-green-600'}>Rp {(diff / 1000000).toFixed(2)}M</span>{Math.abs(diff) > 1000 && <AlertTriangle className="w-4 h-4 text-orange-500" />}</div>;
                   }},
-                  { header: 'Status', cell: (row) => <div className="flex flex-col gap-1"><StatusBadge status={row.status} />{row.has_exception && <Badge className="bg-orange-500 text-white text-xs">Exception</Badge>}</div> },
+                  { header: 'Recon Status', cell: (row) => <StatusBadge status={row.recon_status} /> },
+                  { header: 'Nota Status', cell: (row) => <StatusBadge status={row.status} /> },
                   { header: 'Actions', cell: (row) => (
                     <div className="flex gap-1">
-                      {isTugure && row.has_exception && row.status !== 'Paid' && (
-                        <Button size="sm" variant="outline" onClick={() => { setSelectedNota(row); setShowDnCnDialog(true); }}>
-                          <Plus className="w-4 h-4 mr-1" />
-                          DN/CN
+                      {isTugure && row.status !== 'Paid' && (
+                        <Button size="sm" className="bg-blue-600" onClick={() => { 
+                          setSelectedRecon(row); 
+                          setActualPaidAmount(row.amount?.toString() || '');
+                          setShowReconActionDialog(true); 
+                        }}>
+                          Record Payment
                         </Button>
                       )}
-                      {row.status !== 'Paid' && !row.has_exception && (
-                        <Button size="sm" className="bg-green-600" onClick={() => handleNotaAction()}>
-                          Close
+                      {isTugure && row.has_exception && row.status !== 'Paid' && (
+                        <Button size="sm" variant="outline" className="text-orange-600" onClick={() => { setSelectedNota(row); setShowDnCnDialog(true); }}>
+                          <Plus className="w-4 h-4 mr-1" />
+                          DN/CN
                         </Button>
                       )}
                     </div>
@@ -993,6 +1085,79 @@ export default function NotaManagement() {
             <Button onClick={() => handleDnCnAction(selectedDnCn, actionType)} disabled={processing}>
               {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reconciliation Action Dialog */}
+      <Dialog open={showReconActionDialog} onOpenChange={setShowReconActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Payment - Reconciliation</DialogTitle>
+            <DialogDescription>Nota: {selectedRecon?.nota_number}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Nota Amount:</span>
+                  <span className="ml-2 font-bold text-blue-600">Rp {(selectedRecon?.amount || 0).toLocaleString('id-ID')}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Currently Received:</span>
+                  <span className="ml-2 font-medium text-green-600">Rp {(selectedRecon?.payment_received || 0).toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+            </div>
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                Enter actual payment received. System will auto-detect: MATCHED (exact), UNDER (less), or OVER (more). 
+                Exceptions trigger DN/CN workflow.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <label className="text-sm font-medium">Actual Paid Amount (Rp) *</label>
+              <Input
+                type="number"
+                value={actualPaidAmount}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  setActualPaidAmount(e.target.value);
+                  const diff = (selectedRecon?.amount || 0) - val;
+                  if (Math.abs(diff) > 1000) {
+                    setRemarks(`Payment difference detected: ${diff > 0 ? 'Underpayment' : 'Overpayment'} of Rp ${Math.abs(diff).toLocaleString()}`);
+                  } else {
+                    setRemarks('Payment matched - exact amount');
+                  }
+                }}
+                placeholder="Enter amount received from bank"
+              />
+              {actualPaidAmount && (
+                <p className={`text-xs mt-1 ${Math.abs((selectedRecon?.amount || 0) - parseFloat(actualPaidAmount)) > 1000 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {Math.abs((selectedRecon?.amount || 0) - parseFloat(actualPaidAmount)) <= 1000 
+                    ? '✓ MATCHED - Payment complete' 
+                    : `⚠️ EXCEPTION - Difference: Rp ${Math.abs((selectedRecon?.amount || 0) - parseFloat(actualPaidAmount)).toLocaleString()}`
+                  }
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Payment Reference / Remarks</label>
+              <Textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Bank reference or notes..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowReconActionDialog(false); setActualPaidAmount(''); setRemarks(''); }}>Cancel</Button>
+            <Button onClick={handleReconAction} disabled={processing || !actualPaidAmount} className="bg-blue-600">
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Record Payment
             </Button>
           </DialogFooter>
         </DialogContent>
