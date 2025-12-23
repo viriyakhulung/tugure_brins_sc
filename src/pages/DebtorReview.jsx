@@ -44,6 +44,7 @@ export default function DebtorReview() {
     contract: 'all',
     batch: '',
     submitStatus: 'all',
+    status: 'all',
     startDate: '',
     endDate: ''
   });
@@ -198,6 +199,7 @@ export default function DebtorReview() {
       contract: 'all',
       batch: '',
       submitStatus: 'all',
+      status: 'all',
       startDate: '',
       endDate: ''
     });
@@ -207,6 +209,7 @@ export default function DebtorReview() {
     if (filters.contract !== 'all' && d.contract_id !== filters.contract) return false;
     if (filters.batch && !d.batch_id?.includes(filters.batch)) return false;
     if (filters.submitStatus !== 'all' && d.underwriting_status !== filters.submitStatus) return false;
+    if (filters.status !== 'all' && d.batch_status !== filters.status) return false;
     if (filters.startDate && d.created_date < filters.startDate) return false;
     if (filters.endDate && d.created_date > filters.endDate) return false;
     return true;
@@ -254,21 +257,7 @@ export default function DebtorReview() {
     { header: 'Batch', accessorKey: 'batch_id', cell: (row) => <span className="font-mono text-sm">{row.batch_id?.slice(0, 15)}</span> },
     { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
     { header: 'Premium', cell: (row) => `Rp ${(row.gross_premium || 0).toLocaleString('id-ID')}` },
-    {
-      header: 'Document Progress',
-      cell: (row) => {
-        const progress = calculateDocProgress(row.id);
-        return (
-          <div className="w-32">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-600">{progress.completed}/{progress.total}</span>
-              <span className="text-xs font-medium">{progress.percentage}%</span>
-            </div>
-            <Progress value={progress.percentage} className="h-2" />
-          </div>
-        );
-      }
-    },
+
     { header: 'Underwriting', cell: (row) => <StatusBadge status={row.underwriting_status} /> },
     { header: 'Batch Status', cell: (row) => <StatusBadge status={row.batch_status} /> },
     {
@@ -409,7 +398,7 @@ export default function DebtorReview() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
               <SelectTrigger>
                 <SelectValue placeholder="Contract" />
@@ -417,7 +406,7 @@ export default function DebtorReview() {
               <SelectContent>
                 <SelectItem value="all">All Contracts</SelectItem>
                 {contracts.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.contract_number || c.contract_id}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -428,7 +417,7 @@ export default function DebtorReview() {
             />
             <Select value={filters.submitStatus} onValueChange={(val) => setFilters({...filters, submitStatus: val})}>
               <SelectTrigger>
-                <SelectValue placeholder="Submit Status" />
+                <SelectValue placeholder="Underwriting" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
@@ -436,6 +425,18 @@ export default function DebtorReview() {
                 <SelectItem value="SUBMITTED">Submitted</SelectItem>
                 <SelectItem value="APPROVED">Approved</SelectItem>
                 <SelectItem value="REJECTED">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Batch Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Uploaded">Uploaded</SelectItem>
+                <SelectItem value="Validated">Validated</SelectItem>
+                <SelectItem value="Matched">Matched</SelectItem>
+                <SelectItem value="Approved">Approved</SelectItem>
               </SelectContent>
             </Select>
             <Input
@@ -494,29 +495,7 @@ export default function DebtorReview() {
               </div>
             </div>
 
-            <div>
-              <h4 className="font-semibold mb-2">Documents ({calculateDocProgress(selectedDebtor?.id || '').completed}/{DOCUMENT_TYPES.length})</h4>
-              <div className="space-y-2">
-                {DOCUMENT_TYPES.map((docType, idx) => {
-                  const doc = getDebtorDocuments(selectedDebtor?.id || '').find(d => d.document_type === docType);
-                  return (
-                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <div className="flex items-center gap-2">
-                        {doc?.status === 'VERIFIED' ? (
-                          <CheckCircle2 className="w-4 h-4 text-green-500" />
-                        ) : doc ? (
-                          <Clock className="w-4 h-4 text-yellow-500" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-gray-300" />
-                        )}
-                        <span className="text-sm">{docType}</span>
-                      </div>
-                      {doc && <StatusBadge status={doc.status} />}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+
           </div>
           <DialogFooter>
             <Button onClick={() => setShowDetailDialog(false)}>Close</Button>
@@ -552,10 +531,7 @@ export default function DebtorReview() {
                   <span className="text-gray-500">Premium:</span>
                   <span className="ml-2 font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</span>
                 </div>
-                <div>
-                  <span className="text-gray-500">Doc Progress:</span>
-                  <span className="ml-2 font-medium">{calculateDocProgress(selectedDebtor?.id || '').percentage}%</span>
-                </div>
+
                 <div>
                   <span className="text-gray-500">Batch Status:</span>
                   <span className="ml-2"><StatusBadge status={selectedDebtor?.batch_status} /></span>

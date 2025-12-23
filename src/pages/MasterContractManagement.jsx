@@ -22,10 +22,20 @@ export default function MasterContractManagement() {
   const [user, setUser] = useState(null);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showFormDialog, setShowFormDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showVersionDialog, setShowVersionDialog] = useState(false);
+  const [showActionDialog, setShowActionDialog] = useState(false);
+  const [actionType, setActionType] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [filters, setFilters] = useState({
+    status: 'all',
+    contractId: '',
+    productType: 'all',
+    creditType: 'all',
+    startDate: '',
+    endDate: ''
+  });
   const [selectedContract, setSelectedContract] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -189,52 +199,88 @@ export default function MasterContractManagement() {
     if (!uploadFile) return;
 
     setProcessing(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    let uploaded = 0;
+    let errors = [];
+    
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: uploadFile });
+      const text = await uploadFile.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        setErrorMessage('File is empty or invalid format');
+        setProcessing(false);
+        return;
+      }
+      
+      const headers = lines[0].split(',');
 
-      const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url: file_url,
-        json_schema: {
-          type: "object",
-          properties: {
-            contracts: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  contract_id: { type: "string" },
-                  policy_number: { type: "string" },
-                  product_type: { type: "string" },
-                  credit_type: { type: "string" },
-                  coverage_start_date: { type: "string" },
-                  coverage_end_date: { type: "string" },
-                  coverage_limit: { type: "number" },
-                  reinsurance_share: { type: "number" }
-                }
-              }
-            }
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const values = lines[i].split(',');
+          if (values.length !== headers.length) {
+            errors.push(`Row ${i + 1}: Column count mismatch`);
+            continue;
           }
-        }
-      });
 
-      if (result.status === 'success' && result.output?.contracts) {
-        for (const contract of result.output.contracts) {
+          const contractId = values[0]?.trim();
+          const policyNumber = values[1]?.trim();
+          
+          if (!contractId || !policyNumber) {
+            errors.push(`Row ${i + 1}: Missing contract_id or policy_number`);
+            continue;
+          }
+
+          // Check for existing contract with same contract_id
+          const existingContracts = await base44.entities.MasterContract.filter({ contract_id: contractId });
+          const latestVersion = existingContracts.length > 0 
+            ? Math.max(...existingContracts.map(c => c.version || 1))
+            : 0;
+          
+          // If existing, create new version and archive old
+          if (existingContracts.length > 0 && latestVersion > 0) {
+            // Archive previous version
+            await base44.entities.MasterContract.update(existingContracts[existingContracts.length - 1].id, {
+              effective_status: 'Archived'
+            });
+          }
+
           await base44.entities.MasterContract.create({
-            ...contract,
+            contract_id: contractId,
+            policy_number: policyNumber,
+            product_type: values[2]?.trim() || 'Treaty',
+            credit_type: values[3]?.trim() || 'Individual',
+            coverage_start_date: values[4]?.trim(),
+            coverage_end_date: values[5]?.trim(),
+            coverage_limit: parseFloat(values[6]) || 0,
+            reinsurance_share: parseFloat(values[7]) || 0,
             effective_status: 'Draft',
-            version: 1
+            version: latestVersion + 1,
+            parent_contract_id: existingContracts.length > 0 ? existingContracts[existingContracts.length - 1].id : null,
+            effective_date: values[4]?.trim(),
+            remarks: values[8]?.trim() || ''
           });
+          
+          uploaded++;
+        } catch (rowError) {
+          errors.push(`Row ${i + 1}: ${rowError.message}`);
         }
-        setSuccessMessage(`${result.output.contracts.length} contracts uploaded successfully`);
-      } else {
-        alert('Failed to extract data from file');
       }
 
+      if (errors.length > 0) {
+        setErrorMessage(`Uploaded ${uploaded} contracts. ${errors.length} errors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`);
+      } else {
+        setSuccessMessage(`Successfully uploaded ${uploaded} contracts`);
+      }
+      
       setShowUploadDialog(false);
       setUploadFile(null);
       loadData();
     } catch (error) {
       console.error('Upload error:', error);
+      setErrorMessage(`Upload failed: ${error.message}`);
     }
     setProcessing(false);
   };
@@ -397,10 +443,7 @@ export default function MasterContractManagement() {
               <Upload className="w-4 h-4 mr-2" />
               Upload Excel
             </Button>
-            <Button className="bg-blue-600" onClick={() => setShowFormDialog(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Contract
-            </Button>
+
           </div>
         }
       />
@@ -419,6 +462,78 @@ export default function MasterContractManagement() {
         <StatCard title="Draft" value={stats.draft} icon={FileText} className="text-gray-600" />
       </div>
 
+      {errorMessage && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="whitespace-pre-wrap">{errorMessage}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <Input
+              placeholder="Contract ID..."
+              value={filters.contractId}
+              onChange={(e) => setFilters({...filters, contractId: e.target.value})}
+            />
+            <Select value={filters.productType} onValueChange={(val) => setFilters({...filters, productType: val})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Product Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Product Types</SelectItem>
+                <SelectItem value="Treaty">Treaty</SelectItem>
+                <SelectItem value="Facultative">Facultative</SelectItem>
+                <SelectItem value="Retro">Retro</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.creditType} onValueChange={(val) => setFilters({...filters, creditType: val})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Credit Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Credit Types</SelectItem>
+                <SelectItem value="Individual">Individual</SelectItem>
+                <SelectItem value="Corporate">Corporate</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Pending First Approval">Pending First Approval</SelectItem>
+                <SelectItem value="Pending Second Approval">Pending Second Approval</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+                <SelectItem value="Archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              placeholder="Start Date"
+              value={filters.startDate}
+              onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+            />
+            <Input
+              type="date"
+              placeholder="End Date"
+              value={filters.endDate}
+              onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+            />
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setFilters({ status: 'all', contractId: '', productType: 'all', creditType: 'all', startDate: '', endDate: '' })}>
+              Clear Filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Master Contracts</CardTitle>
@@ -426,12 +541,166 @@ export default function MasterContractManagement() {
         <CardContent>
           <DataTable
             columns={columns}
-            data={contracts}
+            data={contracts.filter(c => {
+              if (filters.status !== 'all' && c.effective_status !== filters.status) return false;
+              if (filters.contractId && !c.contract_id.includes(filters.contractId)) return false;
+              if (filters.productType !== 'all' && c.product_type !== filters.productType) return false;
+              if (filters.creditType !== 'all' && c.credit_type !== filters.creditType) return false;
+              if (filters.startDate && c.coverage_start_date < filters.startDate) return false;
+              if (filters.endDate && c.coverage_end_date > filters.endDate) return false;
+              return true;
+            })}
             isLoading={loading}
             emptyMessage="No master contracts found"
           />
         </CardContent>
       </Card>
+
+      {/* Contract Versioning Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Contract Versioning History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={[
+              { header: 'Contract ID', accessorKey: 'contract_id' },
+              { header: 'Policy Number', accessorKey: 'policy_number' },
+              { header: 'Version', cell: (row) => <Badge>v{row.version}</Badge> },
+              { header: 'Product Type', accessorKey: 'product_type' },
+              { header: 'Credit Type', accessorKey: 'credit_type' },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.effective_status} /> },
+              { header: 'Effective Date', accessorKey: 'effective_date' },
+              { header: 'Coverage End', accessorKey: 'coverage_end_date' },
+              { 
+                header: 'Actions', 
+                cell: (row) => (
+                  <div className="flex gap-1">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedContract(row);
+                        setShowVersionDialog(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    {(row.effective_status === 'Active' || row.effective_status === 'Inactive') && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="text-orange-600 hover:text-orange-700"
+                        onClick={() => {
+                          setSelectedContract(row);
+                          setActionType('close');
+                          setShowActionDialog(true);
+                        }}
+                      >
+                        Close
+                      </Button>
+                    )}
+                    {row.effective_status === 'Draft' && (
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => {
+                          setSelectedContract(row);
+                          setActionType('invalidate');
+                          setShowActionDialog(true);
+                        }}
+                      >
+                        Invalidate
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            ]}
+            data={contracts.sort((a, b) => {
+              if (a.contract_id !== b.contract_id) return a.contract_id.localeCompare(b.contract_id);
+              return (b.version || 1) - (a.version || 1);
+            })}
+            isLoading={loading}
+            emptyMessage="No contract versions found"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Contract Action Dialog */}
+      <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {actionType === 'close' ? 'Close Contract' : 'Invalidate Contract'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedContract?.contract_id} - {selectedContract?.policy_number}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <Alert variant={actionType === 'close' ? 'default' : 'destructive'}>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {actionType === 'close' 
+                  ? 'This contract will be marked as Inactive. No new batches can reference it.'
+                  : 'This contract will be permanently invalidated and cannot be used.'}
+              </AlertDescription>
+            </Alert>
+            <div>
+              <label className="text-sm font-medium">Remarks *</label>
+              <Textarea
+                value={approvalRemarks}
+                onChange={(e) => setApprovalRemarks(e.target.value)}
+                placeholder="Enter reason for this action..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowActionDialog(false); setApprovalRemarks(''); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!approvalRemarks) return;
+                setProcessing(true);
+                try {
+                  const newStatus = actionType === 'close' ? 'Inactive' : 'Archived';
+                  await base44.entities.MasterContract.update(selectedContract.id, {
+                    effective_status: newStatus,
+                    remarks: approvalRemarks
+                  });
+
+                  await base44.entities.AuditLog.create({
+                    action: `CONTRACT_${actionType.toUpperCase()}`,
+                    module: 'CONFIG',
+                    entity_type: 'MasterContract',
+                    entity_id: selectedContract.id,
+                    old_value: selectedContract.effective_status,
+                    new_value: newStatus,
+                    user_email: user?.email,
+                    user_role: user?.role,
+                    reason: approvalRemarks
+                  });
+
+                  setSuccessMessage(`Contract ${actionType}d successfully`);
+                  setShowActionDialog(false);
+                  setApprovalRemarks('');
+                  loadData();
+                } catch (error) {
+                  console.error('Action error:', error);
+                }
+                setProcessing(false);
+              }}
+              disabled={processing || !approvalRemarks}
+              variant={actionType === 'close' ? 'default' : 'destructive'}
+            >
+              {processing ? 'Processing...' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Form Dialog */}
       <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>

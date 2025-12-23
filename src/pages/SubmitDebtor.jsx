@@ -30,6 +30,7 @@ export default function SubmitDebtor() {
   const [showPreview, setShowPreview] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [validationRemarks, setValidationRemarks] = useState([]);
   
   // Corporate form
   const [corporateDebtors, setCorporateDebtors] = useState([{
@@ -89,12 +90,25 @@ export default function SubmitDebtor() {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    if (!selectedContract) {
+      setErrorMessage('Please select an active contract first');
+      return;
+    }
 
     setUploadedFile(file);
     setLoading(true);
     setErrorMessage('');
+    setValidationRemarks([]);
 
     try {
+      const contract = contracts.find(c => c.id === selectedContract);
+      if (!contract) {
+        setErrorMessage('Selected contract not found');
+        setLoading(false);
+        return;
+      }
+
       // Read file directly in browser - much faster than AI extraction
       const text = await file.text();
       const parsedData = parseCSV(text);
@@ -105,11 +119,41 @@ export default function SubmitDebtor() {
         return;
       }
 
-      // Map parsed CSV to Debtor entity instantly
+      // Map parsed CSV to Debtor entity instantly with validation
       const batchTimestamp = Date.now();
       const batchId = `BATCH-${parsedData[0].batch_year || new Date().getFullYear()}-${String(parsedData[0].batch_month || new Date().getMonth() + 1).padStart(2, '0')}-${batchTimestamp}`;
       
-      const enrichedData = parsedData.map((row, idx) => ({
+      const validationErrors = [];
+      const enrichedData = parsedData.map((row, idx) => {
+        const creditType = row.credit_type || creditType;
+        const creditPlafond = parseFloat(row.plafon?.replace(/[^0-9.-]/g, '')) || 0;
+        const coverageStartDate = row.tanggal_mulai_covering || coverageStart || new Date().toISOString().split('T')[0];
+        const coverageEndDate = row.tanggal_akhir_covering || coverageEnd || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0];
+        
+        // Validation against contract
+        let rowRemarks = [];
+        
+        if (contract.credit_type !== creditType) {
+          rowRemarks.push(`Credit type mismatch: expected ${contract.credit_type}, got ${creditType}`);
+        }
+        
+        if (coverageStartDate < contract.coverage_start_date || coverageStartDate > contract.coverage_end_date) {
+          rowRemarks.push(`Coverage start date outside contract period (${contract.coverage_start_date} to ${contract.coverage_end_date})`);
+        }
+        
+        if (creditPlafond > contract.coverage_limit) {
+          rowRemarks.push(`Plafond (${creditPlafond}) exceeds contract limit (${contract.coverage_limit})`);
+        }
+        
+        if (rowRemarks.length > 0) {
+          validationErrors.push({ 
+            row: idx + 2, 
+            debtor: row.nama_peserta, 
+            issues: rowRemarks 
+          });
+        }
+        
+        return ({
         cover_id: parseInt(row.cover_id) || idx + 1,
         program_id: row.program_id || 'PROG-001',
         batch_id: batchId,
@@ -149,11 +193,29 @@ export default function SubmitDebtor() {
         flag_restruktur: parseInt(row.flag_restruktur) || 0,
         collectability_col: parseInt(row.kolektabilitas) || 1,
         premium_remarks: row.remark_premi || '',
-        underwriting_status: 'DRAFT'
-      }));
+        underwriting_status: 'DRAFT',
+        validation_remarks: rowRemarks.join('; ')
+      })});
       
       setPreviewData(enrichedData);
+      setValidationRemarks(validationErrors);
       setShowPreview(true);
+      
+      if (validationErrors.length > 0) {
+        setErrorMessage(`${validationErrors.length} validation issues found - check remarks below`);
+        
+        // Send notification about validation issues
+        await base44.entities.Notification.create({
+          title: 'Batch Validation Issues',
+          message: `${validationErrors.length} debtors have validation issues against contract ${contract.contract_id}`,
+          type: 'WARNING',
+          module: 'DEBTOR',
+          reference_id: batchId,
+          target_role: 'BRINS'
+        });
+      } else {
+        setSuccessMessage(`Loaded ${enrichedData.length} debtors - all validated successfully against contract ${contract.contract_id}`);
+      }
     } catch (error) {
       console.error('File upload error:', error);
       setErrorMessage('Failed to process file. Please check the format and try again.');
@@ -463,11 +525,61 @@ export default function SubmitDebtor() {
         </Alert>
       )}
 
+      {validationRemarks.length > 0 && (
+        <Card className="border-orange-300 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="text-orange-700">System Validation Remarks</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {validationRemarks.map((remark, idx) => (
+                <Alert key={idx} className="bg-orange-100 border-orange-300">
+                  <AlertCircle className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-800">
+                    <strong>Row {remark.row} ({remark.debtor}):</strong> {remark.issues.join(', ')}
+                  </AlertDescription>
+                </Alert>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Contract Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>1. Select Active Contract</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Select value={selectedContract} onValueChange={setSelectedContract}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select active master contract" />
+            </SelectTrigger>
+            <SelectContent>
+              {contracts.filter(c => c.effective_status === 'Active').map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.contract_id} - {c.policy_number} ({c.credit_type}) - Limit: Rp {(c.coverage_limit || 0).toLocaleString('id-ID')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedContract && (
+            <Alert className="mt-3 bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                Selected: {contracts.find(c => c.id === selectedContract)?.contract_id} - 
+                All uploaded debtors will be validated against this contract
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Debtor Upload */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Upload Debtor Data</CardTitle>
+            <CardTitle>2. Upload Batch File</CardTitle>
             <Button variant="outline" onClick={downloadTemplate}>
               <Download className="w-4 h-4 mr-2" />
               Download Template
@@ -482,6 +594,7 @@ export default function SubmitDebtor() {
               onChange={handleFileUpload}
               className="hidden"
               id="file-upload"
+              disabled={!selectedContract}
             />
             <label htmlFor="file-upload" className="cursor-pointer">
               {loading ? (
@@ -493,6 +606,9 @@ export default function SubmitDebtor() {
                 {uploadedFile ? uploadedFile.name : 'Click to upload or drag and drop'}
               </p>
               <p className="text-sm text-gray-400">Excel or CSV files</p>
+              {!selectedContract && (
+                <p className="text-sm text-orange-600 mt-2">⚠️ Please select a contract first</p>
+              )}
             </label>
           </div>
 

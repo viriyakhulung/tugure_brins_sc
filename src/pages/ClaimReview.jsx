@@ -129,11 +129,10 @@ export default function ClaimReview() {
           updateData.invoiced_by = user?.email;
           updateData.invoiced_date = new Date().toISOString().split('T')[0];
           break;
-        case 'pay':
-          newStatus = 'Paid';
-          updateData.claim_status = 'Paid';
-          updateData.paid_by = user?.email;
-          updateData.paid_date = new Date().toISOString().split('T')[0];
+        case 'reject':
+          newStatus = 'Draft';
+          updateData.claim_status = 'Draft';
+          updateData.rejection_reason = remarks;
           break;
       }
 
@@ -272,7 +271,6 @@ export default function ClaimReview() {
     { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
     { header: 'Share Tugure', cell: (row) => `${row.share_tugure_pct}% (Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')})` },
     { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> },
-    { header: 'Eligibility', cell: (row) => <StatusBadge status={row.eligibility_status} /> },
     {
       header: 'Actions',
       cell: (row) => (
@@ -327,17 +325,18 @@ export default function ClaimReview() {
               Issue Invoice
             </Button>
           )}
-          {row.claim_status === 'Invoiced' && (
+          {row.claim_status === 'Draft' && (
             <Button 
               size="sm" 
-              className="bg-green-600 hover:bg-green-700"
+              variant="destructive"
               onClick={() => {
                 setSelectedClaim(row);
-                setActionType('pay');
+                setActionType('reject');
                 setShowActionDialog(true);
               }}
             >
-              Mark Paid
+              <X className="w-4 h-4 mr-1" />
+              Reject
             </Button>
           )}
         </div>
@@ -489,6 +488,54 @@ export default function ClaimReview() {
         ]}
         actions={
           <div className="flex gap-2">
+            {selectedClaims.length > 0 && (
+              <>
+                <Button 
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={async () => {
+                    setProcessing(true);
+                    for (const claimId of selectedClaims) {
+                      const claim = claims.find(c => c.id === claimId);
+                      if (claim && claim.claim_status === 'Draft') {
+                        await base44.entities.Claim.update(claimId, {
+                          claim_status: 'Checked',
+                          checked_by: user?.email,
+                          checked_date: new Date().toISOString().split('T')[0]
+                        });
+                      }
+                    }
+                    setSuccessMessage(`${selectedClaims.length} claims checked`);
+                    setSelectedClaims([]);
+                    loadData();
+                    setProcessing(false);
+                  }}
+                  disabled={processing}
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Bulk Check ({selectedClaims.length})
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={async () => {
+                    setProcessing(true);
+                    for (const claimId of selectedClaims) {
+                      await base44.entities.Claim.update(claimId, {
+                        claim_status: 'Draft',
+                        rejection_reason: 'Bulk rejection'
+                      });
+                    }
+                    setSuccessMessage(`${selectedClaims.length} claims rejected`);
+                    setSelectedClaims([]);
+                    loadData();
+                    setProcessing(false);
+                  }}
+                  disabled={processing}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Bulk Reject ({selectedClaims.length})
+                </Button>
+              </>
+            )}
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
@@ -666,8 +713,68 @@ export default function ClaimReview() {
         </TabsContent>
 
         <TabsContent value="subrogation" className="mt-4">
+          <div className="mb-4">
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                Manage subrogation lifecycle: Draft → Invoiced → Paid/Closed. Revise, cancel, or reopen as needed.
+              </AlertDescription>
+            </Alert>
+          </div>
           <DataTable
-            columns={subrogationColumns}
+            columns={[
+              {
+                header: (
+                  <Checkbox
+                    checked={selectedSubrogations.length === subrogations.length && subrogations.length > 0}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedSubrogations(subrogations.map(s => s.id));
+                      } else {
+                        setSelectedSubrogations([]);
+                      }
+                    }}
+                  />
+                ),
+                cell: (row) => (
+                  <Checkbox
+                    checked={selectedSubrogations.includes(row.id)}
+                    onCheckedChange={() => toggleSubrogationSelection(row.id)}
+                  />
+                ),
+                width: '50px'
+              },
+              { header: 'Subrogation ID', accessorKey: 'subrogation_id' },
+              { header: 'Claim ID', accessorKey: 'claim_id' },
+              { header: 'Recovery Amount', cell: (row) => `IDR ${(row.recovery_amount || 0).toLocaleString()}` },
+              { header: 'Recovery Date', accessorKey: 'recovery_date' },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              {
+                header: 'Actions',
+                cell: (row) => (
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm">
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    {row.status === 'Draft' && (
+                      <>
+                        <Button size="sm" variant="outline" className="text-orange-600">
+                          Revise
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-red-600">
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+                    {row.status === 'Paid / Closed' && (
+                      <Button size="sm" variant="outline" className="text-blue-600">
+                        Reopen
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            ]}
             data={subrogations}
             isLoading={loading}
             emptyMessage="No subrogation records"
@@ -800,11 +907,11 @@ export default function ClaimReview() {
                 </>
               ) : (
                 <>
-                  <Check className="w-4 h-4 mr-2" />
+                  {actionType === 'reject' ? <X className="w-4 h-4 mr-2" /> : <Check className="w-4 h-4 mr-2" />}
                   {actionType === 'check' && 'Mark as Checked'}
                   {actionType === 'verify' && 'Mark as Verified'}
                   {actionType === 'invoice' && 'Issue Invoice'}
-                  {actionType === 'pay' && 'Mark as Paid'}
+                  {actionType === 'reject' && 'Reject Claim'}
                 </>
               )}
             </Button>

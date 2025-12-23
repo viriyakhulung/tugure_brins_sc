@@ -18,86 +18,21 @@ import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 
-function ClaimDocumentUploadRow({ docType, existingDoc }) {
-  const [file, setFile] = useState(null);
-  const [uploaded, setUploaded] = useState(!!existingDoc);
-  const [uploading, setUploading] = useState(false);
-  const [fileUrl, setFileUrl] = useState(existingDoc?.file_url || null);
-
-  const handleUpload = async () => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      // Simulate upload - in real scenario would upload via base44.integrations.Core.UploadFile
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setFileUrl(URL.createObjectURL(file));
-      setUploaded(true);
-    } catch (error) {
-      console.error('Upload error:', error);
-    }
-    setUploading(false);
-  };
-
-  return (
-    <div className="flex items-center gap-3 p-3 border rounded-lg">
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          {uploaded ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-          ) : (
-            <FileText className="w-4 h-4 text-gray-400" />
-          )}
-          <span className="font-medium text-sm">{docType}</span>
-        </div>
-        {(file || existingDoc) && <p className="text-xs text-gray-500 mt-1">{file?.name || existingDoc?.document_name}</p>}
-      </div>
-      <div className="flex items-center gap-2">
-        {(uploaded && fileUrl) && (
-          <Button variant="ghost" size="sm" asChild>
-            <a href={fileUrl} download={file?.name || existingDoc?.document_name}>
-              <Download className="w-4 h-4" />
-            </a>
-          </Button>
-        )}
-        <Input
-          type="file"
-          onChange={(e) => {
-            const selectedFile = e.target.files?.[0];
-            if (selectedFile) {
-              setFile(selectedFile);
-              setUploaded(false);
-            }
-          }}
-          accept=".pdf,.jpg,.jpeg,.png"
-          className="w-48 text-sm"
-        />
-        <Button 
-          size="sm"
-          variant="outline"
-          disabled={!file || uploading}
-          onClick={handleUpload}
-        >
-          {uploading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : uploaded ? 'Re-upload' : 'Upload'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 export default function ClaimSubmit() {
   const [claims, setClaims] = useState([]);
   const [subrogations, setSubrogations] = useState([]);
   const [debtors, setDebtors] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showSubrogationDialog, setShowSubrogationDialog] = useState(false);
+  const [showRevisionDialog, setShowRevisionDialog] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState('');
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [validationRemarks, setValidationRemarks] = useState([]);
   
   // Subrogation form state
   const [selectedClaim, setSelectedClaim] = useState('');
@@ -130,16 +65,18 @@ export default function ClaimSubmit() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [claimData, subrogationData, debtorData, contractData, masterContractData] = await Promise.all([
+      const [claimData, subrogationData, debtorData, batchData, contractData, masterContractData] = await Promise.all([
         base44.entities.Claim.list(),
         base44.entities.Subrogation.list(),
         base44.entities.Debtor.list(),
+        base44.entities.Batch.list(),
         base44.entities.Contract.list(),
         base44.entities.MasterContract.list()
       ]);
       setClaims(claimData || []);
       setSubrogations(subrogationData || []);
       setDebtors(debtorData || []);
+      setBatches(batchData || []);
       
       // Combine active master contracts with old contracts
       const activeContracts = masterContractData.filter(c => c.effective_status === 'Active');
@@ -279,30 +216,77 @@ export default function ClaimSubmit() {
   };
 
   const handleFileUpload = async (file) => {
-    if (!file) return;
+    if (!file || !selectedBatch) return;
     
     setProcessing(true);
     setErrorMessage('');
+    setValidationRemarks([]);
+    
     try {
+      const batch = batches.find(b => b.id === selectedBatch);
+      if (!batch) {
+        setErrorMessage('Selected batch not found');
+        setProcessing(false);
+        return;
+      }
+
+      const batchDebtors = debtors.filter(d => d.batch_id === batch.batch_id);
+      if (batchDebtors.length === 0) {
+        setErrorMessage('No debtors found in selected batch');
+        setProcessing(false);
+        return;
+      }
+
       const text = await file.text();
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(',');
       
       const parsed = [];
+      const validationErrors = [];
+      
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',');
-        if (values.length !== headers.length) continue;
+        if (values.length !== headers.length) {
+          validationErrors.push({ row: i + 1, issue: 'Column count mismatch' });
+          continue;
+        }
         
+        const participantNo = values[3]?.trim();
+        const claimAmount = parseFloat(values[8]) || 0;
+        
+        // Find corresponding debtor in batch
+        const debtor = batchDebtors.find(d => d.participant_no === participantNo);
+        
+        let rowRemarks = [];
+        if (!debtor) {
+          rowRemarks.push('Debtor not found in batch');
+        } else {
+          if (debtor.underwriting_status !== 'APPROVED') {
+            rowRemarks.push('Debtor not approved');
+          }
+          if (claimAmount > (debtor.credit_plafond || 0)) {
+            rowRemarks.push(`Claim exceeds plafond (${debtor.credit_plafond})`);
+          }
+        }
+        
+        if (rowRemarks.length > 0) {
+          validationErrors.push({ 
+            row: i + 1, 
+            participant: participantNo, 
+            issues: rowRemarks 
+          });
+        }
+
         const claim = {
           claim_no: values[0]?.trim(),
           policy_no: values[1]?.trim(),
           certificate_no: values[2]?.trim(),
-          participant_no: values[3]?.trim(),
+          participant_no: participantNo,
           nama_tertanggung: values[4]?.trim(),
           no_ktp_npwp: values[5]?.trim(),
           no_fasilitas_kredit: values[6]?.trim(),
           tanggal_realisasi_kredit: values[7]?.trim(),
-          nilai_klaim: parseFloat(values[8]) || 0,
+          nilai_klaim: claimAmount,
           dol: values[9]?.trim(),
           kol_debitur: values[10]?.trim(),
           plafond: parseFloat(values[11]) || 0,
@@ -310,13 +294,20 @@ export default function ClaimSubmit() {
           share_tugure_pct: parseFloat(values[13]) || 75,
           share_tugure_amount: parseFloat(values[14]) || 0,
           bdo_premi_period: values[15]?.trim(),
-          check_bdo_premi: values[16]?.trim().toUpperCase() === 'TRUE'
+          check_bdo_premi: values[16]?.trim().toUpperCase() === 'TRUE',
+          validation_remarks: rowRemarks.join('; ')
         };
         parsed.push(claim);
       }
       
       setParsedClaims(parsed);
-      setSuccessMessage(`Parsed ${parsed.length} claims from file`);
+      setValidationRemarks(validationErrors);
+      
+      if (validationErrors.length > 0) {
+        setErrorMessage(`${validationErrors.length} validation issues found`);
+      } else {
+        setSuccessMessage(`Parsed ${parsed.length} claims - all validated successfully`);
+      }
     } catch (error) {
       console.error('Parse error:', error);
       setErrorMessage('Failed to parse file. Please check format.');
@@ -325,8 +316,8 @@ export default function ClaimSubmit() {
   };
 
   const handleBulkUpload = async () => {
-    if (parsedClaims.length === 0) {
-      setErrorMessage('No claims to upload');
+    if (parsedClaims.length === 0 || !selectedBatch) {
+      setErrorMessage('No claims to upload or batch not selected');
       return;
     }
 
@@ -337,28 +328,20 @@ export default function ClaimSubmit() {
     let invalidClaims = [];
     
     try {
+      const batch = batches.find(b => b.id === selectedBatch);
+      const batchDebtors = debtors.filter(d => d.batch_id === batch.batch_id);
+      
       for (const claimData of parsedClaims) {
-        const debtor = debtors.find(d => d.participant_no === claimData.participant_no);
+        // Skip if has validation remarks
+        if (claimData.validation_remarks) {
+          invalidClaims.push({ participant_no: claimData.participant_no, reason: claimData.validation_remarks });
+          continue;
+        }
         
-        // Validate against Master Contract
+        const debtor = batchDebtors.find(d => d.participant_no === claimData.participant_no);
+        
         if (!debtor) {
-          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'Debtor not found' });
-          continue;
-        }
-        
-        if (!debtor.contract_id) {
-          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'No contract reference' });
-          continue;
-        }
-        
-        const contract = contracts.find(c => c.id === debtor.contract_id);
-        if (!contract || (contract.effective_status && contract.effective_status !== 'Active')) {
-          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'Contract not active' });
-          continue;
-        }
-        
-        if (debtor.underwriting_status !== 'APPROVED') {
-          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'Debtor not approved' });
+          invalidClaims.push({ participant_no: claimData.participant_no, reason: 'Debtor not found in selected batch' });
           continue;
         }
         
@@ -396,10 +379,19 @@ export default function ClaimSubmit() {
       }
       
       if (invalidClaims.length > 0) {
-        const errorMsg = `${validClaims} claims uploaded. ${invalidClaims.length} failed:\n${invalidClaims.map(e => `${e.participant_no}: ${e.reason}`).join('\n')}`;
-        setErrorMessage(errorMsg);
+        setErrorMessage(`${validClaims} claims uploaded. ${invalidClaims.length} failed - you can re-upload revised rows only`);
+        setValidationRemarks(invalidClaims);
+        
+        await base44.entities.Notification.create({
+          title: 'Claim Upload Issues',
+          message: `${invalidClaims.length} claims have validation issues for batch ${batch.batch_id}`,
+          type: 'WARNING',
+          module: 'CLAIM',
+          reference_id: batch.batch_id,
+          target_role: 'BRINS'
+        });
       } else {
-        setSuccessMessage(`Successfully uploaded ${validClaims} claims`);
+        setSuccessMessage(`Successfully uploaded ${validClaims} claims for batch ${batch.batch_id}`);
       }
       
       setShowUploadDialog(false);
@@ -415,16 +407,7 @@ export default function ClaimSubmit() {
 
   const approvedDebtors = debtors.filter(d => d.underwriting_status === 'APPROVED');
 
-  const [selectedClaimForDocs, setSelectedClaimForDocs] = useState(null);
-  const [showDocUploadDialog, setShowDocUploadDialog] = useState(false);
 
-  const REQUIRED_CLAIM_DOCS = [
-    'Claim Advice',
-    'Default Letter',
-    'Outstanding Statement',
-    'Collection Evidence',
-    'Other Supporting Documents'
-  ];
 
   const toggleClaimSelection = (claimId) => {
     if (selectedClaims.includes(claimId)) {
@@ -470,26 +453,7 @@ export default function ClaimSubmit() {
     { header: 'DOL', accessorKey: 'dol' },
     { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
     { header: 'Share Tugure', cell: (row) => `${row.share_tugure_pct}% (Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')})` },
-    { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> },
-    { header: 'Eligibility', cell: (row) => <StatusBadge status={row.eligibility_status} /> },
-    {
-      header: 'Actions',
-      cell: (row) => (
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => {
-              setSelectedClaimForDocs(row);
-              setShowDocUploadDialog(true);
-            }}
-          >
-            <Upload className="w-4 h-4 mr-1" />
-            Docs
-          </Button>
-        </div>
-      )
-    }
+    { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> }
   ];
 
   const subrogationColumns = [
@@ -528,12 +492,11 @@ export default function ClaimSubmit() {
               Download Template
             </Button>
             <Button 
-              variant="outline"
-              onClick={() => setShowUploadDialog(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => setShowUploadDialog(true)}
             >
               <Upload className="w-4 h-4 mr-2" />
-              Upload Claims
+              Bulk Upload Claims
             </Button>
             <Button 
               className="bg-green-600 hover:bg-green-700 text-white"
@@ -578,6 +541,32 @@ export default function ClaimSubmit() {
         </Alert>
       )}
 
+      {validationRemarks.length > 0 && (
+        <Card className="border-orange-300 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="text-orange-700">System Validation Remarks</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {validationRemarks.map((remark, idx) => (
+                <Alert key={idx} className="bg-orange-100 border-orange-300">
+                  <AlertCircle className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-800">
+                    <strong>{remark.participant_no}:</strong> {remark.reason}
+                  </AlertDescription>
+                </Alert>
+              ))}
+            </div>
+            <Button 
+              className="mt-3 bg-orange-600 hover:bg-orange-700"
+              onClick={() => setShowRevisionDialog(true)}
+            >
+              Re-upload Revised Claims Only
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <FilterPanel
         filters={filters}
         onFilterChange={handleFilterChange}
@@ -592,7 +581,7 @@ export default function ClaimSubmit() {
             Claims ({claims.length})
           </TabsTrigger>
           <TabsTrigger value="subrogation">
-            <FileText className="w-4 h-4 mr-2" />
+            <DollarSign className="w-4 h-4 mr-2" />
             Subrogation ({subrogations.length})
           </TabsTrigger>
         </TabsList>
@@ -609,7 +598,7 @@ export default function ClaimSubmit() {
         <TabsContent value="subrogation" className="mt-4">
           <div className="mb-4 flex justify-between items-center">
             <p className="text-sm text-gray-600">
-              Subrogation records for settled claims
+              Subrogation records for settled claims - Manage revisions and cancellations
             </p>
             <Button 
               className="bg-green-600 hover:bg-green-700"
@@ -620,7 +609,38 @@ export default function ClaimSubmit() {
             </Button>
           </div>
           <DataTable
-            columns={subrogationColumns}
+            columns={[
+              { header: 'Subrogation ID', accessorKey: 'subrogation_id' },
+              { header: 'Claim ID', accessorKey: 'claim_id' },
+              { header: 'Recovery Amount', cell: (row) => `IDR ${(row.recovery_amount || 0).toLocaleString()}` },
+              { header: 'Recovery Date', accessorKey: 'recovery_date' },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              {
+                header: 'Actions',
+                cell: (row) => (
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm">
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    {row.status === 'Draft' && (
+                      <>
+                        <Button size="sm" variant="outline" className="text-orange-600">
+                          Revise
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-red-600">
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+                    {row.status === 'Paid / Closed' && (
+                      <Button size="sm" variant="outline" className="text-blue-600">
+                        Reopen
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            ]}
             data={subrogations}
             isLoading={loading}
             emptyMessage="No subrogation records"
@@ -628,33 +648,8 @@ export default function ClaimSubmit() {
         </TabsContent>
       </Tabs>
 
-      {/* Document Upload Dialog */}
-      <Dialog open={showDocUploadDialog} onOpenChange={setShowDocUploadDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Upload Claim Documents</DialogTitle>
-            <DialogDescription>
-              Upload required documents for claim: {selectedClaimForDocs?.claim_no || 'N/A'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-4">
-            {REQUIRED_CLAIM_DOCS.map(docType => (
-              <ClaimDocumentUploadRow key={docType} docType={docType} />
-            ))}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowDocUploadDialog(false);
-              setSelectedClaimForDocs(null);
-            }}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Claim Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      {/* Upload Claims Dialog (Excel/CSV) */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Submit New Claim</DialogTitle>
@@ -889,12 +884,27 @@ export default function ClaimSubmit() {
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Upload Claims (Excel/CSV)</DialogTitle>
+            <DialogTitle>Bulk Upload Claims per Batch</DialogTitle>
             <DialogDescription>
-              Upload multiple claims from Excel or CSV file
+              Select batch and upload multiple claims from Excel/CSV file
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div>
+              <Label>Select Batch *</Label>
+              <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select batch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {batches.map(b => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.batch_id} ({b.batch_month}/{b.batch_year}) - {b.total_records} debtors
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label>Upload File</Label>
               <Input
@@ -907,9 +917,10 @@ export default function ClaimSubmit() {
                     handleFileUpload(file);
                   }
                 }}
+                disabled={!selectedBatch}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Supported formats: CSV (.csv)
+                Supported formats: CSV (.csv). Select batch first.
               </p>
             </div>
             {parsedClaims.length > 0 && (
@@ -931,12 +942,13 @@ export default function ClaimSubmit() {
               setShowUploadDialog(false);
               setUploadFile(null);
               setParsedClaims([]);
+              setSelectedBatch('');
             }}>
               Cancel
             </Button>
             <Button 
               className="bg-blue-600 hover:bg-blue-700"
-              disabled={parsedClaims.length === 0 || processing}
+              disabled={parsedClaims.length === 0 || processing || !selectedBatch}
               onClick={handleBulkUpload}
             >
               {processing ? (
@@ -950,6 +962,46 @@ export default function ClaimSubmit() {
                   Upload {parsedClaims.length} Claims
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revision Upload Dialog */}
+      <Dialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Re-upload Revised Claims</DialogTitle>
+            <DialogDescription>
+              Upload only the revised claim rows that had validation issues
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                Only upload rows that were flagged with validation issues. Corrected claims will be re-validated.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label>Upload Revised File</Label>
+              <Input
+                type="file"
+                accept=".csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setUploadFile(file);
+                    handleFileUpload(file);
+                    setShowRevisionDialog(false);
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRevisionDialog(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

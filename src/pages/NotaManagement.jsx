@@ -130,7 +130,19 @@ export default function NotaManagement() {
       // 1. Update Nota
       await base44.entities.Nota.update(selectedNota.id, updateData);
 
-      // 2. CRITICAL: Sync Debtor invoice_status if Nota is for Batch
+      // 2. When Nota is Confirmed, data flows to Payment Intent
+      if (nextStatus === 'Confirmed') {
+        await createNotification(
+          'Nota Confirmed - Ready for Payment',
+          `Nota ${selectedNota.nota_number} confirmed. Payment Intent can now be created.`,
+          'ACTION_REQUIRED',
+          'DEBTOR',
+          selectedNota.id,
+          'BRINS'
+        );
+      }
+
+      // 3. CRITICAL: When Nota is Paid, flow to Reconciliation/Payment
       if (selectedNota.nota_type === 'Batch' && selectedNota.reference_id) {
         const batchDebtors = await base44.entities.Debtor.filter({ batch_id: selectedNota.reference_id });
         
@@ -457,8 +469,8 @@ export default function NotaManagement() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Nota & Reconciliation Center"
-        subtitle="Manage notas, payments, and debit/credit notes"
+        title="Nota Management"
+        subtitle="Manage notas, payments, reconciliation, and debit/credit notes"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Nota Management' }
@@ -589,7 +601,57 @@ export default function NotaManagement() {
       </Card>
 
           <DataTable
-            columns={columns}
+            columns={[
+              {
+                header: 'Nota Number',
+                cell: (row) => (
+                  <div>
+                    <p className="font-medium font-mono">{row.nota_number}</p>
+                    <p className="text-xs text-gray-500">{row.nota_type}</p>
+                  </div>
+                )
+              },
+              { 
+                header: 'Reference',
+                cell: (row) => <span className="text-sm">{row.reference_id}</span>
+              },
+              { header: 'Amount', cell: (row) => `Rp ${(row.amount || 0).toLocaleString('id-ID')}` },
+              { header: 'Paid Amount', cell: (row) => row.status === 'Paid' ? `Rp ${(row.amount || 0).toLocaleString('id-ID')}` : '-' },
+              { header: 'Outstanding', cell: (row) => row.status === 'Paid' ? 'Rp 0' : `Rp ${(row.amount || 0).toLocaleString('id-ID')}` },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              {
+                header: 'Actions',
+                cell: (row) => (
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedNota(row);
+                        setShowViewDialog(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      View
+                    </Button>
+                    {row.status !== 'Paid' && getNextStatus(row.status) && (
+                      <Button 
+                        size="sm" 
+                        className="bg-blue-600 hover:bg-blue-700"
+                        onClick={() => {
+                          setSelectedNota(row);
+                          setActionType(getActionLabel(row.status));
+                          setShowActionDialog(true);
+                        }}
+                      >
+                        <ArrowRight className="w-4 h-4 mr-1" />
+                        {getActionLabel(row.status)}
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            ]}
             data={filteredNotas}
             isLoading={loading}
             emptyMessage="No notas found"
