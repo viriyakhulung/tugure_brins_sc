@@ -340,6 +340,35 @@ export default function SystemConfiguration() {
     
     // Create sample email templates - Complete end-to-end workflow
     const sampleTemplates = [
+      // === MASTER CONTRACT WORKFLOW ===
+      {
+        object_type: 'MasterContract',
+        status_from: 'Draft',
+        status_to: 'Pending First Approval',
+        recipient_role: 'TUGURE',
+        email_subject: '[Contract {contract_id}] First Approval Required',
+        email_body: 'Dear TUGURE Team,\n\nMaster Contract {contract_id} requires first approval.\n\nContract Details:\n- Policy: {policy_number}\n- Coverage Limit: {coverage_limit}\n- Share: {reinsurance_share}%\n\nPlease review and approve.\n\nBest regards,\nSystem',
+        is_active: true
+      },
+      {
+        object_type: 'MasterContract',
+        status_from: 'Pending First Approval',
+        status_to: 'Pending Second Approval',
+        recipient_role: 'ADMIN',
+        email_subject: '[Contract {contract_id}] Second Approval Required',
+        email_body: 'Dear Admin,\n\nMaster Contract {contract_id} requires second approval.\n\nFirst approved by: {user_name}\nDate: {date}\n\nPlease review and approve.\n\nBest regards,\nSystem',
+        is_active: true
+      },
+      {
+        object_type: 'MasterContract',
+        status_from: 'Pending Second Approval',
+        status_to: 'Active',
+        recipient_role: 'ALL',
+        email_subject: '[Contract {contract_id}] Activated',
+        email_body: 'Dear Team,\n\nMaster Contract {contract_id} is now active.\n\nApproved by: {user_name}\nDate: {date}\n\nContract is ready for batch submissions.\n\nBest regards,\nSystem',
+        is_active: true
+      },
+      
       // === BATCH WORKFLOW ===
       {
         object_type: 'Batch',
@@ -347,7 +376,7 @@ export default function SystemConfiguration() {
         status_to: 'Validated',
         recipient_role: 'BRINS',
         email_subject: '[Batch {batch_id}] Validated Successfully',
-        email_body: 'Dear BRINS Team,\n\nYour batch {batch_id} has been validated successfully by {user_name} on {date}.\n\nValidation Summary:\n- Total Records: {total_records}\n- Total Exposure: {total_exposure}\n- Total Premium: {total_premium}\n\nNext Step: System will proceed with matching process.\n\nBest regards,\nTUGURE Reinsurance System',
+        email_body: 'Dear BRINS Team,\n\nBatch {batch_id} validated by {user_name} on {date}.\n\nValidation Summary:\n- Total Records: {total_records}\n- Total Premium: {total_premium}\n\nNext: Matching process.\n\nBest regards,\nTUGURE System',
         is_active: true
       },
       {
@@ -463,14 +492,34 @@ export default function SystemConfiguration() {
         is_active: true
       },
       
+      // === DEBTOR REVIEW WORKFLOW ===
+      {
+        object_type: 'Debtor',
+        status_from: 'SUBMITTED',
+        status_to: 'APPROVED',
+        recipient_role: 'BRINS',
+        email_subject: '[Debtor {debtor_name}] Approved',
+        email_body: 'Dear BRINS Team,\n\nDebtor {debtor_name} approved.\n\nDetails:\n- Plafond: {plafond}\n- Premium: {premium}\n- Approved by: {user_name}\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'Debtor',
+        status_from: 'SUBMITTED',
+        status_to: 'REJECTED',
+        recipient_role: 'BRINS',
+        email_subject: '[Debtor {debtor_name}] Rejected - Revision Needed',
+        email_body: 'Dear BRINS Team,\n\nDebtor {debtor_name} rejected.\n\nReason: {remarks}\nRejected by: {user_name}\n\nPlease revise and resubmit.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      
       // === CLAIM WORKFLOW ===
       {
         object_type: 'Claim',
         status_from: 'Draft',
         status_to: 'Checked',
         recipient_role: 'BRINS',
-        email_subject: '[Claim {claim_no}] Eligibility Check Completed',
-        email_body: 'Dear BRINS Team,\n\nClaim {claim_no} has been checked for eligibility.\n\nClaim Details:\n- Debtor: {debtor_name}\n- Claim Amount: {claim_amount}\n- Checked Date: {date}\n- Checked by: {user_name}\n\nNext Step: Document verification process.\n\nBest regards,\nTUGURE Reinsurance System',
+        email_subject: '[Claim {claim_no}] Checked',
+        email_body: 'Claim {claim_no} checked by {user_name}.\n\nNext: Doc verification.\n\nBest regards,\nTUGURE System',
         is_active: true
       },
       {
@@ -790,17 +839,47 @@ export default function SystemConfiguration() {
 
       // === NOTA WORKFLOW SLA ===
       {
-        rule_name: 'Nota Draft - Issuance Required',
+        rule_name: 'Nota Confirmed - Payment Intent Auto-Create',
         entity_type: 'Nota',
         trigger_condition: 'STATUS_DURATION',
-        status_value: 'Draft',
-        duration_value: 24,
+        status_value: 'Confirmed',
+        duration_value: 1,
         duration_unit: 'HOURS',
         notification_type: 'SYSTEM',
-        recipient_role: 'TUGURE',
-        email_subject: '[Reminder] Nota {entity_id} - Ready for Issuance',
-        email_body: 'Dear TUGURE Team,\n\nNota {entity_id} has been in draft status for {duration} hours.\n\nAction Required:\n- Review Nota details\n- Issue Nota to BRINS\n\nBest regards,\nSystem SLA Monitor',
-        priority: 'LOW',
+        recipient_role: 'BRINS',
+        email_subject: '[Payment Intent] Nota {entity_id} - Payment Intent Created',
+        email_body: 'Payment Intent auto-created for Nota {entity_id}. Check Payment Intent menu.',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'Nota Paid - Reconciliation Update',
+        entity_type: 'Nota',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Paid',
+        duration_value: 1,
+        duration_unit: 'HOURS',
+        notification_type: 'SYSTEM',
+        recipient_role: 'ALL',
+        email_subject: '[Reconciliation] Nota {entity_id} Paid - Recon Updated',
+        email_body: 'Nota {entity_id} paid. Reconciliation and Payment records updated automatically.',
+        priority: 'MEDIUM',
+        is_active: true,
+        is_recurring: false
+      },
+      {
+        rule_name: 'DN/CN Approved - Reconciliation Adjustment',
+        entity_type: 'DebitCreditNote',
+        trigger_condition: 'STATUS_DURATION',
+        status_value: 'Approved',
+        duration_value: 1,
+        duration_unit: 'HOURS',
+        notification_type: 'SYSTEM',
+        recipient_role: 'ALL',
+        email_subject: '[DN/CN] {entity_id} Approved - Reconciliation Adjusted',
+        email_body: 'DN/CN {entity_id} approved. Reconciliation amounts adjusted automatically.',
+        priority: 'MEDIUM',
         is_active: true,
         is_recurring: false
       },

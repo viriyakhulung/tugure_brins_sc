@@ -60,12 +60,13 @@ export default function DebtorReview() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [debtorData, contractData] = await Promise.all([
+      const [debtorData, contractData, oldContractData] = await Promise.all([
         base44.entities.Debtor.list(),
-        base44.entities.MasterContract.list()
+        base44.entities.MasterContract.list(),
+        base44.entities.Contract.list()
       ]);
       setDebtors(debtorData || []);
-      setContracts(contractData || []);
+      setContracts([...contractData, ...oldContractData] || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }

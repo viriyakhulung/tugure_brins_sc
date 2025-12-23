@@ -130,16 +130,34 @@ export default function NotaManagement() {
       // 1. Update Nota
       await base44.entities.Nota.update(selectedNota.id, updateData);
 
-      // 2. When Nota is Confirmed, data flows to Payment Intent
-      if (nextStatus === 'Confirmed') {
-        await createNotification(
-          'Nota Confirmed - Ready for Payment',
-          `Nota ${selectedNota.nota_number} confirmed. Payment Intent can now be created.`,
-          'ACTION_REQUIRED',
-          'DEBTOR',
-          selectedNota.id,
-          'BRINS'
-        );
+      // 2. When Nota is Confirmed, create Payment Intent
+      if (nextStatus === 'Confirmed' && selectedNota.nota_type === 'Batch') {
+        const existingIntent = await base44.entities.PaymentIntent.filter({ 
+          contract_id: selectedNota.contract_id 
+        });
+        
+        if (existingIntent.length === 0) {
+          const intentId = `PI-NOTA-${selectedNota.nota_number}-${Date.now()}`;
+          await base44.entities.PaymentIntent.create({
+            intent_id: intentId,
+            invoice_id: selectedNota.id,
+            contract_id: selectedNota.contract_id,
+            payment_type: 'FULL',
+            planned_amount: selectedNota.amount,
+            planned_date: new Date().toISOString().split('T')[0],
+            status: 'DRAFT',
+            remarks: `Auto-created from Nota ${selectedNota.nota_number}`
+          });
+          
+          await createNotification(
+            'Payment Intent Created',
+            `Payment Intent ${intentId} auto-created for Nota ${selectedNota.nota_number}`,
+            'ACTION_REQUIRED',
+            'DEBTOR',
+            selectedNota.id,
+            'BRINS'
+          );
+        }
       }
 
       // 3. CRITICAL: When Nota is Paid, flow to Reconciliation/Payment

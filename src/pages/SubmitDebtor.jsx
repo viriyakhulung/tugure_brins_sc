@@ -28,10 +28,24 @@ export default function SubmitDebtor() {
   const [errorMessage, setErrorMessage] = useState('');
   const [validationRemarks, setValidationRemarks] = useState([]);
 
+  const [user, setUser] = useState(null);
+
   useEffect(() => {
+    loadUser();
     loadContracts();
     loadBatches();
   }, []);
+
+  const loadUser = () => {
+    try {
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        setUser(JSON.parse(demoUserStr));
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadContracts = async () => {
     try {
@@ -230,7 +244,7 @@ export default function SubmitDebtor() {
       const totalPremium = previewData.reduce((sum, d) => sum + (d.gross_premium || 0), 0);
 
       if (submissionMode === 'revise' && selectedBatch) {
-        // Revise mode: delete old debtors and create new version
+        // Revise mode: mark old debtors inactive and update batch version
         const batch = batches.find(b => b.id === selectedBatch);
         const oldDebtors = await base44.entities.Debtor.filter({ batch_id: batch.batch_id });
         
@@ -244,7 +258,19 @@ export default function SubmitDebtor() {
           total_records: totalRecords,
           total_exposure: totalExposure,
           total_premium: totalPremium,
-          status: 'Uploaded'
+          status: 'Uploaded',
+          version: (batch.version || 1) + 1
+        });
+        
+        await base44.entities.AuditLog.create({
+          action: 'BATCH_REVISED',
+          module: 'DEBTOR',
+          entity_type: 'Batch',
+          entity_id: batch.batch_id,
+          old_value: `v${batch.version || 1}`,
+          new_value: `v${(batch.version || 1) + 1}`,
+          user_email: user?.email,
+          user_role: user?.role
         });
       } else {
         // New batch mode
@@ -256,7 +282,8 @@ export default function SubmitDebtor() {
           total_records: totalRecords,
           total_exposure: totalExposure,
           total_premium: totalPremium,
-          status: 'Uploaded'
+          status: 'Uploaded',
+          version: 1
         });
       }
 
@@ -422,7 +449,7 @@ export default function SubmitDebtor() {
             </SelectContent>
           </Select>
           
-          {submissionMode === 'revise' && (
+          {submissionMode === 'revise' && selectedContract && (
             <Select value={selectedBatch} onValueChange={setSelectedBatch}>
               <SelectTrigger>
                 <SelectValue placeholder="Select batch to revise" />
@@ -430,11 +457,23 @@ export default function SubmitDebtor() {
               <SelectContent>
                 {batches.filter(b => b.contract_id === selectedContract).map(b => (
                   <SelectItem key={b.id} value={b.id}>
-                    {b.batch_id} (v{b.version || 1}) - {b.total_records} debtors
+                    {b.batch_id} (v{b.version || 1}) - {b.total_records} debtors - Status: {b.status}
                   </SelectItem>
                 ))}
+                {batches.filter(b => b.contract_id === selectedContract).length === 0 && (
+                  <SelectItem value="none" disabled>No batches found for this contract</SelectItem>
+                )}
               </SelectContent>
             </Select>
+          )}
+          
+          {submissionMode === 'revise' && selectedBatch && (
+            <Alert className="bg-orange-50 border-orange-200">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-orange-700">
+                Revising batch will create new version (v{(batches.find(b => b.id === selectedBatch)?.version || 1) + 1}) and mark old debtors as inactive
+              </AlertDescription>
+            </Alert>
           )}
         </CardContent>
       </Card>
