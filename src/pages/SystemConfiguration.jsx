@@ -56,6 +56,7 @@ export default function SystemConfiguration() {
     whatsapp_number: '',
     email_enabled: true,
     whatsapp_enabled: false,
+    notify_contract_status: true,
     notify_batch_status: true,
     notify_record_status: true,
     notify_nota_status: true,
@@ -63,10 +64,10 @@ export default function SystemConfiguration() {
     notify_subrogation_status: true,
     notify_bordero_status: true,
     notify_invoice_status: true,
-    notify_reconciliation_status: true,
     notify_payment_received: true,
     notify_approval_required: true,
-    notify_document_verification: true
+    notify_document_verification: true,
+    notify_debit_credit_note: true
   });
 
   // Config form
@@ -574,6 +575,73 @@ export default function SystemConfiguration() {
         email_subject: '[Subrogation {subrogation_id}] Recovery Completed',
         email_body: 'Dear Team,\n\nSubrogation {subrogation_id} completed and closed.\n\nRecovery Summary:\n- Recovery Amount: {recovery_amount}\n- Recovery Date: {date}\n- Related Claim: {claim_id}\n\nSubrogation process is now complete.\n\nBest regards,\nSystem Automation',
         is_active: true
+      },
+      
+      // === DEBIT/CREDIT NOTE WORKFLOW ===
+      {
+        object_type: 'DebitCreditNote',
+        status_from: 'Draft',
+        status_to: 'Under Review',
+        recipient_role: 'TUGURE',
+        email_subject: '[DN/CN {note_number}] Review Required',
+        email_body: 'Dear TUGURE Team,\n\nDebit/Credit Note {note_number} submitted for review.\n\nDetails:\n- Type: {note_type}\n- Amount: {adjustment_amount}\n- Reason: {reason_code}\n\nPlease review and approve/reject.\n\nBest regards,\nSystem',
+        is_active: true
+      },
+      {
+        object_type: 'DebitCreditNote',
+        status_from: 'Under Review',
+        status_to: 'Approved',
+        recipient_role: 'BRINS',
+        email_subject: '[DN/CN {note_number}] Approved',
+        email_body: 'Dear BRINS Team,\n\nDebit/Credit Note {note_number} has been approved.\n\nDetails:\n- Type: {note_type}\n- Amount: {adjustment_amount}\n- Approved by: {user_name}\n\nReconciliation updated automatically.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'DebitCreditNote',
+        status_from: 'Under Review',
+        status_to: 'Rejected',
+        recipient_role: 'BRINS',
+        email_subject: '[DN/CN {note_number}] Rejected',
+        email_body: 'Dear BRINS Team,\n\nDebit/Credit Note {note_number} has been rejected.\n\nReason: {rejection_reason}\n\nPlease review and resubmit if necessary.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'DebitCreditNote',
+        status_from: 'Approved',
+        status_to: 'Acknowledged',
+        recipient_role: 'ALL',
+        email_subject: '[DN/CN {note_number}] Acknowledged',
+        email_body: 'Dear Team,\n\nDebit/Credit Note {note_number} acknowledged by BRINS.\n\nProcess completed.\n\nBest regards,\nSystem',
+        is_active: true
+      },
+      
+      // === PAYMENT INTENT WORKFLOW ===
+      {
+        object_type: 'PaymentIntent',
+        status_from: 'Draft',
+        status_to: 'Submitted',
+        recipient_role: 'TUGURE',
+        email_subject: '[Payment Intent {intent_id}] Approval Required',
+        email_body: 'Dear TUGURE Team,\n\nPayment Intent {intent_id} submitted for approval.\n\nDetails:\n- Invoice: {invoice_id}\n- Planned Amount: {planned_amount}\n- Planned Date: {planned_date}\n\nPlease review and approve.\n\nBest regards,\nBRINS',
+        is_active: true
+      },
+      {
+        object_type: 'PaymentIntent',
+        status_from: 'Submitted',
+        status_to: 'Approved',
+        recipient_role: 'BRINS',
+        email_subject: '[Payment Intent {intent_id}] Approved',
+        email_body: 'Dear BRINS Team,\n\nPayment Intent {intent_id} approved.\n\nApproved by: {user_name}\nDate: {date}\n\nPlease proceed with payment.\n\nBest regards,\nTUGURE System',
+        is_active: true
+      },
+      {
+        object_type: 'PaymentIntent',
+        status_from: 'Submitted',
+        status_to: 'Rejected',
+        recipient_role: 'BRINS',
+        email_subject: '[Payment Intent {intent_id}] Rejected',
+        email_body: 'Dear BRINS Team,\n\nPayment Intent {intent_id} rejected.\n\nReason: {rejection_reason}\n\nBest regards,\nTUGURE System',
+        is_active: true
       }
     ];
     
@@ -794,53 +862,36 @@ export default function SystemConfiguration() {
         is_recurring: false
       },
 
-      // === RECONCILIATION SLA ===
+      // === MASTER CONTRACT SLA ===
       {
-        rule_name: 'Reconciliation Exception - Resolution Required',
-        entity_type: 'Reconciliation',
+        rule_name: 'Contract Pending First Approval - 24h SLA',
+        entity_type: 'MasterContract',
         trigger_condition: 'STATUS_DURATION',
-        status_value: 'EXCEPTION',
-        duration_value: 72,
+        status_value: 'Pending First Approval',
+        duration_value: 24,
         duration_unit: 'HOURS',
         notification_type: 'BOTH',
         recipient_role: 'TUGURE',
-        email_subject: '[Urgent] Reconciliation {entity_id} - Exception for 3 Days',
-        email_body: 'Dear TUGURE Team,\n\nReconciliation {entity_id} has been in EXCEPTION status for {duration} hours (3 days).\n\nAction Required:\n- Review exception details\n- Resolve discrepancies\n- Mark as Ready to Close or provide resolution notes\n\nUnresolved exceptions may impact financial reporting.\n\nBest regards,\nSystem SLA Monitor',
+        email_subject: '[SLA Alert] Contract {entity_id} - First Approval Pending 24h',
+        email_body: 'Dear TUGURE Team,\n\nMaster Contract {entity_id} pending first approval for {duration} hours.\n\nAction Required:\n- Review contract terms\n- Approve or reject within SLA\n\nBest regards,\nSystem SLA Monitor',
         priority: 'HIGH',
-        is_active: true,
-        is_recurring: true,
-        recurrence_interval: 48
-      },
-      {
-        rule_name: 'Reconciliation Ready to Close - Pending Closure',
-        entity_type: 'Reconciliation',
-        trigger_condition: 'STATUS_DURATION',
-        status_value: 'READY_TO_CLOSE',
-        duration_value: 120,
-        duration_unit: 'HOURS',
-        notification_type: 'EMAIL',
-        recipient_role: 'TUGURE',
-        email_subject: '[Reminder] Reconciliation {entity_id} - Ready to Close for 5 Days',
-        email_body: 'Dear TUGURE Team,\n\nReconciliation {entity_id} has been ready to close for {duration} hours (5 days).\n\nAction Required:\n- Final review of reconciliation\n- Close reconciliation to complete financial period\n\nBest regards,\nSystem SLA Monitor',
-        priority: 'MEDIUM',
         is_active: true,
         is_recurring: false
       },
       {
-        rule_name: 'Reconciliation In Progress - 14 Days Alert',
-        entity_type: 'Reconciliation',
+        rule_name: 'Contract Pending Second Approval - 48h SLA',
+        entity_type: 'MasterContract',
         trigger_condition: 'STATUS_DURATION',
-        status_value: 'IN_PROGRESS',
-        duration_value: 336,
+        status_value: 'Pending Second Approval',
+        duration_value: 48,
         duration_unit: 'HOURS',
         notification_type: 'BOTH',
-        recipient_role: 'ALL',
-        email_subject: '[Alert] Reconciliation {entity_id} - In Progress for 14 Days',
-        email_body: 'Dear Team,\n\nReconciliation {entity_id} has been in progress for {duration} hours (14 days).\n\nStatus Review:\n- Check for unmatched payments\n- Review exception cases\n- Target closure: Within 30 days from start\n\nPlease expedite reconciliation process.\n\nBest regards,\nSystem SLA Monitor',
-        priority: 'MEDIUM',
+        recipient_role: 'ADMIN',
+        email_subject: '[SLA Alert] Contract {entity_id} - Second Approval Pending 48h',
+        email_body: 'Dear Admin,\n\nMaster Contract {entity_id} pending second approval for {duration} hours.\n\nAction Required:\n- Final review and approval needed\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
         is_active: true,
-        is_recurring: true,
-        recurrence_interval: 168
+        is_recurring: false
       },
 
       // === NOTA WORKFLOW SLA ===
@@ -860,32 +911,17 @@ export default function SystemConfiguration() {
         is_recurring: false
       },
       {
-        rule_name: 'Nota Paid - Reconciliation Update',
-        entity_type: 'Nota',
-        trigger_condition: 'STATUS_DURATION',
-        status_value: 'Paid',
-        duration_value: 1,
-        duration_unit: 'HOURS',
-        notification_type: 'SYSTEM',
-        recipient_role: 'ALL',
-        email_subject: '[Reconciliation] Nota {entity_id} Paid - Recon Updated',
-        email_body: 'Nota {entity_id} paid. Reconciliation and Payment records updated automatically.',
-        priority: 'MEDIUM',
-        is_active: true,
-        is_recurring: false
-      },
-      {
-        rule_name: 'DN/CN Approved - Reconciliation Adjustment',
+        rule_name: 'DN/CN Pending Review - 48h SLA',
         entity_type: 'DebitCreditNote',
         trigger_condition: 'STATUS_DURATION',
-        status_value: 'Approved',
-        duration_value: 1,
+        status_value: 'Under Review',
+        duration_value: 48,
         duration_unit: 'HOURS',
-        notification_type: 'SYSTEM',
-        recipient_role: 'ALL',
-        email_subject: '[DN/CN] {entity_id} Approved - Reconciliation Adjusted',
-        email_body: 'DN/CN {entity_id} approved. Reconciliation amounts adjusted automatically.',
-        priority: 'MEDIUM',
+        notification_type: 'BOTH',
+        recipient_role: 'TUGURE',
+        email_subject: '[SLA Alert] DN/CN {entity_id} - Review Pending 48h',
+        email_body: 'Dear TUGURE Team,\n\nDebit/Credit Note {entity_id} pending review for {duration} hours.\n\nAction Required:\n- Review adjustment reason\n- Approve or reject DN/CN\n\nBest regards,\nSystem SLA Monitor',
+        priority: 'HIGH',
         is_active: true,
         is_recurring: false
       },
@@ -1102,6 +1138,11 @@ export default function SystemConfiguration() {
         for (const nota of notas) {
           await base44.entities.Nota.delete(nota.id);
         }
+        
+        const dnCnNotes = await base44.entities.DebitCreditNote.list();
+        for (const note of dnCnNotes) {
+          await base44.entities.DebitCreditNote.delete(note.id);
+        }
       } else if (dataType === 'claims') {
         const claims = await base44.entities.Claim.list();
         for (const claim of claims) {
@@ -1129,9 +1170,9 @@ export default function SystemConfiguration() {
           await base44.entities.PaymentIntent.delete(intent.id);
         }
         
-        const recons = await base44.entities.Reconciliation.list();
-        for (const recon of recons) {
-          await base44.entities.Reconciliation.delete(recon.id);
+        const dnCnNotes = await base44.entities.DebitCreditNote.list();
+        for (const note of dnCnNotes) {
+          await base44.entities.DebitCreditNote.delete(note.id);
         }
         
         deletedCount = invoices.length + payments.length;
@@ -1241,7 +1282,8 @@ export default function SystemConfiguration() {
           {row.notify_invoice_status && <Badge variant="outline" className="text-xs bg-fuchsia-50">Invoice</Badge>}
           {row.notify_claim_status && <Badge variant="outline" className="text-xs bg-pink-50">Claim</Badge>}
           {row.notify_subrogation_status && <Badge variant="outline" className="text-xs bg-orange-50">Subrogation</Badge>}
-          {row.notify_reconciliation_status && <Badge variant="outline" className="text-xs bg-amber-50">Recon</Badge>}
+          {row.notify_debit_credit_note && <Badge variant="outline" className="text-xs bg-amber-50">DN/CN</Badge>}
+          {row.notify_contract_status && <Badge variant="outline" className="text-xs bg-slate-50">Contract</Badge>}
           {row.notify_payment_received && <Badge variant="outline" className="text-xs bg-green-50">Payment</Badge>}
           {row.notify_approval_required && <Badge variant="outline" className="text-xs bg-yellow-50">Approval</Badge>}
           {row.notify_document_verification && <Badge variant="outline" className="text-xs bg-teal-50">Document</Badge>}
@@ -1403,6 +1445,8 @@ export default function SystemConfiguration() {
                     <SelectItem value="Debtor">Debtor</SelectItem>
                     <SelectItem value="Claim">Claim</SelectItem>
                     <SelectItem value="Subrogation">Subrogation</SelectItem>
+                    <SelectItem value="DebitCreditNote">Debit/Credit Note</SelectItem>
+                    <SelectItem value="PaymentIntent">Payment Intent</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button variant="outline" size="sm" onClick={() => setTemplateFilters({objectType: 'all'})}>
@@ -1474,13 +1518,28 @@ export default function SystemConfiguration() {
               {
                 header: 'Actions',
                 cell: (row) => (
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => { setSelectedTemplate(row); setShowTemplateDialog(true); }}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => { setSelectedTemplate(row); setShowTemplateDialog(true); }}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={async () => {
+                        if (window.confirm('Delete this template?')) {
+                          await base44.entities.EmailTemplate.delete(row.id);
+                          loadData();
+                          setSuccessMessage('Template deleted');
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4 text-red-500" />
+                    </Button>
+                  </div>
                 )
               }
             ]}
@@ -1577,6 +1636,7 @@ export default function SystemConfiguration() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[
+                      { key: 'notify_contract_status', label: 'Master Contract Status', description: 'Draft → Pending Approvals → Active/Rejected', color: 'slate' },
                       { key: 'notify_batch_status', label: 'Batch Status', description: 'Uploaded → Validated → Matched → Approved → Paid → Closed', color: 'blue' },
                       { key: 'notify_record_status', label: 'Record Status', description: 'Accepted → Revised → Rejected', color: 'indigo' },
                       { key: 'notify_nota_status', label: 'Nota Status', description: 'Draft → Issued → Confirmed → Paid', color: 'purple' },
@@ -1584,7 +1644,7 @@ export default function SystemConfiguration() {
                       { key: 'notify_invoice_status', label: 'Invoice Status', description: 'Issued → Partially Paid → Paid', color: 'fuchsia' },
                       { key: 'notify_claim_status', label: 'Claim Status', description: 'Draft → Checked → Doc Verified → Invoiced → Paid', color: 'pink' },
                       { key: 'notify_subrogation_status', label: 'Subrogation Status', description: 'Draft → Invoiced → Paid/Closed', color: 'orange' },
-                      { key: 'notify_reconciliation_status', label: 'Reconciliation Status', description: 'In Progress → Exception → Ready to Close → Closed', color: 'amber' },
+                      { key: 'notify_debit_credit_note', label: 'Debit/Credit Note', description: 'Draft → Under Review → Approved/Rejected → Acknowledged', color: 'amber' },
                       { key: 'notify_payment_received', label: 'Payment Received', description: 'Payment confirmations and matching', color: 'green' },
                       { key: 'notify_approval_required', label: 'Approval Required', description: 'Actions requiring your approval', color: 'yellow' },
                       { key: 'notify_document_verification', label: 'Document Verification', description: 'Document upload and verification updates', color: 'teal' }
@@ -1950,7 +2010,7 @@ export default function SystemConfiguration() {
                 <Card className="border-orange-200">
                   <CardHeader>
                     <CardTitle className="text-lg">Reset Financial Data</CardTitle>
-                    <p className="text-sm text-gray-500">Delete invoices, payments, and reconciliations</p>
+                    <p className="text-sm text-gray-500">Delete invoices, payments, payment intents, and DN/CN</p>
                   </CardHeader>
                   <CardContent>
                     <Button 
@@ -2005,7 +2065,7 @@ export default function SystemConfiguration() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Note:</strong> Contracts and System Configurations are preserved during reset operations.
+                  <strong>Note:</strong> Master Contracts and System Configurations are preserved during reset operations.
                   These should be configured once and reused across testing sessions.
                 </AlertDescription>
               </Alert>
@@ -2037,14 +2097,17 @@ export default function SystemConfiguration() {
                   onChange={(e) => setSelectedRule({ ...selectedRule, entity_type: e.target.value })}
                   className="w-full border rounded-md px-3 py-2"
                 >
+                  <option value="MasterContract">Master Contract</option>
                   <option value="Debtor">Debtor</option>
                   <option value="Batch">Batch</option>
                   <option value="Claim">Claim</option>
                   <option value="Subrogation">Subrogation</option>
                   <option value="Nota">Nota</option>
+                  <option value="DebitCreditNote">Debit/Credit Note</option>
                   <option value="Invoice">Invoice</option>
                   <option value="Payment">Payment</option>
-                  <option value="Reconciliation">Reconciliation</option>
+                  <option value="PaymentIntent">Payment Intent</option>
+                  <option value="Document">Document</option>
                 </select>
               </div>
             </div>
@@ -2250,11 +2313,15 @@ export default function SystemConfiguration() {
                   onChange={(e) => setSelectedTemplate({ ...selectedTemplate, object_type: e.target.value })}
                   className="w-full border rounded px-3 py-2"
                 >
+                  <option value="MasterContract">Master Contract</option>
                   <option value="Batch">Batch</option>
                   <option value="Record">Record</option>
                   <option value="Nota">Nota</option>
+                  <option value="Debtor">Debtor</option>
                   <option value="Claim">Claim</option>
                   <option value="Subrogation">Subrogation</option>
+                  <option value="DebitCreditNote">Debit/Credit Note</option>
+                  <option value="PaymentIntent">Payment Intent</option>
                 </select>
               </div>
               <div>
