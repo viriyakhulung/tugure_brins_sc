@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   FileText, Upload, Plus, RefreshCw, CheckCircle2, 
-  XCircle, Eye, Clock, Download, History
+  XCircle, Eye, Clock, Download, History, AlertCircle
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
@@ -702,8 +702,8 @@ export default function MasterContractManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Form Dialog */}
-      <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
+      {/* Upload Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create New Master Contract</DialogTitle>

@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   FileText, Upload, Send, CheckCircle2, AlertCircle, 
-  Download, RefreshCw, Loader2, Eye, Plus
+  Download, RefreshCw, Loader2, Eye, Plus, DollarSign
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
@@ -648,105 +648,6 @@ export default function ClaimSubmit() {
         </TabsContent>
       </Tabs>
 
-      {/* Upload Claims Dialog (Excel/CSV) */}
-      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Submit New Claim</DialogTitle>
-            <DialogDescription>
-              Create a claim for an approved debtor and upload required documents
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Debtor *</Label>
-              <Select value={selectedDebtor} onValueChange={setSelectedDebtor}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select debtor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {approvedDebtors.map(d => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.debtor_name} - Rp {(d.credit_plafond || 0).toLocaleString('id-ID')}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {selectedDebtor && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500">Plafond:</span>
-                    <span className="ml-2 font-medium">
-                      Rp {(debtors.find(d => d.id === selectedDebtor)?.credit_plafond || 0).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Max Coverage:</span>
-                    <span className="ml-2 font-medium">
-                      Rp {((debtors.find(d => d.id === selectedDebtor)?.credit_plafond || 0) * (debtors.find(d => d.id === selectedDebtor)?.coverage_pct || 75) / 100).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <Label>Date of Loss (DOL) *</Label>
-              <Input
-                type="date"
-                value={lossDate}
-                onChange={(e) => setLossDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Claim Amount (IDR) *</Label>
-              <Input
-                type="number"
-                value={claimAmount}
-                onChange={(e) => setClaimAmount(e.target.value)}
-                placeholder="Enter claim amount"
-              />
-            </div>
-            
-            <div className="border-t pt-4">
-              <Label className="text-base font-semibold mb-3 block">Upload Required Documents</Label>
-              <div className="space-y-3">
-                <ClaimDocumentUploadRow docType="Claim Advice" />
-                <ClaimDocumentUploadRow docType="Default Letter" />
-                <ClaimDocumentUploadRow docType="Outstanding Statement" />
-                <ClaimDocumentUploadRow docType="Collection Evidence" />
-                <ClaimDocumentUploadRow docType="Other Supporting Documents" />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowCreateDialog(false); resetForm(); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateClaim}
-              disabled={processing || !selectedDebtor || !lossDate || !claimAmount}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4 mr-2" />
-                  Submit Claim
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* New Subrogation Dialog */}
       <Dialog open={showSubrogationDialog} onOpenChange={setShowSubrogationDialog}>
         <DialogContent>
@@ -880,7 +781,7 @@ export default function ClaimSubmit() {
         </DialogContent>
       </Dialog>
 
-      {/* Upload Claims Dialog (Excel/CSV) */}
+      {/* Bulk Upload Claims Dialog */}
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent>
           <DialogHeader>

@@ -2,27 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { 
-  Upload, Download, FileSpreadsheet, Users, CheckCircle2, 
-  AlertCircle, Loader2, Eye, Send, Plus, Trash2
+  Upload, Download, FileSpreadsheet, CheckCircle2, 
+  AlertCircle, Loader2, Send
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
-import StatusBadge from "@/components/ui/StatusBadge";
-
 
 export default function SubmitDebtor() {
   const [contracts, setContracts] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [selectedContract, setSelectedContract] = useState('');
-  const [creditType, setCreditType] = useState('Individual');
-  const [coverageStart, setCoverageStart] = useState('');
-  const [coverageEnd, setCoverageEnd] = useState('');
+  const [submissionMode, setSubmissionMode] = useState('new'); // 'new' or 'revise'
+  const [selectedBatch, setSelectedBatch] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [previewData, setPreviewData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -31,40 +27,28 @@ export default function SubmitDebtor() {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [validationRemarks, setValidationRemarks] = useState([]);
-  
-  // Corporate form
-  const [corporateDebtors, setCorporateDebtors] = useState([{
-    nama_peserta: '',
-    plafon: '',
-    outstanding: '',
-    tenor: '',
-    coverage_start: '',
-    coverage_end: ''
-  }]);
 
   useEffect(() => {
     loadContracts();
+    loadBatches();
   }, []);
 
   const loadContracts = async () => {
     try {
-      // Load ACTIVE Master Contracts for validation
       const masterContracts = await base44.entities.MasterContract.list();
       const activeContracts = masterContracts.filter(c => c.effective_status === 'Active');
-      
-      // Fallback to old Contract entity if no master contracts
-      const oldContracts = await base44.entities.Contract.list();
-      
-      const allContracts = [...activeContracts, ...oldContracts];
-      setContracts(allContracts || []);
-      
-      if (allContracts && allContracts.length > 0) {
-        setSelectedContract(allContracts[0].id);
-      } else {
-        setErrorMessage('No active master contracts available. Please create contracts first.');
-      }
+      setContracts(activeContracts || []);
     } catch (error) {
       console.error('Failed to load contracts:', error);
+    }
+  };
+
+  const loadBatches = async () => {
+    try {
+      const data = await base44.entities.Batch.list();
+      setBatches(data || []);
+    } catch (error) {
+      console.error('Failed to load batches:', error);
     }
   };
 
@@ -96,6 +80,11 @@ export default function SubmitDebtor() {
       return;
     }
 
+    if (submissionMode === 'revise' && !selectedBatch) {
+      setErrorMessage('Please select a batch to revise');
+      return;
+    }
+
     setUploadedFile(file);
     setLoading(true);
     setErrorMessage('');
@@ -109,7 +98,6 @@ export default function SubmitDebtor() {
         return;
       }
 
-      // Read file directly in browser - much faster than AI extraction
       const text = await file.text();
       const parsedData = parseCSV(text);
       
@@ -119,18 +107,18 @@ export default function SubmitDebtor() {
         return;
       }
 
-      // Map parsed CSV to Debtor entity instantly with validation
       const batchTimestamp = Date.now();
-      const batchId = `BATCH-${parsedData[0].batch_year || new Date().getFullYear()}-${String(parsedData[0].batch_month || new Date().getMonth() + 1).padStart(2, '0')}-${batchTimestamp}`;
+      const batchId = submissionMode === 'revise' && selectedBatch 
+        ? batches.find(b => b.id === selectedBatch)?.batch_id
+        : `BATCH-${parsedData[0].batch_year || new Date().getFullYear()}-${String(parsedData[0].batch_month || new Date().getMonth() + 1).padStart(2, '0')}-${batchTimestamp}`;
       
       const validationErrors = [];
       const enrichedData = parsedData.map((row, idx) => {
-        const creditType = row.credit_type || creditType;
+        const creditType = row.credit_type || contract.credit_type;
         const creditPlafond = parseFloat(row.plafon?.replace(/[^0-9.-]/g, '')) || 0;
-        const coverageStartDate = row.tanggal_mulai_covering || coverageStart || new Date().toISOString().split('T')[0];
-        const coverageEndDate = row.tanggal_akhir_covering || coverageEnd || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0];
+        const coverageStartDate = row.tanggal_mulai_covering || new Date().toISOString().split('T')[0];
         
-        // Validation against contract
+        // Validation
         let rowRemarks = [];
         
         if (contract.credit_type !== creditType) {
@@ -138,11 +126,11 @@ export default function SubmitDebtor() {
         }
         
         if (coverageStartDate < contract.coverage_start_date || coverageStartDate > contract.coverage_end_date) {
-          rowRemarks.push(`Coverage start date outside contract period (${contract.coverage_start_date} to ${contract.coverage_end_date})`);
+          rowRemarks.push(`Coverage date outside contract period (${contract.coverage_start_date} - ${contract.coverage_end_date})`);
         }
         
         if (creditPlafond > contract.coverage_limit) {
-          rowRemarks.push(`Plafond (${creditPlafond}) exceeds contract limit (${contract.coverage_limit})`);
+          rowRemarks.push(`Plafond exceeds contract limit (Rp ${contract.coverage_limit.toLocaleString()})`);
         }
         
         if (rowRemarks.length > 0) {
@@ -153,49 +141,50 @@ export default function SubmitDebtor() {
           });
         }
         
-        return ({
-        cover_id: parseInt(row.cover_id) || idx + 1,
-        program_id: row.program_id || 'PROG-001',
-        batch_id: batchId,
-        batch_month: parseInt(row.batch_month) || new Date().getMonth() + 1,
-        batch_year: parseInt(row.batch_year) || new Date().getFullYear(),
-        participant_no: row.nomor_peserta || `P${batchTimestamp}-${idx}`,
-        loan_account_no: row.nomor_rekening_pinjaman || `LA${batchTimestamp}-${idx}`,
-        credit_agreement_no: row.nomor_perjanjian_kredit || '',
-        debtor_name: row.nama_peserta || '',
-        debtor_address: row.alamat_usaha || '',
-        debtor_identifier: '',
-        debtor_type: creditType === 'Corporate' ? 'PT' : 'Individual',
-        credit_type: creditType,
-        currency: 'IDR',
-        product_code: row.loan_type || 'KUR',
-        loan_type: row.loan_type || 'KMK',
-        loan_type_desc: row.loan_type_desc || 'Kredit Modal Kerja',
-        submission_type_desc: row.jenis_pengajuan_desc || 'Pengajuan Baru',
-        covering_type_desc: row.jenis_covering_desc || 'Full Coverage',
-        coverage_start_date: row.tanggal_mulai_covering || coverageStart || new Date().toISOString().split('T')[0],
-        coverage_end_date: row.tanggal_akhir_covering || coverageEnd || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0],
-        credit_plafond: parseFloat(row.plafon?.replace(/[^0-9.-]/g, '')) || 0,
-        outstanding_amount: parseFloat(row.plafon?.replace(/[^0-9.-]/g, '')) || 0,
-        coverage_pct: 75,
-        gross_premium: parseFloat(row.nominal_premi?.replace(/[^0-9.-]/g, '')) || 0,
-        reinsurance_premium: parseFloat(row.premium_reinsurance?.replace(/[^0-9.-]/g, '')) || 0,
-        ric_amount: parseFloat(row.ric_amount?.replace(/[^0-9.-]/g, '')) || 0,
-        bf_amount: parseFloat(row.bf_amount?.replace(/[^0-9.-]/g, '')) || 0,
-        net_premium: parseFloat(row.net_premi?.replace(/[^0-9.-]/g, '')) || 0,
-        unit_code: row.unit_code || 'U001',
-        unit_desc: row.unit_desc || 'Unit Jakarta',
-        branch_code: 'BR001',
-        branch_desc: row.branch_desc || 'Cabang Jakarta',
-        region_desc: row.region_desc || 'DKI Jakarta',
-        received_date: new Date().toISOString(),
-        status_aktif: parseInt(row.status_aktif) || 1,
-        flag_restruktur: parseInt(row.flag_restruktur) || 0,
-        collectability_col: parseInt(row.kolektabilitas) || 1,
-        premium_remarks: row.remark_premi || '',
-        underwriting_status: 'DRAFT',
-        validation_remarks: rowRemarks.join('; ')
-      })});
+        return {
+          cover_id: parseInt(row.cover_id) || idx + 1,
+          program_id: row.program_id || 'PROG-001',
+          batch_id: batchId,
+          batch_month: parseInt(row.batch_month) || new Date().getMonth() + 1,
+          batch_year: parseInt(row.batch_year) || new Date().getFullYear(),
+          participant_no: row.nomor_peserta || `P${batchTimestamp}-${idx}`,
+          loan_account_no: row.nomor_rekening_pinjaman || `LA${batchTimestamp}-${idx}`,
+          credit_agreement_no: row.nomor_perjanjian_kredit || '',
+          debtor_name: row.nama_peserta || '',
+          debtor_address: row.alamat_usaha || '',
+          debtor_identifier: '',
+          debtor_type: creditType === 'Corporate' ? 'PT' : 'Individual',
+          credit_type: creditType,
+          currency: 'IDR',
+          product_code: row.loan_type || 'KUR',
+          loan_type: row.loan_type || 'KMK',
+          loan_type_desc: row.loan_type_desc || 'Kredit Modal Kerja',
+          submission_type_desc: row.jenis_pengajuan_desc || 'Pengajuan Baru',
+          covering_type_desc: row.jenis_covering_desc || 'Full Coverage',
+          coverage_start_date: coverageStartDate,
+          coverage_end_date: row.tanggal_akhir_covering || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0],
+          credit_plafond: creditPlafond,
+          outstanding_amount: creditPlafond,
+          coverage_pct: contract.reinsurance_share || 75,
+          gross_premium: parseFloat(row.nominal_premi?.replace(/[^0-9.-]/g, '')) || 0,
+          reinsurance_premium: parseFloat(row.premium_reinsurance?.replace(/[^0-9.-]/g, '')) || 0,
+          ric_amount: parseFloat(row.ric_amount?.replace(/[^0-9.-]/g, '')) || 0,
+          bf_amount: parseFloat(row.bf_amount?.replace(/[^0-9.-]/g, '')) || 0,
+          net_premium: parseFloat(row.net_premi?.replace(/[^0-9.-]/g, '')) || 0,
+          unit_code: row.unit_code || 'U001',
+          unit_desc: row.unit_desc || 'Unit Jakarta',
+          branch_code: 'BR001',
+          branch_desc: row.branch_desc || 'Cabang Jakarta',
+          region_desc: row.region_desc || 'DKI Jakarta',
+          received_date: new Date().toISOString(),
+          status_aktif: parseInt(row.status_aktif) || 1,
+          flag_restruktur: parseInt(row.flag_restruktur) || 0,
+          collectability_col: parseInt(row.kolektabilitas) || 1,
+          premium_remarks: row.remark_premi || '',
+          underwriting_status: 'DRAFT',
+          validation_remarks: rowRemarks.join('; ')
+        };
+      });
       
       setPreviewData(enrichedData);
       setValidationRemarks(validationErrors);
@@ -204,7 +193,6 @@ export default function SubmitDebtor() {
       if (validationErrors.length > 0) {
         setErrorMessage(`${validationErrors.length} validation issues found - check remarks below`);
         
-        // Send notification about validation issues
         await base44.entities.Notification.create({
           title: 'Batch Validation Issues',
           message: `${validationErrors.length} debtors have validation issues against contract ${contract.contract_id}`,
@@ -214,11 +202,11 @@ export default function SubmitDebtor() {
           target_role: 'BRINS'
         });
       } else {
-        setSuccessMessage(`Loaded ${enrichedData.length} debtors - all validated successfully against contract ${contract.contract_id}`);
+        setSuccessMessage(`Loaded ${enrichedData.length} debtors - all validated successfully`);
       }
     } catch (error) {
       console.error('File upload error:', error);
-      setErrorMessage('Failed to process file. Please check the format and try again.');
+      setErrorMessage('Failed to process file');
     }
     setLoading(false);
   };
@@ -226,19 +214,6 @@ export default function SubmitDebtor() {
   const handleSubmitToTugure = async () => {
     if (!selectedContract) {
       setErrorMessage('Please select an active contract');
-      return;
-    }
-
-    // Validate against Master Contract
-    const masterContract = contracts.find(c => c.id === selectedContract);
-    if (!masterContract) {
-      setErrorMessage('Selected contract not found or inactive');
-      return;
-    }
-
-    // Check if contract is active
-    if (masterContract.effective_status && masterContract.effective_status !== 'Active') {
-      setErrorMessage('Selected contract is not active. Please select an active contract.');
       return;
     }
 
@@ -250,30 +225,46 @@ export default function SubmitDebtor() {
       const batchMonth = previewData[0]?.batch_month || new Date().getMonth() + 1;
       const batchYear = previewData[0]?.batch_year || new Date().getFullYear();
       
-      // Calculate batch totals
       const totalRecords = previewData.length;
       const totalExposure = previewData.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0);
       const totalPremium = previewData.reduce((sum, d) => sum + (d.gross_premium || 0), 0);
 
-      // 1. Create Batch first
-      await base44.entities.Batch.create({
-        batch_id: batchId,
-        batch_month: batchMonth,
-        batch_year: batchYear,
-        contract_id: selectedContract,
-        total_records: totalRecords,
-        total_exposure: totalExposure,
-        total_premium: totalPremium,
-        status: 'Uploaded'
-      });
+      if (submissionMode === 'revise' && selectedBatch) {
+        // Revise mode: delete old debtors and create new version
+        const batch = batches.find(b => b.id === selectedBatch);
+        const oldDebtors = await base44.entities.Debtor.filter({ batch_id: batch.batch_id });
+        
+        for (const oldDebtor of oldDebtors) {
+          await base44.entities.Debtor.update(oldDebtor.id, {
+            record_status: 'INACTIVE'
+          });
+        }
+        
+        await base44.entities.Batch.update(selectedBatch, {
+          total_records: totalRecords,
+          total_exposure: totalExposure,
+          total_premium: totalPremium,
+          status: 'Uploaded'
+        });
+      } else {
+        // New batch mode
+        await base44.entities.Batch.create({
+          batch_id: batchId,
+          batch_month: batchMonth,
+          batch_year: batchYear,
+          contract_id: selectedContract,
+          total_records: totalRecords,
+          total_exposure: totalExposure,
+          total_premium: totalPremium,
+          status: 'Uploaded'
+        });
+      }
 
-      // 2. Create Debtors with synchronized status
       const debtorsToCreate = previewData.map(d => ({
         ...d,
         contract_id: selectedContract,
-        batch_id: batchId,
         underwriting_status: 'SUBMITTED',
-        batch_status: 'Uploaded', // Sync with Batch.status
+        batch_status: 'Uploaded',
         record_status: 'ACTIVE',
         bordero_status: 'PENDING',
         invoice_status: 'NOT_ISSUED',
@@ -285,108 +276,21 @@ export default function SubmitDebtor() {
 
       await base44.entities.Debtor.bulkCreate(debtorsToCreate);
 
-      // 3. Create notification
       await base44.entities.Notification.create({
-        title: 'New Debtor Submission',
-        message: `Batch ${batchId} with ${debtorsToCreate.length} debtors submitted for approval`,
+        title: submissionMode === 'revise' ? 'Batch Revised' : 'New Batch Submitted',
+        message: `Batch ${batchId} with ${debtorsToCreate.length} debtors ${submissionMode === 'revise' ? 'revised' : 'submitted'}`,
         type: 'ACTION_REQUIRED',
         module: 'DEBTOR',
         reference_id: batchId,
         target_role: 'TUGURE'
       });
 
-      setSuccessMessage(`Successfully submitted ${debtorsToCreate.length} debtors to Tugure for approval`);
+      setSuccessMessage(`Successfully ${submissionMode === 'revise' ? 'revised' : 'submitted'} ${debtorsToCreate.length} debtors`);
       setPreviewData([]);
       setShowPreview(false);
       setUploadedFile(null);
-    } catch (error) {
-      console.error('Submit error:', error);
-      setErrorMessage('Failed to submit debtors. Please try again.');
-    }
-    setSubmitting(false);
-  };
-
-  const handleCorporateSubmit = async () => {
-    if (!selectedContract) {
-      setErrorMessage('Please select a contract');
-      return;
-    }
-
-    const validDebtors = corporateDebtors.filter(d => d.nama_peserta && d.plafon);
-    if (validDebtors.length === 0) {
-      setErrorMessage('Please add at least one debtor');
-      return;
-    }
-
-    setSubmitting(true);
-    setErrorMessage('');
-
-    try {
-      const batchId = `BATCH-CORP-${Date.now()}`;
-      const batchMonth = new Date().getMonth() + 1;
-      const batchYear = new Date().getFullYear();
-      
-      const debtorsToCreate = validDebtors.map((d, idx) => ({
-        contract_id: selectedContract,
-        batch_id: batchId,
-        batch_month: batchMonth,
-        batch_year: batchYear,
-        credit_type: 'Corporate',
-        currency: 'IDR',
-        participant_no: `P${Date.now()}-${idx}`,
-        loan_account_no: `LA${Date.now()}-${idx}`,
-        debtor_name: d.nama_peserta,
-        debtor_type: 'PT',
-        credit_plafond: parseFloat(d.plafon) || 0,
-        outstanding_amount: parseFloat(d.outstanding) || 0,
-        coverage_pct: 75,
-        collectability_col: 1,
-        flag_restruktur: 0,
-        coverage_start_date: d.coverage_start || coverageStart,
-        coverage_end_date: d.coverage_end || coverageEnd,
-        underwriting_status: 'SUBMITTED',
-        batch_status: 'Uploaded', // Sync with Batch.status
-        record_status: 'ACTIVE',
-        bordero_status: 'PENDING',
-        invoice_status: 'NOT_ISSUED',
-        recon_status: 'NOT_STARTED',
-        claim_status: 'NO_CLAIM',
-        subrogation_status: 'NO_SUBROGATION',
-        source_system: 'MANUAL-INPUT'
-      }));
-
-      // Calculate batch totals
-      const totalRecords = debtorsToCreate.length;
-      const totalExposure = debtorsToCreate.reduce((sum, d) => sum + d.outstanding_amount, 0);
-      const totalPremium = debtorsToCreate.reduce((sum, d) => sum + (d.credit_plafond * 0.025), 0);
-
-      // 1. Create Batch first
-      await base44.entities.Batch.create({
-        batch_id: batchId,
-        batch_month: batchMonth,
-        batch_year: batchYear,
-        contract_id: selectedContract,
-        total_records: totalRecords,
-        total_exposure: totalExposure,
-        total_premium: totalPremium,
-        status: 'Uploaded'
-      });
-
-      // 2. Create Debtors with synchronized status
-      await base44.entities.Debtor.bulkCreate(debtorsToCreate);
-
-      // 3. Create notification
-      await base44.entities.Notification.create({
-        title: 'New Corporate Debtor Submission',
-        message: `Batch ${batchId} with ${debtorsToCreate.length} corporate debtors submitted`,
-        type: 'ACTION_REQUIRED',
-        module: 'DEBTOR',
-        reference_id: batchId,
-        target_role: 'TUGURE'
-      });
-
-      setSuccessMessage(`Successfully submitted ${debtorsToCreate.length} corporate debtors`);
-      setCorporateDebtors([{ nama_peserta: '', plafon: '', outstanding: '', tenor: '', coverage_start: '', coverage_end: '' }]);
+      setSelectedBatch('');
+      loadBatches();
     } catch (error) {
       console.error('Submit error:', error);
       setErrorMessage('Failed to submit debtors');
@@ -394,49 +298,16 @@ export default function SubmitDebtor() {
     setSubmitting(false);
   };
 
-  const addCorporateDebtor = () => {
-    setCorporateDebtors([...corporateDebtors, {
-      nama_peserta: '',
-      plafon: '',
-      outstanding: '',
-      tenor: '',
-      coverage_start: '',
-      coverage_end: ''
-    }]);
-  };
-
-  const removeCorporateDebtor = (index) => {
-    setCorporateDebtors(corporateDebtors.filter((_, i) => i !== index));
-  };
-
-  const updateCorporateDebtor = (index, field, value) => {
-    const updated = [...corporateDebtors];
-    updated[index][field] = value;
-    setCorporateDebtors(updated);
-  };
-
   const previewColumns = [
     { header: 'Participant No', accessorKey: 'participant_no' },
     { header: 'Debtor Name', accessorKey: 'debtor_name' },
     { header: 'Type', accessorKey: 'debtor_type' },
-    { header: 'Loan Account', accessorKey: 'loan_account_no' },
     { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
     { header: 'Premium', cell: (row) => `Rp ${(row.gross_premium || 0).toLocaleString('id-ID')}` },
-    { header: 'Branch', accessorKey: 'branch_desc' }
+    { header: 'Validation', cell: (row) => row.validation_remarks ? <Badge variant="destructive">Issues</Badge> : <Badge className="bg-green-100 text-green-700">OK</Badge> }
   ];
 
   const downloadTemplate = () => {
-    // Proper CSV formatting with quoted fields to handle commas in addresses
-    const escapeCSV = (field) => {
-      if (field === null || field === undefined) return '';
-      const str = String(field);
-      // If field contains comma, quote, or newline, wrap in quotes and escape quotes
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
     const headers = [
       'cover_id', 'program_id', 'batch_month', 'batch_year', 'nomor_peserta', 'nomor_rekening_pinjaman',
       'nomor_perjanjian_kredit', 'nama_peserta', 'alamat_usaha', 'loan_type', 'loan_type_desc',
@@ -447,57 +318,20 @@ export default function SubmitDebtor() {
     ];
 
     const sampleData = [
-      // Individual Example 1
       ['1001', 'PROG-KUR-001', '1', '2025', 'P2025001', '1001234567', 'PKS-2025-001',
-       'Budi Santoso', 'Jl. Merdeka No. 45 Jakarta Pusat', 'KMK', 'Kredit Modal Kerja',
+       'Budi Santoso', 'Jl. Merdeka No. 45 Jakarta', 'KMK', 'Kredit Modal Kerja',
        'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
        '50000000', '500000', '100000', '30000', '10000', '360000',
-       'U001', 'Unit Jakarta', 'Cabang Jakarta Pusat', 'DKI Jakarta', '1', '0',
-       '1', 'Premi individual KUR'],
-      // Individual Example 2
-      ['1002', 'PROG-KUR-001', '1', '2025', 'P2025002', '1001234568', 'PKS-2025-002',
-       'Siti Nurhaliza', 'Jl. Gatot Subroto No. 123 Jakarta Selatan', 'KMK', 'Kredit Modal Kerja',
-       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
-       '75000000', '750000', '150000', '45000', '15000', '540000',
-       'U002', 'Unit Jakarta Selatan', 'Cabang Jakarta Selatan', 'DKI Jakarta', '1', '0',
-       '1', 'Premi individual KMK'],
-      // Individual Example 3
-      ['1003', 'PROG-KUR-001', '1', '2025', 'P2025003', '1001234569', 'PKS-2025-003',
-       'Ahmad Hidayat', 'Jl. Thamrin No. 88 Jakarta Pusat', 'KUR', 'Kredit Usaha Rakyat',
-       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
-       '100000000', '1000000', '200000', '60000', '20000', '720000',
-       'U001', 'Unit Jakarta', 'Cabang Jakarta Pusat', 'DKI Jakarta', '1', '0',
-       '1', 'Premi KUR Mikro'],
-      // Corporate Example 1
-      ['2001', 'PROG-CORP-001', '1', '2025', 'C2025001', '2001234567', 'PKS-CORP-2025-001',
-       'PT Maju Jaya Sentosa', 'Jl. Sudirman Kav 52-53 Jakarta Selatan', 'KI', 'Kredit Investasi',
-       'Pengajuan Baru', 'Proportional Coverage', '2025-01-15', '2026-01-14',
-       '500000000', '5000000', '1000000', '300000', '100000', '3600000',
-       'U002', 'Unit Jakarta Selatan', 'Cabang Jakarta Selatan', 'DKI Jakarta', '1', '0',
-       '1', 'Premi corporate investasi'],
-      // Corporate Example 2
-      ['2002', 'PROG-CORP-001', '1', '2025', 'C2025002', '2001234568', 'PKS-CORP-2025-002',
-       'PT Sejahtera Mandiri', 'Jl. HR Rasuna Said Kav C-22 Jakarta Selatan', 'KI', 'Kredit Investasi',
-       'Pengajuan Baru', 'Full Coverage', '2025-01-15', '2026-01-14',
-       '1000000000', '10000000', '2000000', '600000', '200000', '7200000',
-       'U002', 'Unit Jakarta Selatan', 'Cabang Jakarta Selatan', 'DKI Jakarta', '1', '0',
-       '1', 'Premi corporate full coverage']
+       'U001', 'Unit Jakarta', 'Cabang Jakarta', 'DKI Jakarta', '1', '0', '1', '']
     ];
 
-    // Build CSV with proper escaping
-    const csvRows = [
-      headers.map(escapeCSV).join(','),
-      ...sampleData.map(row => row.map(escapeCSV).join(','))
-    ];
-
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
+    const csvContent = [headers.join(','), ...sampleData.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'batch_premi_template.csv';
+    a.download = 'batch_debtor_template.csv';
     a.click();
-    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -545,7 +379,6 @@ export default function SubmitDebtor() {
         </Card>
       )}
 
-      {/* Contract Selection */}
       <Card>
         <CardHeader>
           <CardTitle>1. Select Active Contract</CardTitle>
@@ -556,7 +389,7 @@ export default function SubmitDebtor() {
               <SelectValue placeholder="Select active master contract" />
             </SelectTrigger>
             <SelectContent>
-              {contracts.filter(c => c.effective_status === 'Active').map(c => (
+              {contracts.map(c => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.contract_id} - {c.policy_number} ({c.credit_type}) - Limit: Rp {(c.coverage_limit || 0).toLocaleString('id-ID')}
                 </SelectItem>
@@ -567,19 +400,49 @@ export default function SubmitDebtor() {
             <Alert className="mt-3 bg-blue-50 border-blue-200">
               <AlertCircle className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-blue-700">
-                Selected: {contracts.find(c => c.id === selectedContract)?.contract_id} - 
-                All uploaded debtors will be validated against this contract
+                Selected: {contracts.find(c => c.id === selectedContract)?.contract_id} - All uploaded debtors will be validated against this contract
               </AlertDescription>
             </Alert>
           )}
         </CardContent>
       </Card>
 
-      {/* Debtor Upload */}
+      <Card>
+        <CardHeader>
+          <CardTitle>2. Choose Submission Mode</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Select value={submissionMode} onValueChange={setSubmissionMode}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">New Batch Submission</SelectItem>
+              <SelectItem value="revise">Revise Existing Batch</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          {submissionMode === 'revise' && (
+            <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select batch to revise" />
+              </SelectTrigger>
+              <SelectContent>
+                {batches.filter(b => b.contract_id === selectedContract).map(b => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.batch_id} (v{b.version || 1}) - {b.total_records} debtors
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>2. Upload Batch File</CardTitle>
+            <CardTitle>3. Upload Batch File</CardTitle>
             <Button variant="outline" onClick={downloadTemplate}>
               <Download className="w-4 h-4 mr-2" />
               Download Template
@@ -603,9 +466,8 @@ export default function SubmitDebtor() {
                 <FileSpreadsheet className="w-12 h-12 mx-auto text-gray-400" />
               )}
               <p className="mt-4 text-gray-600">
-                {uploadedFile ? uploadedFile.name : 'Click to upload or drag and drop'}
+                {uploadedFile ? uploadedFile.name : 'Click to upload CSV file'}
               </p>
-              <p className="text-sm text-gray-400">Excel or CSV files</p>
               {!selectedContract && (
                 <p className="text-sm text-orange-600 mt-2">⚠️ Please select a contract first</p>
               )}
@@ -617,7 +479,7 @@ export default function SubmitDebtor() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Preview ({previewData.length} records)</h3>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setShowPreview(false)}>
+                  <Button variant="outline" onClick={() => { setShowPreview(false); setValidationRemarks([]); }}>
                     Cancel
                   </Button>
                   <Button 

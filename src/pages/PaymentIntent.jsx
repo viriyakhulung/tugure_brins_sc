@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   DollarSign, Plus, Send, CheckCircle2, Download, 
-  RefreshCw, Loader2, Eye, FileText
+  RefreshCw, Loader2, Eye, FileText, AlertCircle, Check, X
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
@@ -304,8 +304,64 @@ export default function PaymentIntent() {
   const isBrins = user?.role === 'BRINS' || user?.role === 'admin';
   const isTugure = user?.role === 'TUGURE' || user?.role === 'admin';
 
+  const [selectedIntents, setSelectedIntents] = useState([]);
+
+  const toggleIntentSelection = (intentId) => {
+    if (selectedIntents.includes(intentId)) {
+      setSelectedIntents(selectedIntents.filter(id => id !== intentId));
+    } else {
+      setSelectedIntents([...selectedIntents, intentId]);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    setProcessing(true);
+    try {
+      for (const intentId of selectedIntents) {
+        await base44.entities.PaymentIntent.update(intentId, {
+          status: 'APPROVED'
+        });
+      }
+      setSuccessMessage(`${selectedIntents.length} payment intents approved`);
+      setSelectedIntents([]);
+      loadData();
+    } catch (error) {
+      console.error('Bulk approve error:', error);
+    }
+    setProcessing(false);
+  };
+
   const intentColumns = [
+    {
+      header: (
+        <Checkbox
+          checked={selectedIntents.length === paymentIntents.filter(p => p.status === 'SUBMITTED').length && paymentIntents.filter(p => p.status === 'SUBMITTED').length > 0}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setSelectedIntents(paymentIntents.filter(p => p.status === 'SUBMITTED').map(p => p.id));
+            } else {
+              setSelectedIntents([]);
+            }
+          }}
+        />
+      ),
+      cell: (row) => (
+        <Checkbox
+          checked={selectedIntents.includes(row.id)}
+          onCheckedChange={() => toggleIntentSelection(row.id)}
+          disabled={row.status !== 'SUBMITTED'}
+        />
+      ),
+      width: '50px'
+    },
     { header: 'Intent ID', accessorKey: 'intent_id' },
+    { 
+      header: 'Batch', 
+      cell: (row) => {
+        const debtor = debtors.find(d => d.invoice_no && invoices.find(inv => inv.id === row.invoice_id)?.invoice_number === d.invoice_no);
+        return debtor?.batch_id || '-';
+      }
+    },
     { header: 'Payment Type', cell: (row) => <StatusBadge status={row.payment_type} /> },
     { header: 'Planned Amount', cell: (row) => `IDR ${(row.planned_amount || 0).toLocaleString()}` },
     { header: 'Planned Date', accessorKey: 'planned_date' },
@@ -370,6 +426,16 @@ export default function PaymentIntent() {
         ]}
         actions={
           <div className="flex gap-2">
+            {selectedIntents.length > 0 && isTugure && (
+              <Button 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleBulkApprove}
+                disabled={processing}
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Bulk Approve ({selectedIntents.length})
+              </Button>
+            )}
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
