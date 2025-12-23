@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { 
   Upload, RefreshCw, Eye, Folder, File,
-  CheckCircle2, AlertCircle, Plus, Download
+  CheckCircle2, AlertCircle, Plus, Download, DollarSign, Clock
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";

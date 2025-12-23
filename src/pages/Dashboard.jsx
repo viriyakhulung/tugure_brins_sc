@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Users, FileText, DollarSign, AlertTriangle, TrendingUp, 
   Clock, CheckCircle2, XCircle, BarChart3, PieChart,
-  ArrowUpRight, ArrowDownRight, Download, Filter
+  ArrowUpRight, ArrowDownRight, Download, Filter, Folder
 } from "lucide-react";
 import { PieChart as RePieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
 import StatCard from "@/components/dashboard/StatCard";
