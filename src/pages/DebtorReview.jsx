@@ -315,11 +315,12 @@ export default function DebtorReview() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Debtors" value={debtors.length} icon={FileText} />
-        <StatCard title="Pending Review" value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length} icon={Clock} className="text-orange-600" />
-        <StatCard title="Total Exposure" value={`Rp ${(debtors.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} className="text-green-600" />
-        <StatCard title="Approved" value={debtors.filter(d => d.underwriting_status === 'APPROVED').length} icon={CheckCircle2} className="text-purple-600" />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <ModernKPI title="Pending Review" value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length} subtitle="Awaiting approval" icon={FileText} color="orange" />
+        <ModernKPI title="Approved" value={debtors.filter(d => d.underwriting_status === 'APPROVED').length} subtitle="Ready for nota" icon={CheckCircle2} color="green" />
+        <ModernKPI title="Rejected" value={debtors.filter(d => d.underwriting_status === 'REJECTED').length} subtitle="Requires revision" icon={AlertCircle} color="red" />
+        <ModernKPI title="Conditional" value={debtors.filter(d => d.underwriting_status === 'CONDITIONAL').length} subtitle="Additional docs needed" icon={Clock} color="purple" />
+        <ModernKPI title="Total Exposure" value={`Rp ${(debtors.filter(d => d.underwriting_status === 'APPROVED').reduce((sum, d) => sum + (d.outstanding_amount || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Approved only" icon={DollarSign} color="blue" />
       </div>
 
       <DataTable
