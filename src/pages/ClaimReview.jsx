@@ -9,12 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   FileText, CheckCircle2, Eye, RefreshCw, Check, X, 
-  Loader2, AlertTriangle, MessageSquare, DollarSign, Download, AlertCircle
+  Loader2, AlertCircle, DollarSign, Download
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
-import FilterPanel from "@/components/common/FilterPanel";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatCard from "@/components/dashboard/StatCard";
@@ -24,29 +23,19 @@ export default function ClaimReview() {
   const [user, setUser] = useState(null);
   const [claims, setClaims] = useState([]);
   const [subrogations, setSubrogations] = useState([]);
+  const [notas, setNotas] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('review');
   const [selectedClaim, setSelectedClaim] = useState(null);
   const [selectedClaims, setSelectedClaims] = useState([]);
-  const [selectedSubrogations, setSelectedSubrogations] = useState([]);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [actionType, setActionType] = useState('');
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const [approvedAmount, setApprovedAmount] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [filters, setFilters] = useState({
-    contract: 'all',
-    batch: '',
-    startDate: '',
-    endDate: '',
-    submitStatus: 'all',
-    reconStatus: 'all',
-    claimStatus: 'all',
-    subrogationStatus: 'all'
-  });
 
   useEffect(() => {
     loadUser();
@@ -57,8 +46,7 @@ export default function ClaimReview() {
     try {
       const demoUserStr = localStorage.getItem('demo_user');
       if (demoUserStr) {
-        const demoUser = JSON.parse(demoUserStr);
-        setUser(demoUser);
+        setUser(JSON.parse(demoUserStr));
       }
     } catch (error) {
       console.error('Failed to load user:', error);
@@ -68,13 +56,15 @@ export default function ClaimReview() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [claimData, subrogationData, contractData] = await Promise.all([
+      const [claimData, subrogationData, notaData, contractData] = await Promise.all([
         base44.entities.Claim.list(),
         base44.entities.Subrogation.list(),
+        base44.entities.Nota.list(),
         base44.entities.Contract.list()
       ]);
       setClaims(claimData || []);
       setSubrogations(subrogationData || []);
+      setNotas(notaData || []);
       setContracts(contractData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -82,27 +72,22 @@ export default function ClaimReview() {
     setLoading(false);
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters({ ...filters, [key]: value });
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      contract: 'all',
-      batch: '',
-      startDate: '',
-      endDate: '',
-      submitStatus: 'all',
-      reconStatus: 'all',
-      claimStatus: 'all',
-      subrogationStatus: 'all'
-    });
+  const canProcessClaim = (claim) => {
+    // Check if nota for claim is paid
+    const claimNotas = notas.filter(n => 
+      n.nota_type === 'Claim' && 
+      n.reference_id === claim.claim_no
+    );
+    const hasPaidNota = claimNotas.some(n => n.status === 'Paid');
+    return hasPaidNota || claim.claim_status === 'Draft' || claim.claim_status === 'Checked';
   };
 
   const handleClaimAction = async () => {
     if (!selectedClaim || !actionType) return;
 
     setProcessing(true);
+    setErrorMessage('');
+    
     try {
       let newStatus = '';
       let updateData = {
@@ -124,10 +109,30 @@ export default function ClaimReview() {
           updateData.doc_verified_date = new Date().toISOString().split('T')[0];
           break;
         case 'invoice':
+          // Check precondition: batch must be paid
+          const relatedNotas = notas.filter(n => n.reference_id === selectedClaim.claim_no);
+          if (relatedNotas.length === 0 || !relatedNotas.some(n => n.status === 'Paid')) {
+            setErrorMessage('Cannot issue invoice: Batch payment not completed yet');
+            setProcessing(false);
+            return;
+          }
+          
           newStatus = 'Invoiced';
           updateData.claim_status = 'Invoiced';
           updateData.invoiced_by = user?.email;
           updateData.invoiced_date = new Date().toISOString().split('T')[0];
+          
+          // Create Claim Nota
+          const notaNumber = `NOTA-CLM-${selectedClaim.claim_no}-${Date.now()}`;
+          await base44.entities.Nota.create({
+            nota_number: notaNumber,
+            nota_type: 'Claim',
+            reference_id: selectedClaim.claim_no,
+            contract_id: selectedClaim.contract_id,
+            amount: selectedClaim.share_tugure_amount || 0,
+            currency: 'IDR',
+            status: 'Draft'
+          });
           break;
         case 'reject':
           newStatus = 'Draft';
@@ -138,52 +143,15 @@ export default function ClaimReview() {
 
       await base44.entities.Claim.update(selectedClaim.id, updateData);
 
-      // Auto-create Nota Claim when invoiced
-      if (actionType === 'invoice') {
-        const notaNumber = `NOTA-CLM-${selectedClaim.claim_no}-${Date.now()}`;
-        await base44.entities.Nota.create({
-          nota_number: notaNumber,
-          nota_type: 'Claim',
-          reference_id: selectedClaim.claim_no,
-          contract_id: selectedClaim.contract_id,
-          amount: selectedClaim.share_tugure_amount || 0,
-          currency: 'IDR',
-          status: 'Draft'
-        });
-      }
-
-      // Determine target role for notifications
-      const targetRole = actionType === 'verify' ? 'TUGURE' : 
-                        actionType === 'pay' ? 'ALL' : 'BRINS';
-
-      // Send templated emails based on user preferences
-      await sendTemplatedEmail(
-        'Claim',
-        newStatus,
-        targetRole,
-        'notify_claim_status',
-        {
-          claim_no: selectedClaim.claim_no,
-          debtor_name: selectedClaim.nama_tertanggung,
-          claim_amount: `Rp ${(selectedClaim.nilai_klaim || 0).toLocaleString('id-ID')}`,
-          user_name: user?.email || 'System',
-          date: new Date().toLocaleDateString('id-ID'),
-          invoice_number: actionType === 'invoice' ? `INV-CLM-${selectedClaim.claim_no}` : '',
-          settlement_ref: remarks || ''
-        }
-      );
-
-      // Create system notification
       await createNotification(
         `Claim ${newStatus}`,
-        `Claim ${selectedClaim.claim_no} moved to ${newStatus} by ${user?.email}`,
+        `Claim ${selectedClaim.claim_no} moved to ${newStatus}`,
         'INFO',
         'CLAIM',
         selectedClaim.id,
-        targetRole
+        'BRINS'
       );
 
-      // Create audit log
       await createAuditLog(
         `CLAIM_${actionType.toUpperCase()}`,
         'CLAIM',
@@ -196,43 +164,24 @@ export default function ClaimReview() {
         remarks
       );
 
-      setSuccessMessage(`Claim ${actionType === 'approve' ? 'approved' : actionType === 'reject' ? 'rejected' : 'updated'} successfully`);
+      setSuccessMessage(`Claim ${actionType}ed successfully`);
       setShowActionDialog(false);
-      resetForm();
+      setSelectedClaim(null);
+      setRemarks('');
       loadData();
     } catch (error) {
       console.error('Action error:', error);
+      setErrorMessage('Failed to process claim');
     }
     setProcessing(false);
   };
 
-  const resetForm = () => {
-    setSelectedClaim(null);
-    setActionType('');
-    setApprovedAmount('');
-    setRemarks('');
-  };
-
-  // Stats
   const pendingClaims = claims.filter(c => c.claim_status === 'Draft' || c.claim_status === 'Checked');
-  const processedClaims = claims.filter(c => c.claim_status === 'Invoiced' || c.claim_status === 'Paid');
-  const totalClaimValue = claims.reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
-  const paidValue = claims.filter(c => c.claim_status === 'Paid').reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
 
   const toggleClaimSelection = (claimId) => {
-    if (selectedClaims.includes(claimId)) {
-      setSelectedClaims(selectedClaims.filter(id => id !== claimId));
-    } else {
-      setSelectedClaims([...selectedClaims, claimId]);
-    }
-  };
-
-  const toggleSubrogationSelection = (subrogationId) => {
-    if (selectedSubrogations.includes(subrogationId)) {
-      setSelectedSubrogations(selectedSubrogations.filter(id => id !== subrogationId));
-    } else {
-      setSelectedSubrogations([...selectedSubrogations, subrogationId]);
-    }
+    setSelectedClaims(prev => 
+      prev.includes(claimId) ? prev.filter(id => id !== claimId) : [...prev, claimId]
+    );
   };
 
   const claimColumns = [
@@ -241,11 +190,7 @@ export default function ClaimReview() {
         <Checkbox
           checked={selectedClaims.length === claims.length && claims.length > 0}
           onCheckedChange={(checked) => {
-            if (checked) {
-              setSelectedClaims(claims.map(c => c.id));
-            } else {
-              setSelectedClaims([]);
-            }
+            setSelectedClaims(checked ? claims.map(c => c.id) : []);
           }}
         />
       ),
@@ -258,218 +203,36 @@ export default function ClaimReview() {
       width: '50px'
     },
     { header: 'Claim No', accessorKey: 'claim_no' },
-    { header: 'Policy No', accessorKey: 'policy_no' },
-    {
-      header: 'Debtor',
-      cell: (row) => (
-        <div>
-          <p className="font-medium">{row.nama_tertanggung}</p>
-        </div>
-      )
-    },
-    { header: 'DOL', accessorKey: 'dol' },
+    { header: 'Participant', accessorKey: 'participant_no' },
+    { header: 'Debtor', accessorKey: 'nama_tertanggung' },
     { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
-    { header: 'Share Tugure', cell: (row) => `${row.share_tugure_pct}% (Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')})` },
+    { header: 'Share Tugure', cell: (row) => `Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')}` },
     { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> },
     {
       header: 'Actions',
       cell: (row) => (
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => {
-              setSelectedClaim(row);
-              setShowViewDialog(true);
-            }}
-          >
-            <Eye className="w-4 h-4 mr-1" />
-            View
+          <Button variant="outline" size="sm" onClick={() => { setSelectedClaim(row); setShowViewDialog(true); }}>
+            <Eye className="w-4 h-4" />
           </Button>
           {row.claim_status === 'Draft' && (
-            <Button 
-              size="sm" 
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => {
-                setSelectedClaim(row);
-                setActionType('check');
-                setShowActionDialog(true);
-              }}
-            >
-              Check
-            </Button>
+            <>
+              <Button size="sm" className="bg-blue-600" onClick={() => { setSelectedClaim(row); setActionType('check'); setShowActionDialog(true); }}>
+                Check
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => { setSelectedClaim(row); setActionType('reject'); setShowActionDialog(true); }}>
+                <X className="w-4 h-4" />
+              </Button>
+            </>
           )}
           {row.claim_status === 'Checked' && (
-            <Button 
-              size="sm" 
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => {
-                setSelectedClaim(row);
-                setActionType('verify');
-                setShowActionDialog(true);
-              }}
-            >
+            <Button size="sm" className="bg-green-600" onClick={() => { setSelectedClaim(row); setActionType('verify'); setShowActionDialog(true); }}>
               Verify Docs
             </Button>
           )}
           {row.claim_status === 'Doc Verified' && (
-            <Button 
-              size="sm" 
-              className="bg-purple-600 hover:bg-purple-700"
-              onClick={() => {
-                setSelectedClaim(row);
-                setActionType('invoice');
-                setShowActionDialog(true);
-              }}
-            >
+            <Button size="sm" className="bg-purple-600" onClick={() => { setSelectedClaim(row); setActionType('invoice'); setShowActionDialog(true); }}>
               Issue Invoice
-            </Button>
-          )}
-          {row.claim_status === 'Draft' && (
-            <Button 
-              size="sm" 
-              variant="destructive"
-              onClick={() => {
-                setSelectedClaim(row);
-                setActionType('reject');
-                setShowActionDialog(true);
-              }}
-            >
-              <X className="w-4 h-4 mr-1" />
-              Reject
-            </Button>
-          )}
-        </div>
-      )
-    }
-  ];
-
-  const subrogationColumns = [
-    {
-      header: (
-        <Checkbox
-          checked={selectedSubrogations.length === subrogations.length && subrogations.length > 0}
-          onCheckedChange={(checked) => {
-            if (checked) {
-              setSelectedSubrogations(subrogations.map(s => s.id));
-            } else {
-              setSelectedSubrogations([]);
-            }
-          }}
-        />
-      ),
-      cell: (row) => (
-        <Checkbox
-          checked={selectedSubrogations.includes(row.id)}
-          onCheckedChange={() => toggleSubrogationSelection(row.id)}
-        />
-      ),
-      width: '50px'
-    },
-    { header: 'Subrogation ID', accessorKey: 'subrogation_id' },
-    { header: 'Claim ID', accessorKey: 'claim_id' },
-    { header: 'Recovery Amount', cell: (row) => `IDR ${(row.recovery_amount || 0).toLocaleString()}` },
-    { header: 'Recovery Date', accessorKey: 'recovery_date' },
-    { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
-    {
-      header: 'Actions',
-      cell: (row) => (
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Eye className="w-4 h-4" />
-          </Button>
-          {row.status === 'Draft' && (
-            <Button 
-              size="sm" 
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={async () => {
-                await base44.entities.Subrogation.update(row.id, {
-                  status: 'Invoiced',
-                  invoiced_by: user?.email,
-                  invoiced_date: new Date().toISOString().split('T')[0]
-                });
-                
-                // Auto-create Nota Subrogation
-                const notaNumber = `NOTA-SUB-${row.subrogation_id}-${Date.now()}`;
-                await base44.entities.Nota.create({
-                  nota_number: notaNumber,
-                  nota_type: 'Subrogation',
-                  reference_id: row.subrogation_id,
-                  contract_id: row.contract_id || '',
-                  amount: row.recovery_amount || 0,
-                  currency: 'IDR',
-                  status: 'Draft'
-                });
-
-                // Send templated email
-                await sendTemplatedEmail(
-                  'Subrogation',
-                  'Invoiced',
-                  'BRINS',
-                  'notify_subrogation_status',
-                  {
-                    subrogation_id: row.subrogation_id,
-                    claim_id: row.claim_id,
-                    recovery_amount: `IDR ${(row.recovery_amount || 0).toLocaleString()}`,
-                    date: new Date().toLocaleDateString('id-ID'),
-                    user_name: user?.email
-                  }
-                );
-
-                await createNotification(
-                  'Subrogation Invoiced',
-                  `Subrogation ${row.subrogation_id} has been invoiced`,
-                  'INFO',
-                  'CLAIM',
-                  row.id,
-                  'BRINS'
-                );
-                
-                loadData();
-              }}
-            >
-              Issue Invoice
-            </Button>
-          )}
-          {row.status === 'Invoiced' && (
-            <Button 
-              size="sm" 
-              className="bg-green-600 hover:bg-green-700"
-              onClick={async () => {
-                await base44.entities.Subrogation.update(row.id, {
-                  status: 'Paid / Closed',
-                  closed_by: user?.email,
-                  closed_date: new Date().toISOString().split('T')[0]
-                });
-
-                // Send templated email
-                await sendTemplatedEmail(
-                  'Subrogation',
-                  'Paid / Closed',
-                  'ALL',
-                  'notify_subrogation_status',
-                  {
-                    subrogation_id: row.subrogation_id,
-                    claim_id: row.claim_id,
-                    recovery_amount: `IDR ${(row.recovery_amount || 0).toLocaleString()}`,
-                    date: new Date().toLocaleDateString('id-ID'),
-                    user_name: user?.email
-                  }
-                );
-
-                await createNotification(
-                  'Subrogation Closed',
-                  `Subrogation ${row.subrogation_id} completed and closed`,
-                  'INFO',
-                  'CLAIM',
-                  row.id,
-                  'ALL'
-                );
-
-                loadData();
-              }}
-            >
-              Mark Paid
             </Button>
           )}
         </div>
@@ -481,7 +244,7 @@ export default function ClaimReview() {
     <div className="space-y-6">
       <PageHeader
         title="Claim Review"
-        subtitle="Review and process reinsurance claims"
+        subtitle="Review and process claims"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Claim Review' }
@@ -490,85 +253,47 @@ export default function ClaimReview() {
           <div className="flex gap-2">
             {selectedClaims.length > 0 && (
               <>
-                <Button 
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={async () => {
-                    setProcessing(true);
-                    for (const claimId of selectedClaims) {
-                      const claim = claims.find(c => c.id === claimId);
-                      if (claim && claim.claim_status === 'Draft') {
-                        await base44.entities.Claim.update(claimId, {
-                          claim_status: 'Checked',
-                          checked_by: user?.email,
-                          checked_date: new Date().toISOString().split('T')[0]
-                        });
-                      }
-                    }
-                    setSuccessMessage(`${selectedClaims.length} claims checked`);
-                    setSelectedClaims([]);
-                    loadData();
-                    setProcessing(false);
-                  }}
-                  disabled={processing}
-                >
-                  <Check className="w-4 h-4 mr-2" />
-                  Bulk Check ({selectedClaims.length})
-                </Button>
-                <Button 
-                  variant="destructive"
-                  onClick={async () => {
-                    setProcessing(true);
-                    for (const claimId of selectedClaims) {
+                <Button className="bg-green-600" onClick={async () => {
+                  setProcessing(true);
+                  for (const claimId of selectedClaims) {
+                    const claim = claims.find(c => c.id === claimId);
+                    if (claim?.claim_status === 'Draft') {
                       await base44.entities.Claim.update(claimId, {
-                        claim_status: 'Draft',
-                        rejection_reason: 'Bulk rejection'
+                        claim_status: 'Checked',
+                        checked_by: user?.email,
+                        checked_date: new Date().toISOString().split('T')[0]
                       });
                     }
-                    setSuccessMessage(`${selectedClaims.length} claims rejected`);
-                    setSelectedClaims([]);
-                    loadData();
-                    setProcessing(false);
-                  }}
-                  disabled={processing}
-                >
+                  }
+                  setSuccessMessage(`${selectedClaims.length} claims checked`);
+                  setSelectedClaims([]);
+                  loadData();
+                  setProcessing(false);
+                }} disabled={processing}>
+                  <Check className="w-4 h-4 mr-2" />
+                  Check ({selectedClaims.length})
+                </Button>
+                <Button variant="destructive" onClick={async () => {
+                  setProcessing(true);
+                  for (const claimId of selectedClaims) {
+                    await base44.entities.Claim.update(claimId, {
+                      claim_status: 'Draft',
+                      rejection_reason: 'Bulk rejection'
+                    });
+                  }
+                  setSuccessMessage(`${selectedClaims.length} claims rejected`);
+                  setSelectedClaims([]);
+                  loadData();
+                  setProcessing(false);
+                }} disabled={processing}>
                   <X className="w-4 h-4 mr-2" />
-                  Bulk Reject ({selectedClaims.length})
+                  Reject ({selectedClaims.length})
                 </Button>
               </>
             )}
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
-            </Button>
-            <Button 
-              variant="outline" 
-              className="bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => {
-                const exportData = claims.map(c => ({
-                  claim_no: c.claim_no,
-                  policy_no: c.policy_no,
-                  debtor: c.nama_tertanggung,
-                  dol: c.dol,
-                  claim_amount: c.nilai_klaim,
-                  share_tugure_pct: c.share_tugure_pct,
-                  share_tugure_amount: c.share_tugure_amount,
-                  status: c.claim_status,
-                  eligibility: c.eligibility_status
-                }));
-                const csvContent = [
-                  Object.keys(exportData[0]).join(','),
-                  ...exportData.map(row => Object.values(row).join(','))
-                ].join('\n');
-                const blob = new Blob([csvContent], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `claims_${new Date().toISOString().split('T')[0]}.csv`;
-                a.click();
-              }}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export Excel
             </Button>
           </div>
         }
@@ -581,269 +306,42 @@ export default function ClaimReview() {
         </Alert>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard
-          title="Pending Review"
-          value={pendingClaims.length}
-          subtitle="Claims awaiting action"
-          icon={FileText}
-          gradient
-          className="from-orange-500 to-orange-600"
-        />
-        <StatCard
-          title="Total Claims"
-          value={claims.length}
-          icon={FileText}
-          gradient
-          className="from-blue-500 to-blue-600"
-        />
-        <StatCard
-          title="Total Claim Value"
-          value={`Rp ${(totalClaimValue / 1000000).toFixed(1)}M`}
-          icon={DollarSign}
-          gradient
-          className="from-purple-500 to-purple-600"
-        />
-        <StatCard
-          title="Paid Value"
-          value={`Rp ${(paidValue / 1000000).toFixed(1)}M`}
-          icon={CheckCircle2}
-          gradient
-          className="from-green-500 to-green-600"
-        />
-      </div>
+      {errorMessage && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      )}
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <Select value={filters.contract} onValueChange={(val) => handleFilterChange('contract', val)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Polis" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Contracts</SelectItem>
-                {contracts.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Batch ID..."
-              value={filters.batch}
-              onChange={(e) => handleFilterChange('batch', e.target.value)}
-            />
-            <Input
-              type="date"
-              placeholder="Start Date"
-              value={filters.startDate || ''}
-              onChange={(e) => handleFilterChange('startDate', e.target.value)}
-            />
-            <Input
-              type="date"
-              placeholder="End Date"
-              value={filters.endDate || ''}
-              onChange={(e) => handleFilterChange('endDate', e.target.value)}
-            />
-            <Select value={filters.claimStatus} onValueChange={(val) => handleFilterChange('claimStatus', val)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Claim Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Claim Status</SelectItem>
-                <SelectItem value="Draft">Draft</SelectItem>
-                <SelectItem value="Checked">Checked</SelectItem>
-                <SelectItem value="Doc Verified">Doc Verified</SelectItem>
-                <SelectItem value="Invoiced">Invoiced</SelectItem>
-                <SelectItem value="Paid">Paid</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filters.subrogationStatus} onValueChange={(val) => handleFilterChange('subrogationStatus', val)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Subrogation" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Subrogation</SelectItem>
-                <SelectItem value="Draft">Draft</SelectItem>
-                <SelectItem value="Invoiced">Invoiced</SelectItem>
-                <SelectItem value="Paid / Closed">Paid / Closed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-3 flex justify-end">
-            <Button variant="outline" size="sm" onClick={clearFilters}>
-              Clear Filters
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard title="Pending Review" value={pendingClaims.length} icon={FileText} className="text-orange-600" />
+        <StatCard title="Total Claims" value={claims.length} icon={FileText} className="text-blue-600" />
+        <StatCard title="Total Value" value={`Rp ${(claims.reduce((s, c) => s + (c.nilai_klaim || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} />
+        <StatCard title="Invoiced" value={claims.filter(c => c.claim_status === 'Invoiced').length} icon={CheckCircle2} className="text-green-600" />
+      </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="review">
-            <FileText className="w-4 h-4 mr-2" />
-            Pending Review ({pendingClaims.length})
-          </TabsTrigger>
-          <TabsTrigger value="all">
-            <FileText className="w-4 h-4 mr-2" />
-            All Claims ({claims.length})
-          </TabsTrigger>
-          <TabsTrigger value="subrogation">
-            <DollarSign className="w-4 h-4 mr-2" />
-            Subrogation ({subrogations.length})
-          </TabsTrigger>
+          <TabsTrigger value="review">Pending ({pendingClaims.length})</TabsTrigger>
+          <TabsTrigger value="all">All ({claims.length})</TabsTrigger>
+          <TabsTrigger value="subrogation">Subrogation ({subrogations.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="review" className="mt-4">
-          <DataTable
-            columns={claimColumns}
-            data={pendingClaims}
-            isLoading={loading}
-            emptyMessage="No claims pending review"
-          />
-        </TabsContent>
-
-        <TabsContent value="all" className="mt-4">
-          <DataTable
-            columns={claimColumns}
-            data={claims}
-            isLoading={loading}
-            emptyMessage="No claims"
-          />
-        </TabsContent>
-
-        <TabsContent value="subrogation" className="mt-4">
-          <div className="mb-4">
-            <Alert className="bg-blue-50 border-blue-200">
-              <AlertCircle className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-700">
-                Manage subrogation lifecycle: Draft → Invoiced → Paid/Closed. Revise, cancel, or reopen as needed.
-              </AlertDescription>
-            </Alert>
-          </div>
+        <TabsContent value="review"><DataTable columns={claimColumns} data={pendingClaims} isLoading={loading} /></TabsContent>
+        <TabsContent value="all"><DataTable columns={claimColumns} data={claims} isLoading={loading} /></TabsContent>
+        <TabsContent value="subrogation">
           <DataTable
             columns={[
-              {
-                header: (
-                  <Checkbox
-                    checked={selectedSubrogations.length === subrogations.length && subrogations.length > 0}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setSelectedSubrogations(subrogations.map(s => s.id));
-                      } else {
-                        setSelectedSubrogations([]);
-                      }
-                    }}
-                  />
-                ),
-                cell: (row) => (
-                  <Checkbox
-                    checked={selectedSubrogations.includes(row.id)}
-                    onCheckedChange={() => toggleSubrogationSelection(row.id)}
-                  />
-                ),
-                width: '50px'
-              },
               { header: 'Subrogation ID', accessorKey: 'subrogation_id' },
               { header: 'Claim ID', accessorKey: 'claim_id' },
-              { header: 'Recovery Amount', cell: (row) => `IDR ${(row.recovery_amount || 0).toLocaleString()}` },
-              { header: 'Recovery Date', accessorKey: 'recovery_date' },
-              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
-              {
-                header: 'Actions',
-                cell: (row) => (
-                  <div className="flex gap-1">
-                    <Button variant="outline" size="sm">
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    {row.status === 'Draft' && (
-                      <>
-                        <Button size="sm" variant="outline" className="text-orange-600">
-                          Revise
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-red-600">
-                          Cancel
-                        </Button>
-                      </>
-                    )}
-                    {row.status === 'Paid / Closed' && (
-                      <Button size="sm" variant="outline" className="text-blue-600">
-                        Reopen
-                      </Button>
-                    )}
-                  </div>
-                )
-              }
+              { header: 'Recovery', cell: (row) => `Rp ${(row.recovery_amount || 0).toLocaleString()}` },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> }
             ]}
             data={subrogations}
             isLoading={loading}
-            emptyMessage="No subrogation records"
           />
         </TabsContent>
       </Tabs>
-
-      {/* Detail Dialog (View only) */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Claim Detail</DialogTitle>
-            <DialogDescription>
-              Claim: {selectedClaim?.claim_no} - {selectedClaim?.nama_tertanggung}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Claim No:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.claim_no}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Policy No:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.policy_no}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Debtor:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.nama_tertanggung}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">KTP/NPWP:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.no_ktp_npwp}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">DOL:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.dol}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Claim Amount:</span>
-                  <span className="ml-2 font-medium">Rp {(selectedClaim?.nilai_klaim || 0).toLocaleString('id-ID')}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Share Tugure:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.share_tugure_pct}%</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Tugure Amount:</span>
-                  <span className="ml-2 font-medium">Rp {(selectedClaim?.share_tugure_amount || 0).toLocaleString('id-ID')}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Status:</span>
-                  <span className="ml-2"><StatusBadge status={selectedClaim?.claim_status} /></span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Eligibility:</span>
-                  <span className="ml-2"><StatusBadge status={selectedClaim?.eligibility_status} /></span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewDialog(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Action Dialog */}
       <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
@@ -853,68 +351,49 @@ export default function ClaimReview() {
               {actionType === 'check' && 'Check Claim'}
               {actionType === 'verify' && 'Verify Documents'}
               {actionType === 'invoice' && 'Issue Invoice'}
-              {actionType === 'pay' && 'Mark as Paid'}
+              {actionType === 'reject' && 'Reject Claim'}
             </DialogTitle>
-            <DialogDescription>
-              Claim: {selectedClaim?.claim_no} - {selectedClaim?.nama_tertanggung}
-            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <div className="p-4 bg-gray-50 rounded-lg mb-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Debtor:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.nama_tertanggung}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Claim Amount:</span>
-                  <span className="ml-2 font-medium">Rp {(selectedClaim?.nilai_klaim || 0).toLocaleString('id-ID')}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">DOL:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.dol}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Share Tugure:</span>
-                  <span className="ml-2 font-medium">{selectedClaim?.share_tugure_pct}% (Rp {(selectedClaim?.share_tugure_amount || 0).toLocaleString('id-ID')})</span>
-                </div>
-              </div>
-            </div>
-
+          <div className="py-4 space-y-4">
+            {actionType === 'invoice' && (
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-700">
+                  This will create Claim Nota. Payment status managed by Nota Management.
+                </AlertDescription>
+              </Alert>
+            )}
             <div>
               <label className="text-sm font-medium">Remarks</label>
-              <Textarea
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Enter remarks..."
-                rows={3}
-              />
+              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowActionDialog(false); resetForm(); }}>
-              Cancel
+            <Button variant="outline" onClick={() => { setShowActionDialog(false); setRemarks(''); }}>Cancel</Button>
+            <Button onClick={handleClaimAction} disabled={processing} className="bg-blue-600">
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Confirm
             </Button>
-            <Button
-              onClick={handleClaimAction}
-              disabled={processing}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  {actionType === 'reject' ? <X className="w-4 h-4 mr-2" /> : <Check className="w-4 h-4 mr-2" />}
-                  {actionType === 'check' && 'Mark as Checked'}
-                  {actionType === 'verify' && 'Mark as Verified'}
-                  {actionType === 'invoice' && 'Issue Invoice'}
-                  {actionType === 'reject' && 'Reject Claim'}
-                </>
-              )}
-            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Dialog */}
+      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Claim Details</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div><span className="text-gray-500">Claim No:</span><span className="ml-2 font-medium">{selectedClaim?.claim_no}</span></div>
+              <div><span className="text-gray-500">Debtor:</span><span className="ml-2 font-medium">{selectedClaim?.nama_tertanggung}</span></div>
+              <div><span className="text-gray-500">Amount:</span><span className="ml-2 font-medium">Rp {(selectedClaim?.nilai_klaim || 0).toLocaleString()}</span></div>
+              <div><span className="text-gray-500">Status:</span><StatusBadge status={selectedClaim?.claim_status} /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowViewDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
