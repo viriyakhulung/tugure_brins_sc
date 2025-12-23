@@ -6,7 +6,8 @@ import ClaimReview from './pages/ClaimReview';
 import ClaimSubmit from './pages/ClaimSubmit';
 import Dashboard from './pages/Dashboard';
 import DebtorReview from './pages/DebtorReview';
-import DocumentEligibility from './pages/DocumentEligibility';
+import DocumentClaim from './pages/DocumentClaim';
+import DocumentEligibilityBatch from './pages/DocumentEligibilityBatch';
 import Home from './pages/Home';
 import MasterContractManagement from './pages/MasterContractManagement';
 import NotaManagement from './pages/NotaManagement';
@@ -16,8 +17,6 @@ import Profile from './pages/Profile';
 import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
-import DocumentClaim from './pages/DocumentClaim';
-import DocumentEligibilityBatch from './pages/DocumentEligibilityBatch';
 import __Layout from './Layout.jsx';
 
 
@@ -30,7 +29,8 @@ export const PAGES = {
     "ClaimSubmit": ClaimSubmit,
     "Dashboard": Dashboard,
     "DebtorReview": DebtorReview,
-    "DocumentEligibility": DocumentEligibility,
+    "DocumentClaim": DocumentClaim,
+    "DocumentEligibilityBatch": DocumentEligibilityBatch,
     "Home": Home,
     "MasterContractManagement": MasterContractManagement,
     "NotaManagement": NotaManagement,
@@ -40,8 +40,6 @@ export const PAGES = {
     "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
-    "DocumentClaim": DocumentClaim,
-    "DocumentEligibilityBatch": DocumentEligibilityBatch,
 }
 
 export const pagesConfig = {

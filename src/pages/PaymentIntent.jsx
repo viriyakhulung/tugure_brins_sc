@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   DollarSign, Plus, Send, CheckCircle2, Download, 
-  RefreshCw, Loader2, Eye, FileText, AlertCircle, Check, X
+  RefreshCw, Loader2, Eye, FileText, AlertCircle, Check
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
