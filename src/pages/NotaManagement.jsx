@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { 
   CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, Download, FileText, Clock, DollarSign,
-  AlertTriangle, Scale, Plus, X
+  AlertTriangle, Scale, Plus, X, AlertCircle
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
