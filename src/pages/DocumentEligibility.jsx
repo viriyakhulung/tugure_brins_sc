@@ -7,15 +7,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   FileText, Upload, CheckCircle2, XCircle, AlertCircle, 
-  Clock, Eye, Trash2, RefreshCw, Loader2, Search, Download
+  Clock, Eye, Trash2, RefreshCw, Loader2, Search, Download, Plus, Ban
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 const DOCUMENT_TYPES = {
   Individual: [
@@ -125,10 +127,28 @@ export default function DocumentEligibility() {
   const [uploadDocType, setUploadDocType] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false);
+  const [showBulkActionDialog, setShowBulkActionDialog] = useState(false);
+  const [bulkFiles, setBulkFiles] = useState([]);
+  const [bulkAction, setBulkAction] = useState('');
+  const [bulkRemarks, setBulkRemarks] = useState('');
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
+    loadUser();
     loadData();
   }, []);
+
+  const loadUser = async () => {
+    try {
+      const demoUserStr = localStorage.getItem('demo_user');
+      if (demoUserStr) {
+        setUser(JSON.parse(demoUserStr));
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -231,6 +251,113 @@ export default function DocumentEligibility() {
     } else {
       setSelectedDebtors([...selectedDebtors, debtorId]);
     }
+  };
+
+  const handleBulkUpload = async () => {
+    if (bulkFiles.length === 0 || selectedDebtors.length === 0) return;
+
+    setUploading(true);
+    try {
+      const selectedBatchId = debtors.find(d => selectedDebtors.includes(d.id))?.batch_id;
+      
+      for (const file of bulkFiles) {
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        
+        await base44.entities.Document.create({
+          batch_id: selectedBatchId,
+          document_type: file.type || 'Other',
+          document_name: file.name,
+          file_url,
+          upload_date: new Date().toISOString().split('T')[0],
+          status: 'PENDING',
+          version: 1,
+          uploaded_by: user?.email
+        });
+      }
+
+      await createAuditLog(
+        'BULK_DOCUMENT_UPLOAD',
+        'DOCUMENT',
+        'Document',
+        selectedBatchId,
+        {},
+        { files_count: bulkFiles.length, batch_id: selectedBatchId },
+        user?.email,
+        user?.role,
+        `Uploaded ${bulkFiles.length} documents for batch ${selectedBatchId}`
+      );
+
+      setSuccessMessage(`${bulkFiles.length} documents uploaded successfully`);
+      setShowBulkUploadDialog(false);
+      setBulkFiles([]);
+      loadData();
+    } catch (error) {
+      console.error('Bulk upload error:', error);
+    }
+    setUploading(false);
+  };
+
+  const handleBulkAction = async () => {
+    if (selectedDebtors.length === 0 || !bulkAction) return;
+
+    setUploading(true);
+    try {
+      const selectedDebtorRecords = debtors.filter(d => selectedDebtors.includes(d.id));
+
+      for (const debtor of selectedDebtorRecords) {
+        const debtorDocs = getDebtorDocuments(debtor.id);
+        
+        if (bulkAction === 'APPROVE') {
+          for (const doc of debtorDocs) {
+            await base44.entities.Document.update(doc.id, { status: 'VERIFIED' });
+          }
+          await base44.entities.Debtor.update(debtor.id, { batch_status: 'VALIDATED' });
+        } else if (bulkAction === 'WAIVE') {
+          await base44.entities.Debtor.update(debtor.id, { 
+            batch_status: 'VALIDATED',
+            premium_remarks: bulkRemarks || 'Documents waived'
+          });
+        } else if (bulkAction === 'REJECT') {
+          for (const doc of debtorDocs) {
+            await base44.entities.Document.update(doc.id, { 
+              status: 'REJECTED',
+              remarks: bulkRemarks
+            });
+          }
+        }
+      }
+
+      await createNotification(
+        `Bulk ${bulkAction}`,
+        `${selectedDebtors.length} debtors processed with action: ${bulkAction}`,
+        'INFO',
+        'DOCUMENT',
+        selectedDebtorRecords[0]?.batch_id,
+        'ALL'
+      );
+
+      await createAuditLog(
+        `BULK_${bulkAction}`,
+        'DOCUMENT',
+        'Debtor',
+        selectedDebtorRecords[0]?.batch_id,
+        {},
+        { action: bulkAction, count: selectedDebtors.length },
+        user?.email,
+        user?.role,
+        bulkRemarks
+      );
+
+      setSuccessMessage(`Bulk ${bulkAction.toLowerCase()} applied to ${selectedDebtors.length} debtors`);
+      setShowBulkActionDialog(false);
+      setBulkAction('');
+      setBulkRemarks('');
+      setSelectedDebtors([]);
+      loadData();
+    } catch (error) {
+      console.error('Bulk action error:', error);
+    }
+    setUploading(false);
   };
 
   const columns = [
@@ -367,11 +494,56 @@ export default function DocumentEligibility() {
     <div className="space-y-6">
       <PageHeader
         title="Document Eligibility"
-        subtitle="Manage debtor documents for coverage eligibility"
+        subtitle="Bulk document upload and validation for bordero and claim"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Document Eligibility' }
         ]}
+        actions={
+          <div className="flex gap-2">
+            {selectedDebtors.length > 0 && (
+              <>
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowBulkUploadDialog(true)}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Bulk Upload ({selectedDebtors.length})
+                </Button>
+                <Button 
+                  className="bg-green-600"
+                  onClick={() => {
+                    setBulkAction('APPROVE');
+                    setShowBulkActionDialog(true);
+                  }}
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Approve Selected
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setBulkAction('WAIVE');
+                    setShowBulkActionDialog(true);
+                  }}
+                >
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Waive Selected
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={() => {
+                    setBulkAction('REJECT');
+                    setShowBulkActionDialog(true);
+                  }}
+                >
+                  <Ban className="w-4 h-4 mr-2" />
+                  Reject Selected
+                </Button>
+              </>
+            )}
+          </div>
+        }
       />
 
       {successMessage && (
@@ -470,6 +642,69 @@ export default function DocumentEligibility() {
           <DialogFooter>
             <Button onClick={() => setShowUploadDialog(false)}>
               Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Upload Dialog */}
+      <Dialog open={showBulkUploadDialog} onOpenChange={setShowBulkUploadDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Document Upload</DialogTitle>
+            <DialogDescription>
+              Upload multiple documents for {selectedDebtors.length} selected debtors
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              onChange={(e) => setBulkFiles(Array.from(e.target.files))}
+              className="w-full"
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              Selected: {bulkFiles.length} files
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkUploadDialog(false)}>Cancel</Button>
+            <Button onClick={handleBulkUpload} disabled={uploading || bulkFiles.length === 0}>
+              {uploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Dialog */}
+      <Dialog open={showBulkActionDialog} onOpenChange={setShowBulkActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk {bulkAction}</DialogTitle>
+            <DialogDescription>
+              Apply {bulkAction} to {selectedDebtors.length} selected debtors
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium">Remarks {bulkAction === 'REJECT' ? '*' : '(optional)'}</label>
+            <Textarea
+              value={bulkRemarks}
+              onChange={(e) => setBulkRemarks(e.target.value)}
+              placeholder="Enter remarks..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkActionDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleBulkAction} 
+              disabled={uploading || (bulkAction === 'REJECT' && !bulkRemarks)}
+              className={bulkAction === 'APPROVE' ? 'bg-green-600' : bulkAction === 'REJECT' ? 'bg-red-600' : ''}
+            >
+              {uploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Confirm {bulkAction}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -377,6 +377,22 @@ export default function MasterContractManagement() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
+            <Button variant="outline" onClick={() => {
+              const csv = [
+                ['contract_id', 'policy_number', 'product_type', 'credit_type', 'coverage_start_date', 'coverage_end_date', 'coverage_limit', 'reinsurance_share', 'effective_date', 'remarks'].join(','),
+                ['MC-2025-001', 'POL-12345', 'Treaty', 'Individual', '2025-01-01', '2025-12-31', '1000000000', '75', '2025-01-01', 'Sample contract'].join(','),
+                ['MC-2025-002', 'POL-12346', 'Facultative', 'Corporate', '2025-01-01', '2025-12-31', '5000000000', '80', '2025-01-01', 'Sample corporate'].join(',')
+              ].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'master_contract_template.csv';
+              a.click();
+            }}>
+              <Download className="w-4 h-4 mr-2" />
+              Download Template
+            </Button>
             <Button onClick={() => setShowUploadDialog(true)}>
               <Upload className="w-4 h-4 mr-2" />
               Upload Excel

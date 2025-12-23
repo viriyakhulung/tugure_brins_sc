@@ -47,10 +47,20 @@ export default function SubmitDebtor() {
 
   const loadContracts = async () => {
     try {
-      const data = await base44.entities.Contract.list();
-      setContracts(data || []);
-      if (data && data.length > 0) {
-        setSelectedContract(data[0].id);
+      // Load ACTIVE Master Contracts for validation
+      const masterContracts = await base44.entities.MasterContract.list();
+      const activeContracts = masterContracts.filter(c => c.effective_status === 'Active');
+      
+      // Fallback to old Contract entity if no master contracts
+      const oldContracts = await base44.entities.Contract.list();
+      
+      const allContracts = [...activeContracts, ...oldContracts];
+      setContracts(allContracts || []);
+      
+      if (allContracts && allContracts.length > 0) {
+        setSelectedContract(allContracts[0].id);
+      } else {
+        setErrorMessage('No active master contracts available. Please create contracts first.');
       }
     } catch (error) {
       console.error('Failed to load contracts:', error);
@@ -153,7 +163,20 @@ export default function SubmitDebtor() {
 
   const handleSubmitToTugure = async () => {
     if (!selectedContract) {
-      setErrorMessage('Please select a contract');
+      setErrorMessage('Please select an active contract');
+      return;
+    }
+
+    // Validate against Master Contract
+    const masterContract = contracts.find(c => c.id === selectedContract);
+    if (!masterContract) {
+      setErrorMessage('Selected contract not found or inactive');
+      return;
+    }
+
+    // Check if contract is active
+    if (masterContract.effective_status && masterContract.effective_status !== 'Active') {
+      setErrorMessage('Selected contract is not active. Please select an active contract.');
       return;
     }
 

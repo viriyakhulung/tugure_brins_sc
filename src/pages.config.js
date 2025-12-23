@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import DebtorReview from './pages/DebtorReview';
 import DocumentEligibility from './pages/DocumentEligibility';
 import Home from './pages/Home';
+import MasterContractManagement from './pages/MasterContractManagement';
 import NotaManagement from './pages/NotaManagement';
 import PaymentIntent from './pages/PaymentIntent';
 import PaymentStatus from './pages/PaymentStatus';
@@ -15,7 +16,6 @@ import Profile from './pages/Profile';
 import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
-import MasterContractManagement from './pages/MasterContractManagement';
 import __Layout from './Layout.jsx';
 
 
@@ -30,6 +30,7 @@ export const PAGES = {
     "DebtorReview": DebtorReview,
     "DocumentEligibility": DocumentEligibility,
     "Home": Home,
+    "MasterContractManagement": MasterContractManagement,
     "NotaManagement": NotaManagement,
     "PaymentIntent": PaymentIntent,
     "PaymentStatus": PaymentStatus,
@@ -37,7 +38,6 @@ export const PAGES = {
     "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
-    "MasterContractManagement": MasterContractManagement,
 }
 
 export const pagesConfig = {
