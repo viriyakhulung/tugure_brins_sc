@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { 
-  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, Download, FileText, Clock, DollarSign
+  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, Download, FileText, Clock, DollarSign,
+  AlertTriangle, Scale, Plus, X
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
@@ -19,19 +23,34 @@ export default function NotaManagement() {
   const [user, setUser] = useState(null);
   const [notas, setNotas] = useState([]);
   const [contracts, setContracts] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [dnCnRecords, setDnCnRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNota, setSelectedNota] = useState(null);
+  const [selectedDnCn, setSelectedDnCn] = useState(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
+  const [showDnCnDialog, setShowDnCnDialog] = useState(false);
+  const [showDnCnActionDialog, setShowDnCnActionDialog] = useState(false);
   const [actionType, setActionType] = useState('');
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [activeTab, setActiveTab] = useState('notas');
+  const [dnCnFormData, setDnCnFormData] = useState({
+    note_type: 'Debit Note',
+    adjustment_amount: 0,
+    reason_code: 'Payment Difference',
+    reason_description: ''
+  });
   const [filters, setFilters] = useState({
     contract: 'all',
     notaType: 'all',
     status: 'all'
   });
+
+  const isTugure = user?.role === 'TUGURE' || user?.role === 'admin';
+  const isBrins = user?.role === 'BRINS' || user?.role === 'admin';
 
   useEffect(() => {
     loadUser();
@@ -53,12 +72,16 @@ export default function NotaManagement() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [notaData, contractData] = await Promise.all([
+      const [notaData, contractData, paymentData, dnCnData] = await Promise.all([
         base44.entities.Nota.list('-created_date'),
-        base44.entities.Contract.list()
+        base44.entities.Contract.list(),
+        base44.entities.Payment.list(),
+        base44.entities.DebitCreditNote.list('-created_date')
       ]);
       setNotas(notaData || []);
       setContracts(contractData || []);
+      setPayments(paymentData || []);
+      setDnCnRecords(dnCnData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -307,11 +330,135 @@ export default function NotaManagement() {
     }
   ];
 
+  const handleCreateDnCn = async () => {
+    if (!selectedNota) return;
+
+    setProcessing(true);
+    try {
+      const noteNumber = `${dnCnFormData.note_type === 'Debit Note' ? 'DN' : 'CN'}-${selectedNota.nota_number}-${Date.now()}`;
+      
+      await base44.entities.DebitCreditNote.create({
+        note_number: noteNumber,
+        note_type: dnCnFormData.note_type,
+        original_nota_id: selectedNota.nota_number,
+        batch_id: selectedNota.reference_id,
+        contract_id: selectedNota.contract_id,
+        adjustment_amount: dnCnFormData.note_type === 'Debit Note' ? 
+          Math.abs(dnCnFormData.adjustment_amount) : 
+          -Math.abs(dnCnFormData.adjustment_amount),
+        reason_code: dnCnFormData.reason_code,
+        reason_description: dnCnFormData.reason_description,
+        status: 'Draft',
+        drafted_by: user?.email,
+        drafted_date: new Date().toISOString(),
+        currency: 'IDR'
+      });
+
+      await base44.entities.AuditLog.create({
+        action: 'CREATE_DN_CN',
+        module: 'RECONCILIATION',
+        entity_type: 'DebitCreditNote',
+        entity_id: noteNumber,
+        user_email: user?.email,
+        user_role: user?.role
+      });
+
+      setSuccessMessage(`${dnCnFormData.note_type} created successfully`);
+      setShowDnCnDialog(false);
+      setSelectedNota(null);
+      setDnCnFormData({
+        note_type: 'Debit Note',
+        adjustment_amount: 0,
+        reason_code: 'Payment Difference',
+        reason_description: ''
+      });
+      loadData();
+    } catch (error) {
+      console.error('DN/CN creation error:', error);
+    }
+    setProcessing(false);
+  };
+
+  const handleDnCnAction = async (dnCn, action) => {
+    setProcessing(true);
+    try {
+      const statusMap = {
+        'review': 'Under Review',
+        'approve': 'Approved',
+        'reject': 'Rejected',
+        'acknowledge': 'Acknowledged'
+      };
+
+      const updates = { status: statusMap[action] };
+
+      if (action === 'review') {
+        updates.reviewed_by = user?.email;
+        updates.reviewed_date = new Date().toISOString();
+      } else if (action === 'approve') {
+        updates.approved_by = user?.email;
+        updates.approved_date = new Date().toISOString();
+      } else if (action === 'acknowledge') {
+        updates.acknowledged_by = user?.email;
+        updates.acknowledged_date = new Date().toISOString();
+      }
+
+      if (action === 'reject') {
+        updates.rejection_reason = remarks;
+      }
+
+      await base44.entities.DebitCreditNote.update(dnCn.id, updates);
+
+      await createNotification(
+        `DN/CN ${statusMap[action]}`,
+        `${dnCn.note_type} ${dnCn.note_number} is now ${statusMap[action]}`,
+        'ACTION_REQUIRED',
+        'RECONCILIATION',
+        dnCn.id,
+        action === 'approve' ? 'BRINS' : 'TUGURE'
+      );
+
+      await base44.entities.AuditLog.create({
+        action: `DN_CN_${action.toUpperCase()}`,
+        module: 'RECONCILIATION',
+        entity_type: 'DebitCreditNote',
+        entity_id: dnCn.id,
+        user_email: user?.email,
+        user_role: user?.role,
+        reason: remarks
+      });
+
+      setSuccessMessage(`DN/CN ${action}ed successfully`);
+      setShowDnCnActionDialog(false);
+      setSelectedDnCn(null);
+      setRemarks('');
+      loadData();
+    } catch (error) {
+      console.error('DN/CN action error:', error);
+    }
+    setProcessing(false);
+  };
+
+  const reconciliationItems = notas.filter(n => n.nota_type === 'Batch').map(nota => {
+    const relatedPayments = payments.filter(p => 
+      p.contract_id === nota.contract_id && p.match_status === 'MATCHED'
+    );
+    const paymentReceived = relatedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const difference = (nota.amount || 0) - paymentReceived;
+
+    return {
+      ...nota,
+      payment_received: paymentReceived,
+      difference: difference,
+      has_exception: Math.abs(difference) > 0 && nota.status !== 'Paid',
+      payment_count: relatedPayments.length
+    };
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Nota Management"
-        subtitle="Process notas through workflow stages"
+        title="Nota & Reconciliation Center"
+        subtitle="Manage notas, payments, and debit/credit notes"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Nota Management' }
@@ -352,41 +499,49 @@ export default function NotaManagement() {
         </Alert>
       )}
 
-      {/* KPI Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Notas"
-          value={notas.length}
-          subtitle={`${notas.filter(n => n.nota_type === 'Batch').length} batch / ${notas.filter(n => n.nota_type === 'Claim').length} claim`}
-          icon={FileText}
-          gradient
-          className="from-blue-500 to-blue-600"
-        />
-        <StatCard
-          title="Pending Confirmation"
-          value={notas.filter(n => n.status === 'Issued').length}
-          subtitle="Awaiting branch"
-          icon={Clock}
-          gradient
-          className="from-orange-500 to-orange-600"
-        />
-        <StatCard
-          title="Total Amount"
-          value={`Rp ${(notas.reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
-          subtitle="All notas"
-          icon={DollarSign}
-          gradient
-          className="from-green-500 to-green-600"
-        />
-        <StatCard
-          title="Paid Notas"
-          value={notas.filter(n => n.status === 'Paid').length}
-          subtitle={`Rp ${(notas.filter(n => n.status === 'Paid').reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
-          icon={CheckCircle2}
-          gradient
-          className="from-purple-500 to-purple-600"
-        />
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full max-w-2xl grid-cols-3">
+          <TabsTrigger value="notas">Notas</TabsTrigger>
+          <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
+          <TabsTrigger value="dncn">DN / CN</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="notas" className="space-y-6">
+          {/* KPI Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <StatCard
+              title="Total Notas"
+              value={notas.length}
+              subtitle={`${notas.filter(n => n.nota_type === 'Batch').length} batch / ${notas.filter(n => n.nota_type === 'Claim').length} claim`}
+              icon={FileText}
+              gradient
+              className="from-blue-500 to-blue-600"
+            />
+            <StatCard
+              title="Pending Confirmation"
+              value={notas.filter(n => n.status === 'Issued').length}
+              subtitle="Awaiting branch"
+              icon={Clock}
+              gradient
+              className="from-orange-500 to-orange-600"
+            />
+            <StatCard
+              title="Total Amount"
+              value={`Rp ${(notas.reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
+              subtitle="All notas"
+              icon={DollarSign}
+              gradient
+              className="from-green-500 to-green-600"
+            />
+            <StatCard
+              title="Paid Notas"
+              value={notas.filter(n => n.status === 'Paid').length}
+              subtitle={`Rp ${(notas.filter(n => n.status === 'Paid').reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
+              icon={CheckCircle2}
+              gradient
+              className="from-purple-500 to-purple-600"
+            />
+          </div>
 
       {/* Filters */}
       <Card>
@@ -433,12 +588,107 @@ export default function NotaManagement() {
         </CardContent>
       </Card>
 
-      <DataTable
-        columns={columns}
-        data={filteredNotas}
-        isLoading={loading}
-        emptyMessage="No notas found"
-      />
+          <DataTable
+            columns={columns}
+            data={filteredNotas}
+            isLoading={loading}
+            emptyMessage="No notas found"
+          />
+        </TabsContent>
+
+        <TabsContent value="reconciliation" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <StatCard title="Total Invoiced" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.amount || 0), 0) / 1000000).toFixed(1)}M`} icon={FileText} />
+            <StatCard title="Total Paid" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.payment_received || 0), 0) / 1000000).toFixed(1)}M`} icon={CheckCircle2} className="text-green-600" />
+            <StatCard title="Difference" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.difference || 0), 0) / 1000000).toFixed(1)}M`} icon={AlertTriangle} className="text-orange-600" />
+            <StatCard title="Exceptions" value={reconciliationItems.filter(r => r.has_exception).length} icon={AlertTriangle} className="text-red-600" />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Reconciliation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                columns={[
+                  { header: 'Nota', cell: (row) => <div><div className="font-medium">{row.nota_number}</div><div className="text-xs text-gray-500">{row.reference_id}</div></div> },
+                  { header: 'Invoice Amount', cell: (row) => `Rp ${((row.amount || 0) / 1000000).toFixed(2)}M` },
+                  { header: 'Payment Received', cell: (row) => <div><div className="text-green-600 font-medium">Rp {((row.payment_received || 0) / 1000000).toFixed(2)}M</div><div className="text-xs text-gray-500">{row.payment_count} payments</div></div> },
+                  { header: 'Difference', cell: (row) => {
+                    const diff = row.difference || 0;
+                    return <div className="flex items-center gap-2"><span className={Math.abs(diff) > 0 ? 'text-red-600 font-bold' : 'text-green-600'}>Rp {(diff / 1000000).toFixed(2)}M</span>{Math.abs(diff) > 0 && <AlertTriangle className="w-4 h-4 text-orange-500" />}</div>;
+                  }},
+                  { header: 'Status', cell: (row) => <div className="flex flex-col gap-1"><StatusBadge status={row.status} />{row.has_exception && <Badge className="bg-orange-500 text-white text-xs">Exception</Badge>}</div> },
+                  { header: 'Actions', cell: (row) => (
+                    <div className="flex gap-1">
+                      {isTugure && row.has_exception && row.status !== 'Paid' && (
+                        <Button size="sm" variant="outline" onClick={() => { setSelectedNota(row); setShowDnCnDialog(true); }}>
+                          <Plus className="w-4 h-4 mr-1" />
+                          DN/CN
+                        </Button>
+                      )}
+                      {row.status !== 'Paid' && !row.has_exception && (
+                        <Button size="sm" className="bg-green-600" onClick={() => handleNotaAction()}>
+                          Close
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                ]}
+                data={reconciliationItems}
+                isLoading={loading}
+                emptyMessage="No reconciliation items"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="dncn" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <StatCard title="Total DN/CN" value={dnCnRecords.length} icon={FileText} />
+            <StatCard title="Pending Review" value={dnCnRecords.filter(d => d.status === 'Draft').length} icon={Clock} className="text-orange-600" />
+            <StatCard title="Approved" value={dnCnRecords.filter(d => d.status === 'Approved').length} icon={CheckCircle2} className="text-green-600" />
+            <StatCard title="Total Amount" value={`Rp ${(dnCnRecords.reduce((sum, d) => sum + Math.abs(d.adjustment_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Debit & Credit Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                columns={[
+                  { header: 'Note Number', cell: (row) => <div><div className="font-medium font-mono">{row.note_number}</div><Badge className={row.note_type === 'Debit Note' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>{row.note_type}</Badge></div> },
+                  { header: 'Original Nota', accessorKey: 'original_nota_id' },
+                  { header: 'Batch ID', accessorKey: 'batch_id' },
+                  { header: 'Adjustment', cell: (row) => <div className={row.note_type === 'Debit Note' ? 'text-red-600 font-bold' : 'text-blue-600 font-bold'}>Rp {(Math.abs(row.adjustment_amount || 0)).toLocaleString('id-ID')}</div> },
+                  { header: 'Reason', accessorKey: 'reason_code' },
+                  { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+                  { header: 'Actions', cell: (row) => (
+                    <div className="flex gap-1">
+                      <Button variant="outline" size="sm" onClick={() => { setSelectedDnCn(row); setShowViewDialog(true); }}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      {isTugure && row.status === 'Draft' && (
+                        <Button size="sm" onClick={() => { setSelectedDnCn(row); setActionType('review'); setShowDnCnActionDialog(true); }}>Review</Button>
+                      )}
+                      {isTugure && row.status === 'Under Review' && (
+                        <Button size="sm" className="bg-green-600" onClick={() => { setSelectedDnCn(row); setActionType('approve'); setShowDnCnActionDialog(true); }}>Approve</Button>
+                      )}
+                      {isBrins && row.status === 'Approved' && (
+                        <Button size="sm" className="bg-blue-600" onClick={() => { setSelectedDnCn(row); setActionType('acknowledge'); setShowDnCnActionDialog(true); }}>Acknowledge</Button>
+                      )}
+                    </div>
+                  )}
+                ]}
+                data={dnCnRecords}
+                isLoading={loading}
+                emptyMessage="No DN/CN records"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Detail Dialog (View only) */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
@@ -484,6 +734,94 @@ export default function NotaManagement() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DN/CN Creation Dialog */}
+      <Dialog open={showDnCnDialog} onOpenChange={setShowDnCnDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Debit / Credit Note</DialogTitle>
+            <DialogDescription>For Nota: {selectedNota?.nota_number}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium">Note Type *</label>
+              <Select value={dnCnFormData.note_type} onValueChange={(val) => setDnCnFormData({...dnCnFormData, note_type: val})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Debit Note">Debit Note (Increase)</SelectItem>
+                  <SelectItem value="Credit Note">Credit Note (Decrease)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Adjustment Amount (IDR) *</label>
+              <Input
+                type="number"
+                value={dnCnFormData.adjustment_amount}
+                onChange={(e) => setDnCnFormData({...dnCnFormData, adjustment_amount: parseFloat(e.target.value) || 0})}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Reason Code *</label>
+              <Select value={dnCnFormData.reason_code} onValueChange={(val) => setDnCnFormData({...dnCnFormData, reason_code: val})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Payment Difference">Payment Difference</SelectItem>
+                  <SelectItem value="FX Adjustment">FX Adjustment</SelectItem>
+                  <SelectItem value="Premium Correction">Premium Correction</SelectItem>
+                  <SelectItem value="Coverage Adjustment">Coverage Adjustment</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description *</label>
+              <Textarea
+                value={dnCnFormData.reason_description}
+                onChange={(e) => setDnCnFormData({...dnCnFormData, reason_description: e.target.value})}
+                placeholder="Explain the reason for this adjustment..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDnCnDialog(false)}>Cancel</Button>
+            <Button onClick={handleCreateDnCn} disabled={processing || !dnCnFormData.reason_description}>
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DN/CN Action Dialog */}
+      <Dialog open={showDnCnActionDialog} onOpenChange={setShowDnCnActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{actionType} DN/CN</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium">Remarks</label>
+            <Textarea
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              placeholder="Enter remarks..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDnCnActionDialog(false)}>Cancel</Button>
+            <Button onClick={() => handleDnCnAction(selectedDnCn, actionType)} disabled={processing}>
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>
