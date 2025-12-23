@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { 
   Upload, Download, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, Loader2, Send
+  AlertCircle, Loader2, Send, DollarSign, Clock
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
