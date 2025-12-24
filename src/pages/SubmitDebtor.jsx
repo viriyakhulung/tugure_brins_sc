@@ -5,17 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Upload, Download, FileSpreadsheet, CheckCircle2, 
-  AlertCircle, Loader2, Send, DollarSign, Clock
+  AlertCircle, Loader2, Send, DollarSign, Clock, RefreshCw, Eye, Filter
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
+import StatusBadge from "@/components/ui/StatusBadge";
+import ModernKPI from "@/components/dashboard/ModernKPI";
 
 export default function SubmitDebtor() {
   const [contracts, setContracts] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [myDebtors, setMyDebtors] = useState([]);
   const [selectedContract, setSelectedContract] = useState('');
   const [submissionMode, setSubmissionMode] = useState('new'); // 'new' or 'revise'
   const [selectedBatch, setSelectedBatch] = useState('');
@@ -27,6 +33,11 @@ export default function SubmitDebtor() {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [validationRemarks, setValidationRemarks] = useState([]);
+  const [showReviseDialog, setShowReviseDialog] = useState(false);
+  const [selectedDebtorForRevision, setSelectedDebtorForRevision] = useState(null);
+  const [revisionFormData, setRevisionFormData] = useState({});
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [activeTab, setActiveTab] = useState('upload');
 
   const [user, setUser] = useState(null);
 
@@ -35,6 +46,12 @@ export default function SubmitDebtor() {
     loadContracts();
     loadBatches();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadMyDebtors();
+    }
+  }, [user]);
 
   const loadUser = () => {
     try {
@@ -63,6 +80,19 @@ export default function SubmitDebtor() {
       setBatches(data || []);
     } catch (error) {
       console.error('Failed to load batches:', error);
+    }
+  };
+
+  const loadMyDebtors = async () => {
+    try {
+      const allDebtors = await base44.entities.Debtor.list();
+      const mySubmittedDebtors = allDebtors.filter(d => 
+        d.created_by === user?.email && 
+        d.record_status === 'ACTIVE'
+      );
+      setMyDebtors(mySubmittedDebtors || []);
+    } catch (error) {
+      console.error('Failed to load my debtors:', error);
     }
   };
 
@@ -318,9 +348,101 @@ export default function SubmitDebtor() {
       setUploadedFile(null);
       setSelectedBatch('');
       loadBatches();
+      loadMyDebtors();
     } catch (error) {
       console.error('Submit error:', error);
       setErrorMessage('Failed to submit debtors');
+    }
+    setSubmitting(false);
+  };
+
+  const handleReviseDebtor = (debtor) => {
+    setSelectedDebtorForRevision(debtor);
+    setRevisionFormData({
+      debtor_name: debtor.debtor_name,
+      participant_no: debtor.participant_no,
+      loan_account_no: debtor.loan_account_no,
+      credit_plafond: debtor.credit_plafond,
+      outstanding_amount: debtor.outstanding_amount,
+      gross_premium: debtor.gross_premium,
+      net_premium: debtor.net_premium,
+      coverage_start_date: debtor.coverage_start_date,
+      coverage_end_date: debtor.coverage_end_date,
+      debtor_address: debtor.debtor_address,
+      revision_reason: ''
+    });
+    setShowReviseDialog(true);
+  };
+
+  const submitRevision = async () => {
+    if (!revisionFormData.revision_reason) {
+      setErrorMessage('Please provide revision reason');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const originalDebtor = selectedDebtorForRevision;
+      const newRevisionNumber = (originalDebtor.revision_number || 1) + 1;
+
+      // Create new debtor as revision
+      await base44.entities.Debtor.create({
+        ...originalDebtor,
+        id: undefined,
+        debtor_name: revisionFormData.debtor_name,
+        participant_no: revisionFormData.participant_no,
+        loan_account_no: revisionFormData.loan_account_no,
+        credit_plafond: parseFloat(revisionFormData.credit_plafond),
+        outstanding_amount: parseFloat(revisionFormData.outstanding_amount),
+        gross_premium: parseFloat(revisionFormData.gross_premium),
+        net_premium: parseFloat(revisionFormData.net_premium),
+        coverage_start_date: revisionFormData.coverage_start_date,
+        coverage_end_date: revisionFormData.coverage_end_date,
+        debtor_address: revisionFormData.debtor_address,
+        is_revision: true,
+        parent_debtor_id: originalDebtor.id,
+        revision_number: newRevisionNumber,
+        revision_reason: revisionFormData.revision_reason,
+        underwriting_status: 'SUBMITTED',
+        rejection_reason: null,
+        record_status: 'ACTIVE'
+      });
+
+      // Mark original as inactive
+      await base44.entities.Debtor.update(originalDebtor.id, {
+        record_status: 'INACTIVE'
+      });
+
+      // Create notification
+      await base44.entities.Notification.create({
+        title: 'Debtor Revised and Resubmitted',
+        message: `${originalDebtor.debtor_name} (${originalDebtor.participant_no}) has been revised (v${newRevisionNumber}) and resubmitted for review. Reason: ${revisionFormData.revision_reason}`,
+        type: 'ACTION_REQUIRED',
+        module: 'DEBTOR',
+        reference_id: originalDebtor.batch_id,
+        target_role: 'TUGURE'
+      });
+
+      // Audit log
+      await base44.entities.AuditLog.create({
+        action: 'DEBTOR_REVISED',
+        module: 'DEBTOR',
+        entity_type: 'Debtor',
+        entity_id: originalDebtor.id,
+        old_value: `v${originalDebtor.revision_number || 1} - REJECTED`,
+        new_value: `v${newRevisionNumber} - SUBMITTED`,
+        user_email: user?.email,
+        user_role: user?.role,
+        reason: revisionFormData.revision_reason
+      });
+
+      setSuccessMessage(`Debtor ${originalDebtor.debtor_name} revised successfully (v${newRevisionNumber})`);
+      setShowReviseDialog(false);
+      setSelectedDebtorForRevision(null);
+      loadMyDebtors();
+    } catch (error) {
+      console.error('Revision error:', error);
+      setErrorMessage('Failed to submit revision');
     }
     setSubmitting(false);
   };
@@ -333,6 +455,93 @@ export default function SubmitDebtor() {
     { header: 'Premium', cell: (row) => `Rp ${(row.gross_premium || 0).toLocaleString('id-ID')}` },
     { header: 'Validation', cell: (row) => row.validation_remarks ? <Badge variant="destructive">Issues</Badge> : <Badge className="bg-green-100 text-green-700">OK</Badge> }
   ];
+
+  const filteredMyDebtors = filterStatus === 'ALL' 
+    ? myDebtors 
+    : myDebtors.filter(d => d.underwriting_status === filterStatus);
+
+  const myDebtorsColumns = [
+    { 
+      header: 'Batch ID', 
+      cell: (row) => (
+        <div>
+          <div className="font-mono text-sm">{row.batch_id}</div>
+          {row.is_revision && (
+            <Badge variant="outline" className="text-xs mt-1">v{row.revision_number}</Badge>
+          )}
+        </div>
+      )
+    },
+    { header: 'Participant No', accessorKey: 'participant_no' },
+    { 
+      header: 'Debtor Name', 
+      cell: (row) => (
+        <div>
+          <div className="font-medium">{row.debtor_name}</div>
+          <div className="text-xs text-gray-500">{row.loan_account_no}</div>
+        </div>
+      )
+    },
+    { 
+      header: 'Financial', 
+      cell: (row) => (
+        <div className="text-sm">
+          <div>Plafond: Rp {((row.credit_plafond || 0) / 1000000).toFixed(1)}M</div>
+          <div className="text-gray-500">Premium: Rp {((row.net_premium || 0) / 1000000).toFixed(2)}M</div>
+        </div>
+      )
+    },
+    { 
+      header: 'Status', 
+      cell: (row) => <StatusBadge status={row.underwriting_status} />
+    },
+    {
+      header: 'Review Result',
+      cell: (row) => (
+        <div className="text-xs">
+          {row.underwriting_status === 'REJECTED' && row.rejection_reason && (
+            <div className="text-red-600 max-w-xs">
+              <strong>Rejected:</strong> {row.rejection_reason}
+            </div>
+          )}
+          {row.underwriting_status === 'APPROVED' && (
+            <div className="text-green-600">✓ Approved</div>
+          )}
+          {row.underwriting_status === 'SUBMITTED' && (
+            <div className="text-blue-600">⏳ Under Review</div>
+          )}
+          {row.underwriting_status === 'DRAFT' && (
+            <div className="text-gray-500">Not Submitted</div>
+          )}
+        </div>
+      )
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex gap-2">
+          {row.underwriting_status === 'REJECTED' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleReviseDebtor(row)}
+              className="text-blue-600 hover:text-blue-700"
+            >
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Revise
+            </Button>
+          )}
+        </div>
+      )
+    }
+  ];
+
+  const debtorStats = {
+    total: myDebtors.length,
+    submitted: myDebtors.filter(d => d.underwriting_status === 'SUBMITTED').length,
+    approved: myDebtors.filter(d => d.underwriting_status === 'APPROVED').length,
+    rejected: myDebtors.filter(d => d.underwriting_status === 'REJECTED').length
+  };
 
   const downloadTemplate = () => {
     const headers = [
@@ -365,7 +574,7 @@ export default function SubmitDebtor() {
     <div className="space-y-6">
       <PageHeader
         title="Submit Debtor & Coverage"
-        subtitle="Upload debtor data for reinsurance coverage"
+        subtitle="Upload and track debtor submissions for reinsurance coverage"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Submit Debtor' }
@@ -406,7 +615,14 @@ export default function SubmitDebtor() {
         </Card>
       )}
 
-      <Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="upload">Upload New Batch</TabsTrigger>
+          <TabsTrigger value="tracking">My Submissions ({myDebtors.length})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="upload" className="space-y-6 mt-6">
+          <Card>
         <CardHeader>
           <CardTitle>1. Select Active Contract</CardTitle>
         </CardHeader>
@@ -545,6 +761,215 @@ export default function SubmitDebtor() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="tracking" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <ModernKPI 
+              title="Total Submissions" 
+              value={debtorStats.total} 
+              subtitle="All debtors" 
+              icon={Upload} 
+              color="blue" 
+            />
+            <ModernKPI 
+              title="Under Review" 
+              value={debtorStats.submitted} 
+              subtitle="Pending TUGURE" 
+              icon={Clock} 
+              color="orange" 
+            />
+            <ModernKPI 
+              title="Approved" 
+              value={debtorStats.approved} 
+              subtitle="Accepted" 
+              icon={CheckCircle2} 
+              color="green" 
+            />
+            <ModernKPI 
+              title="Rejected" 
+              value={debtorStats.rejected} 
+              subtitle="Need revision" 
+              icon={AlertCircle} 
+              color="red" 
+            />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Debtor Submission Tracking</CardTitle>
+                <div className="flex items-center gap-3">
+                  <Filter className="w-4 h-4 text-gray-500" />
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Status</SelectItem>
+                      <SelectItem value="DRAFT">Draft</SelectItem>
+                      <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                      <SelectItem value="APPROVED">Approved</SelectItem>
+                      <SelectItem value="REJECTED">Rejected</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="sm" onClick={loadMyDebtors}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {myDebtors.length === 0 ? (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    No debtors submitted yet. Upload your first batch in the "Upload New Batch" tab.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <DataTable 
+                  columns={myDebtorsColumns} 
+                  data={filteredMyDebtors}
+                  emptyMessage="No debtors match the selected filter"
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-700">
+              <strong>Revision Workflow:</strong> If a debtor is REJECTED by TUGURE, click "Revise" to create a new version with updated data. The revised debtor will go through the review process again.
+            </AlertDescription>
+          </Alert>
+        </TabsContent>
+      </Tabs>
+
+      {/* Revision Dialog */}
+      <Dialog open={showReviseDialog} onOpenChange={setShowReviseDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Revise Rejected Debtor</DialogTitle>
+          </DialogHeader>
+          {selectedDebtorForRevision && (
+            <div className="space-y-4">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Rejection Reason:</strong> {selectedDebtorForRevision.rejection_reason}
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Debtor Name *</Label>
+                  <Input
+                    value={revisionFormData.debtor_name || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, debtor_name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Participant No *</Label>
+                  <Input
+                    value={revisionFormData.participant_no || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, participant_no: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Loan Account No *</Label>
+                  <Input
+                    value={revisionFormData.loan_account_no || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, loan_account_no: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Credit Plafond (Rp) *</Label>
+                  <Input
+                    type="number"
+                    value={revisionFormData.credit_plafond || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, credit_plafond: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Outstanding Amount (Rp) *</Label>
+                  <Input
+                    type="number"
+                    value={revisionFormData.outstanding_amount || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, outstanding_amount: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Gross Premium (Rp) *</Label>
+                  <Input
+                    type="number"
+                    value={revisionFormData.gross_premium || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, gross_premium: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Net Premium (Rp) *</Label>
+                  <Input
+                    type="number"
+                    value={revisionFormData.net_premium || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, net_premium: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Coverage Start Date *</Label>
+                  <Input
+                    type="date"
+                    value={revisionFormData.coverage_start_date || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, coverage_start_date: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Coverage End Date *</Label>
+                  <Input
+                    type="date"
+                    value={revisionFormData.coverage_end_date || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, coverage_end_date: e.target.value})}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label>Debtor Address</Label>
+                  <Input
+                    value={revisionFormData.debtor_address || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, debtor_address: e.target.value})}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label>Revision Reason * (Why are you revising this debtor?)</Label>
+                  <Input
+                    placeholder="E.g., Updated plafond based on new documentation"
+                    value={revisionFormData.revision_reason || ''}
+                    onChange={(e) => setRevisionFormData({...revisionFormData, revision_reason: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReviseDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitRevision} disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Submitting Revision...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Submit Revision
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
