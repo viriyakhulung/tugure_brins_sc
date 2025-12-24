@@ -159,7 +159,7 @@ export default function DebtorReview() {
             d.underwriting_status === 'REJECTED'
           );
           
-          const approvedDebto rs = updatedDebtors.filter(d => d.underwriting_status === 'APPROVED');
+          const approvedDebtors = updatedDebtors.filter(d => d.underwriting_status === 'APPROVED');
           
           const allReviewed = reviewedDebtors.length === updatedDebtors.length;
           const hasApproved = approvedDebtors.length > 0;
