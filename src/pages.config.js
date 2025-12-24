@@ -17,6 +17,7 @@ import PaymentStatus from './pages/PaymentStatus';
 import Profile from './pages/Profile';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
+import CloseBatch from './pages/CloseBatch';
 import __Layout from './Layout.jsx';
 
 
@@ -40,6 +41,7 @@ export const PAGES = {
     "Profile": Profile,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
+    "CloseBatch": CloseBatch,
 }
 
 export const pagesConfig = {
