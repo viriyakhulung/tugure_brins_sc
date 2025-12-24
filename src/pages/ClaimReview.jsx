@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -9,14 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   FileText, CheckCircle2, Eye, RefreshCw, Check, X, 
-  Loader2, AlertCircle, DollarSign, Download
+  Loader2, AlertCircle, DollarSign, Plus
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
-import StatCard from "@/components/dashboard/StatCard";
 import ModernKPI from "@/components/dashboard/ModernKPI";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
@@ -79,16 +79,6 @@ export default function ClaimReview() {
     setLoading(false);
   };
 
-  const canProcessClaim = (claim) => {
-    // Check if nota for claim is paid
-    const claimNotas = notas.filter(n => 
-      n.nota_type === 'Claim' && 
-      n.reference_id === claim.claim_no
-    );
-    const hasPaidNota = claimNotas.some(n => n.status === 'Paid');
-    return hasPaidNota || claim.claim_status === 'Draft' || claim.claim_status === 'Checked';
-  };
-
   const handleClaimAction = async () => {
     if (!selectedClaim || !actionType) return;
 
@@ -116,30 +106,34 @@ export default function ClaimReview() {
           updateData.doc_verified_date = new Date().toISOString().split('T')[0];
           break;
         case 'invoice':
-          // Check precondition: batch must be paid
-          const relatedNotas = notas.filter(n => n.reference_id === selectedClaim.claim_no);
-          if (relatedNotas.length === 0 || !relatedNotas.some(n => n.status === 'Paid')) {
-            setErrorMessage('Cannot issue invoice: Batch payment not completed yet');
-            setProcessing(false);
-            return;
-          }
-          
           newStatus = 'Invoiced';
           updateData.claim_status = 'Invoiced';
           updateData.invoiced_by = user?.email;
           updateData.invoiced_date = new Date().toISOString().split('T')[0];
           
-          // Create Claim Nota
+          // Create Claim Nota (IMMUTABLE AFTER ISSUED)
           const notaNumber = `NOTA-CLM-${selectedClaim.claim_no}-${Date.now()}`;
           await base44.entities.Nota.create({
             nota_number: notaNumber,
             nota_type: 'Claim',
             reference_id: selectedClaim.claim_no,
             contract_id: selectedClaim.contract_id,
-            amount: selectedClaim.share_tugure_amount || 0,
+            amount: selectedClaim.share_tugure_amount || selectedClaim.nilai_klaim || 0,
             currency: 'IDR',
-            status: 'Draft'
+            status: 'Draft',
+            is_immutable: false,
+            total_actual_paid: 0,
+            reconciliation_status: 'PENDING'
           });
+          
+          await createNotification(
+            'Claim Nota Generated',
+            `Nota ${notaNumber} created for Claim ${selectedClaim.claim_no}. Amount: Rp ${((selectedClaim.share_tugure_amount || selectedClaim.nilai_klaim || 0)).toLocaleString()}. Process in Nota Management.`,
+            'ACTION_REQUIRED',
+            'CLAIM',
+            selectedClaim.id,
+            'TUGURE'
+          );
           break;
         case 'reject':
           newStatus = 'Draft';
@@ -171,7 +165,7 @@ export default function ClaimReview() {
         remarks
       );
 
-      setSuccessMessage(`Claim ${actionType}ed successfully`);
+      setSuccessMessage(`Claim ${actionType}ed successfully${actionType === 'invoice' ? ' - Nota created' : ''}`);
       setShowActionDialog(false);
       setSelectedClaim(null);
       setRemarks('');
@@ -239,7 +233,7 @@ export default function ClaimReview() {
           )}
           {row.claim_status === 'Doc Verified' && (
             <Button size="sm" className="bg-purple-600" onClick={() => { setSelectedClaim(row); setActionType('invoice'); setShowActionDialog(true); }}>
-              Issue Invoice
+              Issue Nota
             </Button>
           )}
         </div>
@@ -251,7 +245,7 @@ export default function ClaimReview() {
     <div className="space-y-6">
       <PageHeader
         title="Claim Review"
-        subtitle="Review and process claims"
+        subtitle="Review and process claims - generates Claim Nota"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Claim Review' }
@@ -320,14 +314,24 @@ export default function ClaimReview() {
         </Alert>
       )}
 
+      <Alert className="bg-blue-50 border-blue-200">
+        <AlertCircle className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-700">
+          <strong>Claim Workflow:</strong> Draft → Checked → Doc Verified → Invoiced (Nota Created) → Paid
+          <br/><br/>
+          • <strong>Issue Nota:</strong> Creates CLAIM Nota (managed in Nota Management)
+          <br/>• <strong>Claim Nota:</strong> Same workflow as Batch Nota (Draft → Issued → Confirmed → Paid)
+          <br/>• <strong>Multiple Notas:</strong> One Claim can have multiple Notas (initial + revisions)
+        </AlertDescription>
+      </Alert>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <ModernKPI title="Pending Review" value={pendingClaims.length} subtitle="Awaiting action" icon={FileText} color="orange" />
         <ModernKPI title="Total Claims" value={claims.length} subtitle={`Rp ${(claims.reduce((s, c) => s + (c.nilai_klaim || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} color="blue" />
-        <ModernKPI title="Invoiced" value={claims.filter(c => c.claim_status === 'Invoiced').length} subtitle="Ready for payment" icon={CheckCircle2} color="purple" />
+        <ModernKPI title="Invoiced" value={claims.filter(c => c.claim_status === 'Invoiced').length} subtitle="Nota created" icon={CheckCircle2} color="purple" />
         <ModernKPI title="Paid" value={claims.filter(c => c.claim_status === 'Paid').length} subtitle="Completed" icon={CheckCircle2} color="green" />
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -377,12 +381,12 @@ export default function ClaimReview() {
           if (filters.contract !== 'all' && c.contract_id !== filters.contract) return false;
           if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
           return true;
-        })} isLoading={loading} /></TabsContent>
+        })} isLoading={loading} emptyMessage="No pending claims" /></TabsContent>
         <TabsContent value="all"><DataTable columns={claimColumns} data={claims.filter(c => {
           if (filters.contract !== 'all' && c.contract_id !== filters.contract) return false;
           if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
           return true;
-        })} isLoading={loading} /></TabsContent>
+        })} isLoading={loading} emptyMessage="No claims" /></TabsContent>
         <TabsContent value="subrogation">
           <DataTable
             columns={[
@@ -396,6 +400,7 @@ export default function ClaimReview() {
               return true;
             })}
             isLoading={loading}
+            emptyMessage="No subrogations"
           />
         </TabsContent>
       </Tabs>
@@ -407,22 +412,39 @@ export default function ClaimReview() {
             <DialogTitle>
               {actionType === 'check' && 'Check Claim'}
               {actionType === 'verify' && 'Verify Documents'}
-              {actionType === 'invoice' && 'Issue Invoice'}
+              {actionType === 'invoice' && 'Issue Claim Nota'}
               {actionType === 'reject' && 'Reject Claim'}
             </DialogTitle>
+            <DialogDescription>{selectedClaim?.claim_no} - {selectedClaim?.nama_tertanggung}</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {actionType === 'invoice' && (
-              <Alert className="bg-blue-50 border-blue-200">
-                <AlertCircle className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-700">
-                  This will create Claim Nota. Payment status managed by Nota Management.
+              <Alert className="bg-purple-50 border-purple-200">
+                <Plus className="h-4 w-4 text-purple-600" />
+                <AlertDescription className="text-purple-700">
+                  <strong>Creating Claim Nota:</strong>
+                  <br/>• Nota Type: Claim
+                  <br/>• Amount: {selectedClaim ? `Rp ${((selectedClaim.share_tugure_amount || selectedClaim.nilai_klaim || 0)).toLocaleString()}` : '-'}
+                  <br/>• Status: Draft (process in Nota Management)
+                  <br/><br/>
+                  Claim Nota follows same workflow as Batch Nota:
+                  <br/>Draft → Issued → Confirmed → Paid
                 </AlertDescription>
               </Alert>
             )}
+            {selectedClaim && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-gray-500">Claim No:</span><span className="ml-2 font-medium">{selectedClaim.claim_no}</span></div>
+                  <div><span className="text-gray-500">Debtor:</span><span className="ml-2 font-medium">{selectedClaim.nama_tertanggung}</span></div>
+                  <div><span className="text-gray-500">Claim Amount:</span><span className="ml-2 font-bold">Rp {(selectedClaim.nilai_klaim || 0).toLocaleString()}</span></div>
+                  <div><span className="text-gray-500">Share TUGURE:</span><span className="ml-2 font-bold text-green-600">Rp {(selectedClaim.share_tugure_amount || 0).toLocaleString()}</span></div>
+                </div>
+              </div>
+            )}
             <div>
-              <label className="text-sm font-medium">Remarks</label>
-              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} />
+              <Label>Remarks</Label>
+              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} placeholder="Enter remarks..." />
             </div>
           </div>
           <DialogFooter>
@@ -440,6 +462,7 @@ export default function ClaimReview() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Claim Details</DialogTitle>
+            <DialogDescription>{selectedClaim?.claim_no}</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
