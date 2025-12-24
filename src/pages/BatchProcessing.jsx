@@ -126,45 +126,48 @@ export default function BatchProcessing() {
         return;
       }
 
-      // Validate batch has approved debtors
-      const batchDebtors = debtors.filter(d => d.batch_id === selectedBatch.batch_id);
-      const approvedDebtors = batchDebtors.filter(d => d.underwriting_status === 'APPROVED');
+      // STAGE 1-4: DATA INGESTION ONLY (Uploaded → Validated → Matched)
+      // No financial implications, just data quality checks
       
-      if (approvedDebtors.length === 0 && selectedBatch.status === 'Matched') {
-        setSuccessMessage('');
-        alert('Cannot approve batch: No approved debtors found. Batch rejected.');
+      // STAGE 5: APPROVE - OPERATIONAL VALIDATION ONLY
+      if (nextStatus === 'Approved') {
+        // Approve = "Data is structurally correct"
+        // This does NOT freeze financial amounts
+        // Financial gate is in Debtor Review, NOT here
         
-        // Update batch to Rejected status
-        await base44.entities.Batch.update(selectedBatch.id, {
-          status: 'Rejected',
-          rejection_reason: 'No approved debtors'
-        });
-
-        await createNotification(
-          'Batch Rejected - No Approved Debtors',
-          `Batch ${selectedBatch.batch_id} rejected: no approved debtors`,
-          'WARNING',
-          'DEBTOR',
-          selectedBatch.id,
-          'BRINS'
-        );
-
         await createAuditLog(
-          'BATCH_REJECTED',
+          'BATCH_APPROVED_OPERATIONAL',
           'DEBTOR',
           'Batch',
           selectedBatch.id,
           { status: selectedBatch.status },
-          { status: 'Rejected', reason: 'No approved debtors' },
+          { status: nextStatus, note: 'Operational approval - data structure validated. Financial amounts not frozen yet.' },
           user?.email,
           user?.role,
-          'No approved debtors found'
+          remarks || 'Operational approval - batch structure validated'
         );
-
-        setShowActionDialog(false);
-        loadData();
-        setProcessing(false);
-        return;
+      }
+      
+      // BLOCK: Cannot generate Nota before Debtor Review
+      if (nextStatus === 'Nota Issued') {
+        if (!selectedBatch.batch_ready_for_nota) {
+          await createAuditLog(
+            'BLOCKED_NOTA_GENERATION',
+            'DEBTOR',
+            'Batch',
+            selectedBatch.id,
+            { status: selectedBatch.status },
+            { blocked_action: 'Generate Nota', reason: 'Debtor Review not completed' },
+            user?.email,
+            user?.role,
+            'Attempted to generate Nota before Debtor Review completion'
+          );
+          
+          alert('❌ BLOCKED: Debtor Review must be completed first.\n\nPlease go to Debtor Review menu to approve/reject debtors before generating Nota.');
+          setProcessing(false);
+          setShowActionDialog(false);
+          return;
+        }
       }
 
       const statusField = getStatusField(nextStatus);
@@ -176,33 +179,35 @@ export default function BatchProcessing() {
 
       await base44.entities.Batch.update(selectedBatch.id, updateData);
 
-      // Generate Bordero when moving to Approved
+      // STAGE 6: POSTING - Transform staging to production records
+      // Still NO financial freeze
       if (nextStatus === 'Approved') {
-        const borderoId = `BDR-${selectedBatch.batch_id}-${Date.now()}`;
-        await base44.entities.Bordero.create({
-          bordero_id: borderoId,
-          contract_id: selectedBatch.contract_id,
-          batch_id: selectedBatch.batch_id,
-          period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`,
-          total_debtors: approvedDebtors.length,
-          total_exposure: approvedDebtors.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0),
-          total_premium: approvedDebtors.reduce((sum, d) => sum + (d.gross_premium || 0), 0),
-          currency: 'IDR',
-          status: 'GENERATED'
-        });
+        await createAuditLog(
+          'BATCH_POSTING',
+          'DEBTOR',
+          'Batch',
+          selectedBatch.id,
+          { status: selectedBatch.status },
+          { status: nextStatus, note: 'Data posted to production - ready for Debtor Review' },
+          user?.email,
+          user?.role,
+          'Batch approved - proceed to Debtor Review for financial gate'
+        );
       }
 
-      // Generate Nota when moving to Nota Issued
+      // Generate Nota when moving to Nota Issued (ONLY IF batch_ready_for_nota = TRUE)
       if (nextStatus === 'Nota Issued') {
+        // Use FINAL amounts from Debtor Review
         const notaNumber = `NOTA-${selectedBatch.batch_id}-${Date.now()}`;
         await base44.entities.Nota.create({
           nota_number: notaNumber,
           nota_type: 'Batch',
           reference_id: selectedBatch.batch_id,
           contract_id: selectedBatch.contract_id,
-          amount: selectedBatch.total_premium || 0,
+          amount: selectedBatch.final_premium_amount || 0,
           currency: 'IDR',
-          status: 'Draft'
+          status: 'Draft',
+          is_immutable: false
         });
 
         // Create Invoice
@@ -211,13 +216,17 @@ export default function BatchProcessing() {
           invoice_number: invoiceNumber,
           contract_id: selectedBatch.contract_id,
           period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`,
-          total_amount: selectedBatch.total_premium || 0,
-          outstanding_amount: selectedBatch.total_premium || 0,
+          total_amount: selectedBatch.final_premium_amount || 0,
+          outstanding_amount: selectedBatch.final_premium_amount || 0,
           currency: 'IDR',
           status: 'ISSUED'
         });
 
-        // Update debtors with invoice reference
+        // Update APPROVED debtors only with invoice reference
+        const approvedDebtors = debtors.filter(d => 
+          d.batch_id === selectedBatch.batch_id && 
+          d.underwriting_status === 'APPROVED'
+        );
         for (const debtor of approvedDebtors) {
           await base44.entities.Debtor.update(debtor.id, {
             invoice_no: invoiceNumber,
@@ -225,38 +234,26 @@ export default function BatchProcessing() {
             invoice_status: 'ISSUED'
           });
         }
-      }
-
-      // Create Reconciliation when moving to Paid
-      if (nextStatus === 'Paid') {
-        const reconId = `RECON-${selectedBatch.contract_id}-${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`;
-        const existingRecon = await base44.entities.Reconciliation.filter({ 
-          contract_id: selectedBatch.contract_id,
-          period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`
-        });
-
-        if (existingRecon.length === 0) {
-          await base44.entities.Reconciliation.create({
-            recon_id: reconId,
-            contract_id: selectedBatch.contract_id,
-            period: `${selectedBatch.batch_year}-${String(selectedBatch.batch_month).padStart(2, '0')}`,
-            total_invoiced: selectedBatch.total_premium || 0,
-            total_paid: selectedBatch.total_premium || 0,
-            difference: 0,
-            currency: 'IDR',
-            status: 'READY_TO_CLOSE'
-          });
-        }
-
-        for (const debtor of approvedDebtors) {
-          await base44.entities.Debtor.update(debtor.id, {
-            recon_status: 'READY_TO_CLOSE'
-          });
-        }
+        
+        await createAuditLog(
+          'NOTA_GENERATED_FROM_FINAL',
+          'DEBTOR',
+          'Batch',
+          selectedBatch.id,
+          {},
+          { nota_number: notaNumber, amount: selectedBatch.final_premium_amount, source: 'Debtor Review Final Amounts' },
+          user?.email,
+          user?.role,
+          `Nota generated with final premium: Rp ${(selectedBatch.final_premium_amount || 0).toLocaleString()}`
+        );
       }
 
       const targetRole = nextStatus === 'Nota Issued' ? 'BRINS' :
                         nextStatus === 'Branch Confirmed' ? 'TUGURE' : 'ALL';
+
+      // Use FINAL amounts for email if after Debtor Review
+      const exposureAmount = selectedBatch.final_exposure_amount || selectedBatch.total_exposure || 0;
+      const premiumAmount = selectedBatch.final_premium_amount || selectedBatch.total_premium || 0;
 
       await sendTemplatedEmail(
         'Batch',
@@ -267,8 +264,8 @@ export default function BatchProcessing() {
         {
           batch_id: selectedBatch.batch_id,
           total_records: selectedBatch.total_records,
-          total_exposure: `Rp ${(selectedBatch.total_exposure || 0).toLocaleString('id-ID')}`,
-          total_premium: `Rp ${(selectedBatch.total_premium || 0).toLocaleString('id-ID')}`,
+          total_exposure: `Rp ${exposureAmount.toLocaleString('id-ID')}`,
+          total_premium: `Rp ${premiumAmount.toLocaleString('id-ID')}`,
           user_name: user?.email,
           date: new Date().toLocaleDateString('id-ID')
         }
@@ -437,9 +434,39 @@ export default function BatchProcessing() {
       )
     },
     { header: 'Records', accessorKey: 'total_records' },
-    { header: 'Exposure', cell: (row) => `Rp ${((row.total_exposure || 0) / 1000000).toFixed(1)}M` },
-    { header: 'Premium', cell: (row) => `Rp ${((row.total_premium || 0) / 1000000).toFixed(1)}M` },
-    { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+    { 
+      header: 'Raw / Final Exposure', 
+      cell: (row) => (
+        <div>
+          <div className="text-sm">Rp {((row.total_exposure || 0) / 1000000).toFixed(1)}M</div>
+          {row.final_exposure_amount > 0 && (
+            <div className="text-xs text-green-600 font-bold">Final: Rp {((row.final_exposure_amount || 0) / 1000000).toFixed(1)}M</div>
+          )}
+        </div>
+      )
+    },
+    { 
+      header: 'Raw / Final Premium', 
+      cell: (row) => (
+        <div>
+          <div className="text-sm">Rp {((row.total_premium || 0) / 1000000).toFixed(1)}M</div>
+          {row.final_premium_amount > 0 && (
+            <div className="text-xs text-green-600 font-bold">Final: Rp {((row.final_premium_amount || 0) / 1000000).toFixed(1)}M</div>
+          )}
+        </div>
+      )
+    },
+    { 
+      header: 'Status', 
+      cell: (row) => (
+        <div className="space-y-1">
+          <StatusBadge status={row.status} />
+          {row.batch_ready_for_nota && (
+            <div className="text-xs text-green-600 font-semibold">✓ Ready for Nota</div>
+          )}
+        </div>
+      )
+    },
     {
       header: 'Processed By',
       cell: (row) => {
@@ -540,6 +567,15 @@ export default function BatchProcessing() {
         <ModernKPI title="Paid" value={batches.filter(b => b.status === 'Paid').length} subtitle="Payment completed" icon={DollarSign} color="purple" />
         <ModernKPI title="Rejected" value={batches.filter(b => b.status === 'Rejected').length} subtitle="Requires revision" icon={AlertCircle} color="red" />
       </div>
+
+      <Alert className="bg-blue-50 border-blue-200 mb-6">
+        <AlertCircle className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-700">
+          <strong>Bordero Workflow:</strong> Uploaded → Validated → Matched → Approved → [Debtor Review] → Nota Issued → Branch Confirmed → Paid → Closed
+          <br/><br/>
+          <strong>Important:</strong> Stages 1-6 are DATA INGESTION ONLY. Financial amounts are finalized in <strong>Debtor Review</strong> menu before Nota generation.
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardHeader>
