@@ -84,15 +84,23 @@ export default function SubmitDebtor() {
   };
 
   const loadMyDebtors = async () => {
-    if (!user?.email) return;
+    if (!user?.email) {
+      console.log('User email not available yet');
+      return;
+    }
     
     try {
       const allDebtors = await base44.entities.Debtor.list();
+      console.log('All debtors loaded:', allDebtors.length);
+      console.log('Current user email:', user.email);
+      
       // Filter by created_by email
       const mySubmittedDebtors = allDebtors.filter(d => 
         d.created_by === user?.email && 
         d.record_status === 'ACTIVE'
       );
+      
+      console.log('My submitted debtors:', mySubmittedDebtors.length);
       setMyDebtors(mySubmittedDebtors || []);
     } catch (error) {
       console.error('Failed to load my debtors:', error);
@@ -354,13 +362,13 @@ export default function SubmitDebtor() {
       setShowPreview(false);
       setUploadedFile(null);
       setSelectedBatch('');
-      setActiveTab('tracking'); // Switch to tracking tab
       
       // Reload data with delay to ensure DB updated
-      setTimeout(() => {
-        loadBatches();
-        loadMyDebtors();
-      }, 500);
+      setTimeout(async () => {
+        await loadBatches();
+        await loadMyDebtors();
+        setActiveTab('tracking'); // Switch to tracking tab AFTER data loaded
+      }, 1000);
     } catch (error) {
       console.error('Submit error:', error);
       setErrorMessage('Failed to submit debtors');
