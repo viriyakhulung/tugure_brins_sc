@@ -98,6 +98,25 @@ export default function PaymentIntent() {
         return;
       }
 
+      // BLOCK: Cannot create Payment Intent before Nota is Issued
+      if (nota.status !== 'Issued' && nota.status !== 'Confirmed') {
+        alert(`❌ BLOCKED: Payment Intent can only be created for ISSUED or CONFIRMED notas.\n\nCurrent nota status: ${nota.status}\n\nPlease wait for Nota to be issued first.`);
+        
+        await base44.entities.AuditLog.create({
+          action: 'BLOCKED_PAYMENT_INTENT',
+          module: 'PAYMENT',
+          entity_type: 'PaymentIntent',
+          entity_id: nota.nota_number,
+          user_email: user?.email,
+          user_role: user?.role,
+          reason: `Attempted to create Payment Intent before Nota Issued (current status: ${nota.status})`
+        });
+        
+        setErrorMessage('Payment Intent blocked - Nota must be Issued first');
+        setProcessing(false);
+        return;
+      }
+
       const intentId = `PI-${nota.nota_number}-${Date.now()}`;
       
       await base44.entities.PaymentIntent.create({
@@ -112,8 +131,8 @@ export default function PaymentIntent() {
       });
 
       await base44.entities.Notification.create({
-        title: 'Payment Intent Created',
-        message: `Payment Intent ${intentId} created for Nota ${nota.nota_number}`,
+        title: 'Payment Intent Created (Planning Only)',
+        message: `Payment Intent ${intentId} created for Nota ${nota.nota_number}. This is PLANNING ONLY - actual payment must be recorded in Reconciliation.`,
         type: 'INFO',
         module: 'PAYMENT',
         reference_id: intentId,
@@ -125,11 +144,12 @@ export default function PaymentIntent() {
         module: 'PAYMENT',
         entity_type: 'PaymentIntent',
         entity_id: intentId,
+        new_value: JSON.stringify({ planned_amount: parseFloat(plannedAmount), planned_date: plannedDate, note: 'PLANNING ONLY' }),
         user_email: user?.email,
         user_role: user?.role
       });
 
-      setSuccessMessage('Payment Intent created successfully');
+      setSuccessMessage('Payment Intent created (planning only - record actual payment in Reconciliation)');
       setShowCreateDialog(false);
       resetForm();
       loadData();
@@ -263,8 +283,8 @@ export default function PaymentIntent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Payment Intent"
-        subtitle="Create payment plans for issued notas"
+        title="Payment Intent - Planning Stage"
+        subtitle="⚠️ Payment Intent is PLANNING ONLY - does not mark payment as done. Record actual payments in Reconciliation."
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Payment Intent' }
@@ -307,6 +327,20 @@ export default function PaymentIntent() {
           </AlertDescription>
         </Alert>
       )}
+
+      <Alert className="bg-purple-50 border-purple-200">
+        <AlertCircle className="h-4 w-4 text-purple-600" />
+        <AlertDescription className="text-purple-700">
+          <strong>Payment Intent = PLANNING ONLY</strong>
+          <br/><br/>
+          • Multiple Payment Intents per Nota allowed<br/>
+          • Payment Intent does NOT:<br/>
+          &nbsp;&nbsp;❌ Mark payment as done<br/>
+          &nbsp;&nbsp;❌ Close Nota<br/>
+          &nbsp;&nbsp;❌ Affect reconciliation<br/>
+          • Actual payments must be recorded in <strong>Nota Management → Reconciliation</strong> tab
+        </AlertDescription>
+      </Alert>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <ModernKPI title="Available Notas" value={notas.length} subtitle="Issued/Confirmed" icon={DollarSign} color="blue" />
