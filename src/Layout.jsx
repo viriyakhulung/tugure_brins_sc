@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { 
   LayoutDashboard, FileText, Upload, FileCheck, BarChart3, 
   DollarSign, CreditCard, Scale, Bell, User, Settings, 
-  LogOut, Menu, X, ChevronRight, Shield, Activity
+  LogOut, Menu, X, ChevronRight, Shield, Activity, Lock
 } from "lucide-react";
 export default function Layout({ children, currentPageName }) {
   const [user, setUser] = useState(null);
@@ -87,6 +87,7 @@ export default function Layout({ children, currentPageName }) {
       { name: 'Document Eligibility', icon: FileCheck, path: 'DocumentEligibilityBatch', roles: ['BRINS'] },
       { name: 'Debtor Review', icon: FileCheck, path: 'DebtorReview', roles: ['TUGURE'] },
       { name: 'Nota Management', icon: FileText, path: 'NotaManagement', roles: ['TUGURE'] },
+      { name: 'Close Batch', icon: Lock, path: 'CloseBatch', roles: ['TUGURE'] },
       { name: 'Payment Intent', icon: DollarSign, path: 'PaymentIntent', roles: ['BRINS'] },
       { name: 'Claim Submit', icon: FileText, path: 'ClaimSubmit', roles: ['BRINS'] },
       { name: 'Document Claim', icon: FileCheck, path: 'DocumentClaim', roles: ['BRINS'] },

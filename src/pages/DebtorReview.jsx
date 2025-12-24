@@ -156,17 +156,30 @@ export default function DebtorReview() {
           await base44.entities.Batch.update(batchRecord.id, {
             final_exposure_amount: amounts.approvedExposure,
             final_premium_amount: amounts.approvedPremium,
+            debtor_review_completed: allReviewed,
             batch_ready_for_nota: allReviewed && hasApproved
           });
           
           if (allReviewed && hasApproved) {
             await createNotification(
-              'Debtor Review Completed - Batch Ready for Nota',
-              `Batch ${batchId}: ${amounts.approvedCount} debtors approved. Final premium: Rp ${amounts.approvedPremium.toLocaleString()}. Ready for Nota generation.`,
+              '✅ Debtor Review COMPLETED - Ready for Nota',
+              `Batch ${batchId}: ALL debtors reviewed. ${amounts.approvedCount} approved. Final premium: Rp ${amounts.approvedPremium.toLocaleString()}. ✓ debtor_review_completed = TRUE. ✓ batch_ready_for_nota = TRUE.`,
               'ACTION_REQUIRED',
               'DEBTOR',
               batchRecord.id,
               'TUGURE'
+            );
+            
+            await createAuditLog(
+              'DEBTOR_REVIEW_COMPLETED',
+              'DEBTOR',
+              'Batch',
+              batchRecord.id,
+              { debtor_review_completed: false },
+              { debtor_review_completed: true, batch_ready_for_nota: true, final_premium_amount: amounts.approvedPremium },
+              user?.email,
+              user?.role,
+              `All ${allBatchDebtors.length} debtors reviewed - ${amounts.approvedCount} approved`
             );
           } else if (allReviewed && !hasApproved) {
             await base44.entities.Batch.update(batchRecord.id, {

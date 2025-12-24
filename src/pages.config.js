@@ -15,7 +15,6 @@ import NotificationCenter from './pages/NotificationCenter';
 import PaymentIntent from './pages/PaymentIntent';
 import PaymentStatus from './pages/PaymentStatus';
 import Profile from './pages/Profile';
-import Reconciliation from './pages/Reconciliation';
 import SubmitDebtor from './pages/SubmitDebtor';
 import SystemConfiguration from './pages/SystemConfiguration';
 import __Layout from './Layout.jsx';
@@ -39,7 +38,6 @@ export const PAGES = {
     "PaymentIntent": PaymentIntent,
     "PaymentStatus": PaymentStatus,
     "Profile": Profile,
-    "Reconciliation": Reconciliation,
     "SubmitDebtor": SubmitDebtor,
     "SystemConfiguration": SystemConfiguration,
 }
