@@ -1442,10 +1442,16 @@ export default function SystemConfiguration() {
                 <Button variant="destructive" onClick={async () => {
                   if (!window.confirm(`Delete ${selectedTemplates.length} template(s)?`)) return;
                   setProcessing(true);
+                  let deleted = 0;
                   for (const id of selectedTemplates) {
-                    await base44.entities.EmailTemplate.delete(id);
+                    try {
+                      await base44.entities.EmailTemplate.delete(id);
+                      deleted++;
+                    } catch (error) {
+                      console.error('Delete error:', error);
+                    }
                   }
-                  setSuccessMessage(`${selectedTemplates.length} template(s) deleted`);
+                  setSuccessMessage(`${deleted} template(s) deleted`);
                   setSelectedTemplates([]);
                   loadData();
                   setProcessing(false);
@@ -1563,9 +1569,14 @@ export default function SystemConfiguration() {
                       size="sm"
                       onClick={async () => {
                         if (window.confirm('Delete this template?')) {
-                          await base44.entities.EmailTemplate.delete(row.id);
+                          try {
+                            await base44.entities.EmailTemplate.delete(row.id);
+                            setSuccessMessage('Template deleted');
+                          } catch (error) {
+                            console.error('Delete error:', error);
+                            setSuccessMessage('Template already deleted or not found');
+                          }
                           loadData();
-                          setSuccessMessage('Template deleted');
                         }
                       }}
                     >
@@ -1758,10 +1769,16 @@ export default function SystemConfiguration() {
                     <Button variant="destructive" size="sm" onClick={async () => {
                       if (!window.confirm(`Delete ${selectedRules.length} rule(s)?`)) return;
                       setProcessing(true);
+                      let deleted = 0;
                       for (const id of selectedRules) {
-                        await base44.entities.SlaRule.delete(id);
+                        try {
+                          await base44.entities.SlaRule.delete(id);
+                          deleted++;
+                        } catch (error) {
+                          console.error('Delete error:', error);
+                        }
                       }
-                      setSuccessMessage(`${selectedRules.length} rule(s) deleted`);
+                      setSuccessMessage(`${deleted} rule(s) deleted`);
                       setSelectedRules([]);
                       loadData();
                       setProcessing(false);
@@ -1926,9 +1943,14 @@ export default function SystemConfiguration() {
                           size="sm"
                           onClick={async () => {
                             if (window.confirm('Delete this rule?')) {
-                              await base44.entities.SlaRule.delete(row.id);
+                              try {
+                                await base44.entities.SlaRule.delete(row.id);
+                                setSuccessMessage('Rule deleted');
+                              } catch (error) {
+                                console.error('Delete error:', error);
+                                setSuccessMessage('Rule already deleted or not found');
+                              }
                               loadData();
-                              setSuccessMessage('Rule deleted');
                             }
                           }}
                         >
