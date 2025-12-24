@@ -84,6 +84,9 @@ export default function DebtorReview() {
       const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
       const debtorsToProcess = isBulk ? debtors.filter(d => selectedDebtors.includes(d.id)) : [selectedDebtor];
       
+      // FINANCIAL GATE: Track batch updates
+      const batchUpdates = {};
+      
       for (const debtor of debtorsToProcess) {
         if (!debtor || !debtor.id) continue;
         
@@ -105,6 +108,22 @@ export default function DebtorReview() {
           });
         }
 
+        // Track batch for final amount calculation
+        if (!batchUpdates[debtor.batch_id]) {
+          batchUpdates[debtor.batch_id] = {
+            approvedExposure: 0,
+            approvedPremium: 0,
+            approvedCount: 0,
+            totalCount: 0
+          };
+        }
+        batchUpdates[debtor.batch_id].totalCount++;
+        if (action === 'approve') {
+          batchUpdates[debtor.batch_id].approvedExposure += debtor.outstanding_amount || 0;
+          batchUpdates[debtor.batch_id].approvedPremium += debtor.gross_premium || 0;
+          batchUpdates[debtor.batch_id].approvedCount++;
+        }
+
         await createAuditLog(
           `DEBTOR_${newStatus}`,
           'DEBTOR',
@@ -116,6 +135,55 @@ export default function DebtorReview() {
           user?.role,
           approvalRemarks
         );
+      }
+
+      // CRITICAL: Update batch with FINAL amounts after Debtor Review
+      for (const [batchId, amounts] of Object.entries(batchUpdates)) {
+        const batch = await base44.entities.Batch.filter({ batch_id: batchId });
+        if (batch && batch.length > 0) {
+          const batchRecord = batch[0];
+          
+          // Check if ALL debtors in batch have been reviewed
+          const allBatchDebtors = debtors.filter(d => d.batch_id === batchId);
+          const reviewedDebtors = allBatchDebtors.filter(d => 
+            d.underwriting_status === 'APPROVED' || 
+            d.underwriting_status === 'REJECTED'
+          );
+          
+          const allReviewed = reviewedDebtors.length === allBatchDebtors.length;
+          const hasApproved = amounts.approvedCount > 0;
+          
+          await base44.entities.Batch.update(batchRecord.id, {
+            final_exposure_amount: amounts.approvedExposure,
+            final_premium_amount: amounts.approvedPremium,
+            batch_ready_for_nota: allReviewed && hasApproved
+          });
+          
+          if (allReviewed && hasApproved) {
+            await createNotification(
+              'Debtor Review Completed - Batch Ready for Nota',
+              `Batch ${batchId}: ${amounts.approvedCount} debtors approved. Final premium: Rp ${amounts.approvedPremium.toLocaleString()}. Ready for Nota generation.`,
+              'ACTION_REQUIRED',
+              'DEBTOR',
+              batchRecord.id,
+              'TUGURE'
+            );
+          } else if (allReviewed && !hasApproved) {
+            await base44.entities.Batch.update(batchRecord.id, {
+              status: 'Rejected',
+              rejection_reason: 'All debtors rejected in review'
+            });
+            
+            await createNotification(
+              'Batch Rejected - All Debtors Rejected',
+              `Batch ${batchId}: All debtors rejected. Batch blocked. BRINS must revise and resubmit.`,
+              'WARNING',
+              'DEBTOR',
+              batchRecord.id,
+              'BRINS'
+            );
+          }
+        }
       }
 
       await createNotification(
@@ -130,8 +198,8 @@ export default function DebtorReview() {
       );
 
       setSuccessMessage(isBulk ? 
-        `${debtorsToProcess.length} debtors ${action}d successfully` : 
-        `Debtor ${action}d successfully`);
+        `${debtorsToProcess.length} debtors ${action}d successfully. Batch final amounts updated.` : 
+        `Debtor ${action}d successfully. Batch final amounts updated.`);
       setShowApprovalDialog(false);
       setSelectedDebtor(null);
       setSelectedDebtors([]);
@@ -264,8 +332,8 @@ export default function DebtorReview() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Debtor Review"
-        subtitle="Review and approve debtor submissions"
+        title="Debtor Review - Financial Gate"
+        subtitle="⚠️ CRITICAL: Only APPROVED debtors are included in financial calculations"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Debtor Review' }
@@ -314,6 +382,17 @@ export default function DebtorReview() {
           <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
         </Alert>
       )}
+
+      <Alert className="bg-blue-50 border-blue-200">
+        <AlertCircle className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-700">
+          <strong>🔒 FINANCIAL GATE:</strong> This is the critical approval stage where final exposure and premium are calculated.
+          <br/><br/>
+          • <strong>APPROVED</strong> debtors → included in financial calculation<br/>
+          • <strong>REJECTED</strong> debtors → permanently excluded<br/>
+          • After all debtors reviewed → Batch becomes <strong>ready for Nota</strong>
+        </AlertDescription>
+      </Alert>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <ModernKPI title="Pending Review" value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length} subtitle="Awaiting approval" icon={FileText} color="orange" />
