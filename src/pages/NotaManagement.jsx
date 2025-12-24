@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,38 +10,45 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { 
-  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, Download, FileText, Clock, DollarSign,
-  AlertTriangle, Scale, Plus, X, AlertCircle
+  CheckCircle2, RefreshCw, ArrowRight, Loader2, Eye, FileText, Clock, DollarSign,
+  AlertTriangle, Scale, Plus, X, AlertCircle, Lock
 } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import StatusBadge from "@/components/ui/StatusBadge";
-import StatCard from "@/components/dashboard/StatCard";
 import ModernKPI from "@/components/dashboard/ModernKPI";
 import { sendTemplatedEmail, createNotification, createAuditLog } from "@/components/utils/emailTemplateHelper";
 
 export default function NotaManagement() {
   const [user, setUser] = useState(null);
   const [notas, setNotas] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [paymentIntents, setPaymentIntents] = useState([]);
   const [dnCnRecords, setDnCnRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNota, setSelectedNota] = useState(null);
   const [selectedDnCn, setSelectedDnCn] = useState(null);
+  const [selectedRecon, setSelectedRecon] = useState(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [showDnCnDialog, setShowDnCnDialog] = useState(false);
   const [showDnCnActionDialog, setShowDnCnActionDialog] = useState(false);
-  const [showReconActionDialog, setShowReconActionDialog] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showGenerateNotaDialog, setShowGenerateNotaDialog] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState(null);
   const [actionType, setActionType] = useState('');
   const [processing, setProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [remarks, setRemarks] = useState('');
   const [activeTab, setActiveTab] = useState('notas');
-  const [selectedRecon, setSelectedRecon] = useState(null);
-  const [actualPaidAmount, setActualPaidAmount] = useState('');
+  const [paymentFormData, setPaymentFormData] = useState({
+    actual_paid_amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    bank_reference: ''
+  });
   const [dnCnFormData, setDnCnFormData] = useState({
     note_type: 'Debit Note',
     adjustment_amount: 0,
@@ -86,15 +94,19 @@ export default function NotaManagement() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [notaData, contractData, paymentData, dnCnData] = await Promise.all([
+      const [notaData, batchData, contractData, paymentData, paymentIntentData, dnCnData] = await Promise.all([
         base44.entities.Nota.list('-created_date'),
+        base44.entities.Batch.list(),
         base44.entities.Contract.list(),
         base44.entities.Payment.list(),
+        base44.entities.PaymentIntent.list(),
         base44.entities.DebitCreditNote.list('-created_date')
       ]);
       setNotas(notaData || []);
+      setBatches(batchData || []);
       setContracts(contractData || []);
       setPayments(paymentData || []);
+      setPaymentIntents(paymentIntentData || []);
       setDnCnRecords(dnCnData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -110,15 +122,147 @@ export default function NotaManagement() {
 
   const getActionLabel = (status) => {
     const labels = {
-      'Draft': 'Issue',
-      'Issued': 'Confirm',
+      'Draft': 'Issue Nota',
+      'Issued': 'Confirm Receipt',
       'Confirmed': 'Mark Paid'
     };
     return labels[status] || 'Process';
   };
 
+  const handleGenerateNota = async () => {
+    if (!selectedBatch) return;
+
+    setProcessing(true);
+    try {
+      // CRITICAL CHECKS
+      if (!selectedBatch.debtor_review_completed) {
+        alert('❌ BLOCKED: Debtor Review not completed.\n\nAll debtors in this batch must be reviewed (approved/rejected) before generating Nota.');
+        
+        await createAuditLog(
+          'BLOCKED_NOTA_GENERATION',
+          'DEBTOR',
+          'Batch',
+          selectedBatch.id,
+          {},
+          { blocked_reason: 'debtor_review_completed = FALSE' },
+          user?.email,
+          user?.role,
+          'Attempted to generate Nota before Debtor Review completion'
+        );
+        
+        setProcessing(false);
+        setShowGenerateNotaDialog(false);
+        return;
+      }
+
+      if (!selectedBatch.batch_ready_for_nota) {
+        alert('❌ BLOCKED: Batch not ready for Nota.\n\nAt least one debtor must be approved in Debtor Review.');
+        
+        await createAuditLog(
+          'BLOCKED_NOTA_GENERATION',
+          'DEBTOR',
+          'Batch',
+          selectedBatch.id,
+          {},
+          { blocked_reason: 'batch_ready_for_nota = FALSE - no approved debtors' },
+          user?.email,
+          user?.role,
+          'Attempted to generate Nota with no approved debtors'
+        );
+        
+        setProcessing(false);
+        setShowGenerateNotaDialog(false);
+        return;
+      }
+
+      if ((selectedBatch.final_premium_amount || 0) === 0) {
+        alert('❌ BLOCKED: Final Premium Amount is zero.\n\nCannot generate Nota without any approved premium.');
+
+        await createAuditLog(
+          'BLOCKED_NOTA_GENERATION',
+          'DEBTOR',
+          'Batch',
+          selectedBatch.id,
+          {},
+          { blocked_reason: 'final_premium_amount is zero' },
+          user?.email,
+          user?.role,
+          'Attempted to generate Nota with zero final premium amount'
+        );
+
+        setProcessing(false);
+        setShowGenerateNotaDialog(false);
+        return;
+      }
+
+      const notaNumber = `NOTA-${selectedBatch.batch_id}-${Date.now()}`;
+      
+      await base44.entities.Nota.create({
+        nota_number: notaNumber,
+        nota_type: 'Batch',
+        reference_id: selectedBatch.batch_id,
+        contract_id: selectedBatch.contract_id,
+        amount: selectedBatch.final_premium_amount,
+        currency: 'IDR',
+        status: 'Draft',
+        is_immutable: false,
+        total_actual_paid: 0,
+        reconciliation_status: 'PENDING'
+      });
+
+      await createNotification(
+        'Nota Generated from Final Amounts',
+        `Nota ${notaNumber} created for Batch ${selectedBatch.batch_id} with final premium: Rp ${(selectedBatch.final_premium_amount || 0).toLocaleString()}`,
+        'INFO',
+        'DEBTOR',
+        selectedBatch.id,
+        'ALL'
+      );
+
+      await createAuditLog(
+        'NOTA_GENERATED',
+        'DEBTOR',
+        'Nota',
+        notaNumber,
+        {},
+        { batch_id: selectedBatch.batch_id, amount: selectedBatch.final_premium_amount },
+        user?.email,
+        user?.role,
+        `Generated from debtor_review_completed = TRUE, batch_ready_for_nota = TRUE`
+      );
+
+      setSuccessMessage(`Nota ${notaNumber} generated successfully with final premium amount`);
+      setShowGenerateNotaDialog(false);
+      setSelectedBatch(null);
+      loadData();
+    } catch (error) {
+      console.error('Generate nota error:', error);
+    }
+    setProcessing(false);
+  };
+
   const handleNotaAction = async () => {
     if (!selectedNota || !actionType) return;
+
+    // BLOCK: Cannot edit Nota after Issued
+    if (selectedNota.is_immutable && getActionLabel(selectedNota.status) === 'Issue Nota') {
+      alert('❌ BLOCKED: Nota is IMMUTABLE after being issued.\n\nNota amount cannot be changed. Use DN/CN for adjustments.');
+      
+      await createAuditLog(
+        'BLOCKED_NOTA_EDIT',
+        'DEBTOR',
+        'Nota',
+        selectedNota.id,
+        {},
+        { blocked_reason: 'is_immutable = TRUE' },
+        user?.email,
+        user?.role,
+        'Attempted to edit immutable Nota'
+      );
+      
+      setShowActionDialog(false);
+      return;
+    }
 
     setProcessing(true);
     try {
@@ -133,126 +277,17 @@ export default function NotaManagement() {
       if (nextStatus === 'Issued') {
         updateData.issued_by = user?.email;
         updateData.issued_date = new Date().toISOString().split('T')[0];
+        updateData.is_immutable = true; // LOCK Nota amount
       } else if (nextStatus === 'Confirmed') {
         updateData.confirmed_by = user?.email;
         updateData.confirmed_date = new Date().toISOString().split('T')[0];
-      } else if (nextStatus === 'Paid') {
-        updateData.paid_date = new Date().toISOString().split('T')[0];
-        updateData.payment_reference = remarks;
       }
 
-      // 1. Update Nota
       await base44.entities.Nota.update(selectedNota.id, updateData);
 
-      // 2. When Nota is Confirmed, create Payment Intent
-      if (nextStatus === 'Confirmed' && selectedNota.nota_type === 'Batch') {
-        const existingIntent = await base44.entities.PaymentIntent.filter({ 
-          contract_id: selectedNota.contract_id 
-        });
-        
-        if (existingIntent.length === 0) {
-          const intentId = `PI-NOTA-${selectedNota.nota_number}-${Date.now()}`;
-          await base44.entities.PaymentIntent.create({
-            intent_id: intentId,
-            invoice_id: selectedNota.id,
-            contract_id: selectedNota.contract_id,
-            payment_type: 'FULL',
-            planned_amount: selectedNota.amount,
-            planned_date: new Date().toISOString().split('T')[0],
-            status: 'DRAFT',
-            remarks: `Auto-created from Nota ${selectedNota.nota_number}`
-          });
-          
-          await createNotification(
-            'Payment Intent Created',
-            `Payment Intent ${intentId} auto-created for Nota ${selectedNota.nota_number}`,
-            'ACTION_REQUIRED',
-            'DEBTOR',
-            selectedNota.id,
-            'BRINS'
-          );
-        }
-      }
-
-      // 3. CRITICAL: When Nota is Paid, flow to Reconciliation/Payment
-      if (selectedNota.nota_type === 'Batch' && selectedNota.reference_id) {
-        const batchDebtors = await base44.entities.Debtor.filter({ batch_id: selectedNota.reference_id });
-        
-        // When Nota is marked as Paid
-        if (nextStatus === 'Paid') {
-          // Find related Invoice
-          const invoices = await base44.entities.Invoice.filter({ contract_id: selectedNota.contract_id });
-          const relatedInvoice = invoices.find(inv => 
-            batchDebtors.some(d => d.invoice_no === inv.invoice_number)
-          );
-          
-          if (relatedInvoice) {
-            // Update Invoice to PAID
-            await base44.entities.Invoice.update(relatedInvoice.id, {
-              paid_amount: relatedInvoice.total_amount,
-              outstanding_amount: 0,
-              status: 'PAID'
-            });
-
-            // CRITICAL: Check if Payment already exists from Reconciliation
-            const existingPayments = await base44.entities.Payment.filter({ invoice_id: relatedInvoice.id });
-            if (existingPayments.length === 0) {
-              // Only create Payment if not already created by Reconciliation
-              await base44.entities.Payment.create({
-                payment_ref: `PAY-NOTA-${selectedNota.nota_number}`,
-                invoice_id: relatedInvoice.id,
-                contract_id: selectedNota.contract_id,
-                amount: selectedNota.amount,
-                payment_date: new Date().toISOString().split('T')[0],
-                currency: 'IDR',
-                match_status: 'MATCHED',
-                exception_type: 'NONE',
-                matched_by: user?.email,
-                matched_date: new Date().toISOString().split('T')[0]
-              });
-            }
-
-            // Update Reconciliation to CLOSED if exists
-            const reconciliations = await base44.entities.Reconciliation.filter({
-              contract_id: selectedNota.contract_id
-            });
-            for (const recon of reconciliations) {
-              if (recon.status !== 'CLOSED' && Math.abs(recon.difference || 0) <= 100000) {
-                await base44.entities.Reconciliation.update(recon.id, {
-                  status: 'CLOSED',
-                  closed_by: user?.email,
-                  closed_date: new Date().toISOString().split('T')[0],
-                  remarks: `Auto-closed from Nota ${selectedNota.nota_number} payment`
-                });
-              }
-            }
-          }
-
-          // Update all debtors to PAID and CLOSED recon
-          for (const debtor of batchDebtors) {
-            await base44.entities.Debtor.update(debtor.id, {
-              invoice_status: 'PAID',
-              payment_received_amount: debtor.invoice_amount || debtor.net_premium || 0,
-              recon_status: 'CLOSED'
-            });
-          }
-        } else {
-          // For other status changes, just update invoice_status
-          const invoiceStatus = nextStatus === 'Issued' ? 'ISSUED' : 'NOT_ISSUED';
-          for (const debtor of batchDebtors) {
-            await base44.entities.Debtor.update(debtor.id, {
-              invoice_status: invoiceStatus
-            });
-          }
-        }
-      }
-
-      // 3. Determine target role based on nota type and status
       const targetRole = nextStatus === 'Issued' ? 'BRINS' :
-                        nextStatus === 'Confirmed' ? 'TUGURE' :
-                        'ALL';
+                        nextStatus === 'Confirmed' ? 'TUGURE' : 'ALL';
 
-      // 4. Send templated emails based on user preferences
       await sendTemplatedEmail(
         'Nota',
         selectedNota.status,
@@ -270,30 +305,28 @@ export default function NotaManagement() {
         }
       );
 
-      // 5. Create system notification
       await createNotification(
         `Nota ${nextStatus}`,
-        `Nota ${selectedNota.nota_number} (${selectedNota.nota_type}) moved to ${nextStatus}`,
+        `Nota ${selectedNota.nota_number} (${selectedNota.nota_type}) moved to ${nextStatus}${nextStatus === 'Issued' ? ' - Amount now IMMUTABLE' : ''}`,
         nextStatus === 'Issued' ? 'ACTION_REQUIRED' : 'INFO',
         'DEBTOR',
         selectedNota.id,
         targetRole
       );
 
-      // 6. Create audit log
       await createAuditLog(
         `NOTA_${nextStatus.toUpperCase()}`,
         'DEBTOR',
         'Nota',
         selectedNota.id,
         { status: selectedNota.status },
-        { status: nextStatus },
+        { status: nextStatus, is_immutable: nextStatus === 'Issued' },
         user?.email,
         user?.role,
         remarks
       );
 
-      setSuccessMessage(`Nota moved to ${nextStatus} successfully`);
+      setSuccessMessage(`Nota moved to ${nextStatus} successfully${nextStatus === 'Issued' ? ' - Nota is now IMMUTABLE' : ''}`);
       setShowActionDialog(false);
       setSelectedNota(null);
       setRemarks('');
@@ -304,78 +337,187 @@ export default function NotaManagement() {
     setProcessing(false);
   };
 
-  const filteredNotas = notas.filter(n => {
-    if (filters.contract !== 'all' && n.contract_id !== filters.contract) return false;
-    if (filters.notaType !== 'all' && n.nota_type !== filters.notaType) return false;
-    if (filters.status !== 'all' && n.status !== filters.status) return false;
-    return true;
-  });
+  const handleRecordPayment = async () => {
+    if (!selectedRecon || !paymentFormData.actual_paid_amount) return;
 
-  const columns = [
-    {
-      header: 'Nota Number',
-      cell: (row) => (
-        <div>
-          <p className="font-medium font-mono">{row.nota_number}</p>
-          <p className="text-xs text-gray-500">{row.nota_type}</p>
-        </div>
-      )
-    },
-    { 
-      header: 'Reference',
-      cell: (row) => <span className="text-sm">{row.reference_id}</span>
-    },
-    { header: 'Amount', cell: (row) => `Rp ${(row.amount || 0).toLocaleString('id-ID')}` },
-    { header: 'Currency', accessorKey: 'currency' },
-    { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
-    {
-      header: 'Issued Info',
-      cell: (row) => {
-        if (!row.issued_by) return '-';
-        return (
-          <div className="text-xs">
-            <p>{row.issued_by}</p>
-            <p className="text-gray-500">{row.issued_date}</p>
-          </div>
+    setProcessing(true);
+    try {
+      const paidAmount = parseFloat(paymentFormData.actual_paid_amount);
+      const notaAmount = selectedRecon.amount || 0;
+      const previousPaid = selectedRecon.total_actual_paid || 0;
+      const newTotalPaid = previousPaid + paidAmount;
+      const difference = notaAmount - newTotalPaid;
+      
+      let matchStatus = 'RECEIVED';
+      let exceptionType = 'NONE';
+      let reconStatus = 'PARTIAL';
+      
+      if (Math.abs(difference) <= 1000) {
+        matchStatus = 'MATCHED';
+        exceptionType = 'NONE';
+        reconStatus = 'MATCHED';
+      } else if (difference > 0) {
+        matchStatus = 'PARTIALLY_MATCHED';
+        exceptionType = 'UNDER';
+        reconStatus = 'PARTIAL';
+      } else {
+        matchStatus = 'PARTIALLY_MATCHED';
+        exceptionType = 'OVER';
+        reconStatus = 'OVERPAID';
+      }
+
+      // Create actual Payment record
+      const paymentRef = paymentFormData.bank_reference || `PAY-${selectedRecon.nota_number}-${Date.now()}`;
+      await base44.entities.Payment.create({
+        payment_ref: paymentRef,
+        invoice_id: selectedRecon.id,
+        contract_id: selectedRecon.contract_id,
+        amount: paidAmount,
+        payment_date: paymentFormData.payment_date,
+        bank_reference: paymentFormData.bank_reference,
+        currency: 'IDR',
+        match_status: matchStatus,
+        exception_type: exceptionType,
+        matched_by: user?.email,
+        matched_date: new Date().toISOString().split('T')[0],
+        is_actual_payment: true
+      });
+
+      // Update Nota with accumulated payment
+      await base44.entities.Nota.update(selectedRecon.id, {
+        total_actual_paid: newTotalPaid,
+        reconciliation_status: reconStatus
+      });
+
+      // If MATCHED, auto mark Nota as Paid
+      if (reconStatus === 'MATCHED') {
+        await base44.entities.Nota.update(selectedRecon.id, {
+          status: 'Paid',
+          paid_date: paymentFormData.payment_date,
+          payment_reference: paymentRef
+        });
+
+        await createNotification(
+          'Payment MATCHED - Nota Paid',
+          `Nota ${selectedRecon.nota_number} fully paid. Amount: Rp ${newTotalPaid.toLocaleString()}. Nota closed.`,
+          'INFO',
+          'DEBTOR',
+          selectedRecon.id,
+          'ALL'
+        );
+      } else {
+        await createNotification(
+          `Payment ${reconStatus} - ${exceptionType !== 'NONE' ? 'Exception Detected' : 'Partial'}`,
+          `Nota ${selectedRecon.nota_number}: Rp ${paidAmount.toLocaleString()} received. Total paid: Rp ${newTotalPaid.toLocaleString()}. ${exceptionType === 'UNDER' ? 'UNDERPAYMENT' : exceptionType === 'OVER' ? 'OVERPAYMENT' : 'PARTIAL'} (Difference: Rp ${Math.abs(difference).toLocaleString()})`,
+          exceptionType !== 'NONE' ? 'WARNING' : 'INFO',
+          'DEBTOR',
+          selectedRecon.id,
+          'TUGURE'
         );
       }
-    },
-    {
-      header: 'Actions',
-      cell: (row) => (
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => {
-              setSelectedNota(row);
-              setShowViewDialog(true);
-            }}
-          >
-            <Eye className="w-4 h-4 mr-1" />
-            View
-          </Button>
-          {row.status !== 'Paid' && getNextStatus(row.status) && (
-            <Button 
-              size="sm" 
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={() => {
-                setSelectedNota(row);
-                setActionType(getActionLabel(row.status));
-                setShowActionDialog(true);
-              }}
-            >
-              <ArrowRight className="w-4 h-4 mr-1" />
-              {getActionLabel(row.status)}
-            </Button>
-          )}
-        </div>
-      )
+
+      await createAuditLog(
+        'PAYMENT_RECORDED',
+        'PAYMENT',
+        'Payment',
+        paymentRef,
+        {},
+        { nota_id: selectedRecon.id, amount: paidAmount, match_status: matchStatus, exception_type: exceptionType },
+        user?.email,
+        user?.role,
+        paymentFormData.bank_reference || ''
+      );
+
+      setSuccessMessage(`Payment recorded: ${reconStatus}. ${exceptionType !== 'NONE' ? `DN/CN may be required for ${exceptionType === 'UNDER' ? 'underpayment' : 'overpayment'}.` : ''}`);
+      setShowPaymentDialog(false);
+      setSelectedRecon(null);
+      setPaymentFormData({
+        actual_paid_amount: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        bank_reference: ''
+      });
+      loadData();
+    } catch (error) {
+      console.error('Payment error:', error);
     }
-  ];
+    setProcessing(false);
+  };
+
+  const handleMarkReconFinal = async (nota) => {
+    if (nota.reconciliation_status === 'PARTIAL') {
+      const diff = (nota.amount || 0) - (nota.total_actual_paid || 0);
+      if (Math.abs(diff) > 1000) {
+        alert(`❌ Cannot mark as FINAL while payment is PARTIAL.\n\nDifference: Rp ${Math.abs(diff).toLocaleString()}\n\nPlease record additional payments or create DN/CN to resolve the difference.`);
+        
+        await createAuditLog(
+          'BLOCKED_RECON_FINAL',
+          'RECONCILIATION',
+          'Nota',
+          nota.id,
+          {},
+          { blocked_reason: 'PARTIAL payment - difference exists' },
+          user?.email,
+          user?.role,
+          'Attempted to finalize reconciliation with outstanding difference'
+        );
+        return;
+      }
+    }
+
+    setProcessing(true);
+    try {
+      await base44.entities.Nota.update(nota.id, {
+        reconciliation_status: 'FINAL'
+      });
+
+      await createNotification(
+        'Reconciliation Marked FINAL',
+        `Nota ${nota.nota_number} reconciliation finalized. ${Math.abs((nota.amount || 0) - (nota.total_actual_paid || 0)) > 1000 ? 'DN/CN creation now enabled.' : 'Payment matched.'}`,
+        'INFO',
+        'RECONCILIATION',
+        nota.id,
+        'ALL'
+      );
+
+      setSuccessMessage('Reconciliation marked as FINAL');
+      loadData();
+    } catch (error) {
+      console.error('Mark final error:', error);
+    }
+    setProcessing(false);
+  };
 
   const handleCreateDnCn = async () => {
     if (!selectedNota) return;
+
+    // BLOCK: DN/CN only after FINAL reconciliation
+    if (selectedNota.reconciliation_status !== 'FINAL') {
+      alert('❌ BLOCKED: DN/CN can only be created after reconciliation is marked FINAL.\n\nPlease finalize reconciliation first.');
+      
+      await createAuditLog(
+        'BLOCKED_DNCN_CREATION',
+        'RECONCILIATION',
+        'Nota',
+        selectedNota.id,
+        {},
+        { blocked_reason: 'reconciliation_status not FINAL' },
+        user?.email,
+        user?.role,
+        'Attempted DN/CN creation before reconciliation finalized'
+      );
+      
+      setProcessing(false);
+      setShowDnCnDialog(false);
+      return;
+    }
+
+    // BLOCK: DN/CN only if actual paid != nota amount
+    const diff = (selectedNota.amount || 0) - (selectedNota.total_actual_paid || 0);
+    if (Math.abs(diff) <= 1000) {
+      alert('❌ BLOCKED: DN/CN not needed.\n\nPayment is MATCHED (difference within tolerance).');
+      setShowDnCnDialog(false);
+      return;
+    }
 
     setProcessing(true);
     try {
@@ -398,14 +540,17 @@ export default function NotaManagement() {
         currency: 'IDR'
       });
 
-      await base44.entities.AuditLog.create({
-        action: 'CREATE_DN_CN',
-        module: 'RECONCILIATION',
-        entity_type: 'DebitCreditNote',
-        entity_id: noteNumber,
-        user_email: user?.email,
-        user_role: user?.role
-      });
+      await createAuditLog(
+        'DNCN_CREATED',
+        'RECONCILIATION',
+        'DebitCreditNote',
+        noteNumber,
+        {},
+        { original_nota: selectedNota.nota_number, adjustment: dnCnFormData.adjustment_amount },
+        user?.email,
+        user?.role,
+        dnCnFormData.reason_description
+      );
 
       setSuccessMessage(`${dnCnFormData.note_type} created successfully`);
       setShowDnCnDialog(false);
@@ -441,16 +586,38 @@ export default function NotaManagement() {
       } else if (action === 'approve') {
         updates.approved_by = user?.email;
         updates.approved_date = new Date().toISOString();
+        
+        // When DN/CN approved, allow Nota close
+        const originalNota = notas.find(n => n.nota_number === dnCn.original_nota_id);
+        if (originalNota) {
+          await base44.entities.Nota.update(originalNota.id, {
+            reconciliation_status: 'FINAL'
+          });
+        }
       } else if (action === 'acknowledge') {
         updates.acknowledged_by = user?.email;
         updates.acknowledged_date = new Date().toISOString();
-      }
-
-      if (action === 'reject') {
+      } else if (action === 'reject') {
         updates.rejection_reason = remarks;
       }
 
       await base44.entities.DebitCreditNote.update(dnCn.id, updates);
+
+      await sendTemplatedEmail(
+        'DebitCreditNote',
+        dnCn.status,
+        statusMap[action],
+        action === 'approve' ? 'BRINS' : 'TUGURE',
+        'notify_debit_credit_note',
+        {
+          note_number: dnCn.note_number,
+          note_type: dnCn.note_type,
+          adjustment_amount: `Rp ${Math.abs(dnCn.adjustment_amount || 0).toLocaleString('id-ID')}`,
+          reason_code: dnCn.reason_code,
+          user_name: user?.email,
+          date: new Date().toLocaleDateString('id-ID')
+        }
+      );
 
       await createNotification(
         `DN/CN ${statusMap[action]}`,
@@ -461,15 +628,17 @@ export default function NotaManagement() {
         action === 'approve' ? 'BRINS' : 'TUGURE'
       );
 
-      await base44.entities.AuditLog.create({
-        action: `DN_CN_${action.toUpperCase()}`,
-        module: 'RECONCILIATION',
-        entity_type: 'DebitCreditNote',
-        entity_id: dnCn.id,
-        user_email: user?.email,
-        user_role: user?.role,
-        reason: remarks
-      });
+      await createAuditLog(
+        `DNCN_${action.toUpperCase()}`,
+        'RECONCILIATION',
+        'DebitCreditNote',
+        dnCn.id,
+        { status: dnCn.status },
+        { status: statusMap[action] },
+        user?.email,
+        user?.role,
+        remarks
+      );
 
       setSuccessMessage(`DN/CN ${action}ed successfully`);
       setShowDnCnActionDialog(false);
@@ -482,111 +651,93 @@ export default function NotaManagement() {
     setProcessing(false);
   };
 
-  const handleReconAction = async () => {
-    if (!selectedRecon || !actualPaidAmount) return;
+  const handleCloseNota = async (nota) => {
+    const hasApprovedDnCn = dnCnRecords.some(d => 
+      d.original_nota_id === nota.nota_number && 
+      d.status === 'Approved'
+    );
+    
+    if (nota.reconciliation_status !== 'MATCHED' && !hasApprovedDnCn) {
+      alert(`❌ BLOCKED: Cannot close Nota.\n\nNota can only be closed if:\n• Actual Paid = Nota Amount (MATCHED)\nOR\n• DN/CN Approved\n\nCurrent status: ${nota.reconciliation_status}\nDifference: Rp ${Math.abs((nota.amount || 0) - (nota.total_actual_paid || 0)).toLocaleString()}`);
+      
+      await createAuditLog(
+        'BLOCKED_NOTA_CLOSE',
+        'RECONCILIATION',
+        'Nota',
+        nota.id,
+        {},
+        { blocked_reason: 'Payment not matched and no approved DN/CN' },
+        user?.email,
+        user?.role,
+        'Attempted to close Nota without payment match or DN/CN approval'
+      );
+      return;
+    }
 
     setProcessing(true);
     try {
-      const paidAmount = parseFloat(actualPaidAmount);
-      const notaAmount = selectedRecon.amount || 0;
-      const difference = notaAmount - paidAmount;
-      
-      let matchStatus = 'MATCHED';
-      let exceptionType = 'NONE';
-      
-      if (Math.abs(difference) > 0) {
-        matchStatus = 'PARTIALLY_MATCHED';
-        if (difference > 0) {
-          exceptionType = 'UNDER'; // Underpayment
-        } else {
-          exceptionType = 'OVER'; // Overpayment
-        }
-      }
-
-      // Create Payment record
-      const paymentRef = `PAY-${selectedRecon.nota_number}-${Date.now()}`;
-      await base44.entities.Payment.create({
-        payment_ref: paymentRef,
-        invoice_id: selectedRecon.id,
-        contract_id: selectedRecon.contract_id,
-        amount: paidAmount,
-        payment_date: new Date().toISOString().split('T')[0],
-        currency: 'IDR',
-        match_status: matchStatus,
-        exception_type: exceptionType,
-        matched_by: user?.email,
-        matched_date: new Date().toISOString().split('T')[0]
+      await base44.entities.Nota.update(nota.id, {
+        status: 'Paid',
+        paid_date: new Date().toISOString().split('T')[0],
+        payment_reference: 'Closed via DN/CN or MATCHED payment'
       });
 
-      // If matched, auto update Nota to Paid
-      if (matchStatus === 'MATCHED') {
-        await base44.entities.Nota.update(selectedRecon.id, {
-          status: 'Paid',
-          paid_date: new Date().toISOString().split('T')[0],
-          payment_reference: paymentRef
-        });
-
-        await createNotification(
-          'Payment Matched - Nota Paid',
-          `Nota ${selectedRecon.nota_number} fully paid. Amount: Rp ${paidAmount.toLocaleString()}`,
-          'INFO',
-          'DEBTOR',
-          selectedRecon.id,
-          'ALL'
-        );
-      } else {
-        // Exception - need DN/CN
-        await createNotification(
-          'Payment Exception - DN/CN Required',
-          `Nota ${selectedRecon.nota_number} has payment difference of Rp ${Math.abs(difference).toLocaleString()}. ${exceptionType === 'UNDER' ? 'Underpayment' : 'Overpayment'} detected.`,
-          'WARNING',
-          'DEBTOR',
-          selectedRecon.id,
-          'TUGURE'
-        );
-      }
-
-      setSuccessMessage(`Payment recorded: ${matchStatus === 'MATCHED' ? 'Matched' : 'Exception detected'}`);
-      setShowReconActionDialog(false);
-      setSelectedRecon(null);
-      setActualPaidAmount('');
+      setSuccessMessage('Nota closed successfully');
       loadData();
     } catch (error) {
-      console.error('Recon action error:', error);
+      console.error('Close nota error:', error);
     }
     setProcessing(false);
   };
 
+  const filteredNotas = notas.filter(n => {
+    if (filters.contract !== 'all' && n.contract_id !== filters.contract) return false;
+    if (filters.notaType !== 'all' && n.nota_type !== filters.notaType) return false;
+    if (filters.status !== 'all' && n.status !== filters.status) return false;
+    return true;
+  });
+
+  // Reconciliation items with payment details
   const reconciliationItems = notas.filter(n => n.nota_type === 'Batch').map(nota => {
-    const relatedPayments = payments.filter(p => 
-      p.invoice_id === nota.id || 
-      (p.contract_id === nota.contract_id && p.match_status === 'MATCHED')
-    );
+    const relatedPayments = payments.filter(p => p.invoice_id === nota.id && p.is_actual_payment);
     const paymentReceived = relatedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
     const difference = (nota.amount || 0) - paymentReceived;
-
-    let reconStatus = 'PENDING';
-    if (Math.abs(difference) <= 1000) {
-      reconStatus = 'MATCHED';
-    } else if (Math.abs(difference) > 0 && nota.status !== 'Paid') {
-      reconStatus = 'UNMATCHED';
-    }
+    
+    const relatedIntents = paymentIntents.filter(pi => pi.invoice_id === nota.id);
+    const totalPlanned = relatedIntents.reduce((sum, pi) => sum + (pi.planned_amount || 0), 0);
 
     return {
       ...nota,
       payment_received: paymentReceived,
+      total_planned: totalPlanned,
       difference: difference,
-      recon_status: reconStatus,
-      has_exception: reconStatus === 'UNMATCHED',
-      payment_count: relatedPayments.length
+      recon_status: nota.reconciliation_status,
+      has_exception: Math.abs(difference) > 1000 && nota.status !== 'Paid',
+      payment_count: relatedPayments.length,
+      intent_count: relatedIntents.length
     };
+  });
+
+  const filteredRecon = reconciliationItems.filter(r => {
+    if (reconFilters.contract !== 'all' && r.contract_id !== reconFilters.contract) return false;
+    if (reconFilters.status !== 'all' && r.status !== reconFilters.status) return false;
+    if (reconFilters.hasException === 'yes' && !r.has_exception) return false;
+    if (reconFilters.hasException === 'no' && r.has_exception) return false;
+    return true;
+  });
+
+  const filteredDnCn = dnCnRecords.filter(d => {
+    if (dnCnFilters.contract !== 'all' && d.contract_id !== dnCnFilters.contract) return false;
+    if (dnCnFilters.noteType !== 'all' && d.note_type !== dnCnFilters.noteType) return false;
+    if (dnCnFilters.status !== 'all' && d.status !== dnCnFilters.status) return false;
+    return true;
   });
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Nota Management"
-        subtitle="Manage notas, payments, reconciliation, and debit/credit notes"
+        subtitle="Manage notas, reconciliation, and DN/CN adjustments"
         breadcrumbs={[
           { label: 'Dashboard', url: 'Dashboard' },
           { label: 'Nota Management' }
@@ -597,25 +748,12 @@ export default function NotaManagement() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Button 
-              variant="outline" 
-              className="bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => {
-                const csv = [
-                  ['Nota Number', 'Type', 'Reference', 'Amount', 'Currency', 'Status'].join(','),
-                  ...filteredNotas.map(n => [n.nota_number, n.nota_type, n.reference_id, n.amount, n.currency, n.status].join(','))
-                ].join('\n');
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `notas-${new Date().toISOString().split('T')[0]}.csv`;
-                a.click();
-              }}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+            {isTugure && (
+              <Button className="bg-blue-600" onClick={() => setShowGenerateNotaDialog(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Generate Nota
+              </Button>
+            )}
           </div>
         }
       />
@@ -628,89 +766,67 @@ export default function NotaManagement() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full max-w-2xl grid-cols-3">
+        <TabsList className="grid w-full max-w-3xl grid-cols-3">
           <TabsTrigger value="notas">Notas</TabsTrigger>
           <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
           <TabsTrigger value="dncn">DN / CN</TabsTrigger>
         </TabsList>
 
+        {/* NOTAS TAB */}
         <TabsContent value="notas" className="space-y-6">
-          {/* KPI Stats */}
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-700">
+              <strong>Nota Workflow:</strong> Draft → Issued → Confirmed → Paid
+              <br/><br/>
+              • <strong>Generate Nota:</strong> ONLY if debtor_review_completed = TRUE AND batch_ready_for_nota = TRUE<br/>
+              • <strong>Nota Amount:</strong> Derived from final_premium_amount (IMMUTABLE after Issued)<br/>
+              • <strong>Once Issued:</strong> Amount cannot be changed - use DN/CN for adjustments
+            </AlertDescription>
+          </Alert>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <ModernKPI
-              title="Total Notas"
-              value={notas.length}
-              subtitle={`${notas.filter(n => n.nota_type === 'Batch').length} batch / ${notas.filter(n => n.nota_type === 'Claim').length} claim`}
-              icon={FileText}
-              color="blue"
-            />
-            <ModernKPI
-              title="Pending Confirmation"
-              value={notas.filter(n => n.status === 'Issued').length}
-              subtitle="Awaiting branch"
-              icon={Clock}
-              color="orange"
-            />
-            <ModernKPI
-              title="Total Amount"
-              value={`Rp ${(notas.reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
-              subtitle="All notas"
-              icon={DollarSign}
-              color="green"
-            />
-            <ModernKPI
-              title="Paid Notas"
-              value={notas.filter(n => n.status === 'Paid').length}
-              subtitle={`Rp ${(notas.filter(n => n.status === 'Paid').reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`}
-              icon={CheckCircle2}
-              color="purple"
-            />
+            <ModernKPI title="Total Notas" value={notas.length} subtitle={`${notas.filter(n => n.nota_type === 'Batch').length} batch / ${notas.filter(n => n.nota_type === 'Claim').length} claim`} icon={FileText} color="blue" />
+            <ModernKPI title="Pending Confirmation" value={notas.filter(n => n.status === 'Issued').length} subtitle="Awaiting branch" icon={Clock} color="orange" />
+            <ModernKPI title="Total Amount" value={`Rp ${(notas.reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`} subtitle="All notas" icon={DollarSign} color="green" />
+            <ModernKPI title="Paid Notas" value={notas.filter(n => n.status === 'Paid').length} subtitle={`Rp ${(notas.filter(n => n.status === 'Paid').reduce((sum, n) => sum + (n.amount || 0), 0) / 1000000).toFixed(1)}M`} icon={CheckCircle2} color="purple" />
           </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Contract" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Contracts</SelectItem>
-                {contracts.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filters.notaType} onValueChange={(val) => setFilters({...filters, notaType: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Nota Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Batch">Batch</SelectItem>
-                <SelectItem value="Claim">Claim</SelectItem>
-                <SelectItem value="Subrogation">Subrogation</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Draft">Draft</SelectItem>
-                <SelectItem value="Issued">Issued</SelectItem>
-                <SelectItem value="Confirmed">Confirmed</SelectItem>
-                <SelectItem value="Paid">Paid</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={() => setFilters({ contract: 'all', notaType: 'all', status: 'all' })}>
-              Clear Filters
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Select value={filters.contract} onValueChange={(val) => setFilters({...filters, contract: val})}>
+                  <SelectTrigger><SelectValue placeholder="Contract" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Contracts</SelectItem>
+                    {contracts.map(c => (<SelectItem key={c.id} value={c.id}>{c.contract_number}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                <Select value={filters.notaType} onValueChange={(val) => setFilters({...filters, notaType: val})}>
+                  <SelectTrigger><SelectValue placeholder="Nota Type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="Batch">Batch</SelectItem>
+                    <SelectItem value="Claim">Claim</SelectItem>
+                    <SelectItem value="Subrogation">Subrogation</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filters.status} onValueChange={(val) => setFilters({...filters, status: val})}>
+                  <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="Draft">Draft</SelectItem>
+                    <SelectItem value="Issued">Issued</SelectItem>
+                    <SelectItem value="Confirmed">Confirmed</SelectItem>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={() => setFilters({ contract: 'all', notaType: 'all', status: 'all' })}>
+                  Clear Filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           <DataTable
             columns={[
@@ -719,30 +835,28 @@ export default function NotaManagement() {
                 cell: (row) => (
                   <div>
                     <p className="font-medium font-mono">{row.nota_number}</p>
-                    <p className="text-xs text-gray-500">{row.nota_type}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs">{row.nota_type}</Badge>
+                      {row.is_immutable && <Lock className="w-3 h-3 text-red-500" title="IMMUTABLE - cannot edit" />}
+                    </div>
                   </div>
                 )
               },
-              { 
-                header: 'Reference',
-                cell: (row) => <span className="text-sm">{row.reference_id}</span>
-              },
-              { header: 'Amount', cell: (row) => `Rp ${(row.amount || 0).toLocaleString('id-ID')}` },
-              { header: 'Paid Amount', cell: (row) => row.status === 'Paid' ? `Rp ${(row.amount || 0).toLocaleString('id-ID')}` : '-' },
-              { header: 'Outstanding', cell: (row) => row.status === 'Paid' ? 'Rp 0' : `Rp ${(row.amount || 0).toLocaleString('id-ID')}` },
+              { header: 'Reference', cell: (row) => <span className="text-sm">{row.reference_id}</span> },
+              { header: 'Amount', cell: (row) => <span className="font-bold">Rp {(row.amount || 0).toLocaleString('id-ID')}</span> },
               { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              { 
+                header: 'Recon Status', 
+                cell: (row) => row.reconciliation_status ? <StatusBadge status={row.reconciliation_status} /> : '-'
+              },
               {
                 header: 'Actions',
                 cell: (row) => (
                   <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        setSelectedNota(row);
-                        setShowViewDialog(true);
-                      }}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => {
+                      setSelectedNota(row);
+                      setShowViewDialog(true);
+                    }}>
                       <Eye className="w-4 h-4 mr-1" />
                       View
                     </Button>
@@ -755,10 +869,14 @@ export default function NotaManagement() {
                           setActionType(getActionLabel(row.status));
                           setShowActionDialog(true);
                         }}
+                        disabled={row.is_immutable && getActionLabel(row.status) === 'Issue Nota'}
                       >
                         <ArrowRight className="w-4 h-4 mr-1" />
                         {getActionLabel(row.status)}
                       </Button>
+                    )}
+                    {row.is_immutable && row.status !== 'Paid' && (
+                      <span className="text-xs text-gray-500 italic">Proceed to Reconciliation</span>
                     )}
                   </div>
                 )
@@ -770,15 +888,28 @@ export default function NotaManagement() {
           />
         </TabsContent>
 
+        {/* RECONCILIATION TAB */}
         <TabsContent value="reconciliation" className="space-y-6">
+          <Alert className="bg-purple-50 border-purple-200">
+            <Scale className="h-4 w-4 text-purple-600" />
+            <AlertDescription className="text-purple-700">
+              <strong>Payment Reconciliation - Real Money Tracking:</strong>
+              <br/><br/>
+              • <strong>Nota Amount:</strong> IMMUTABLE financial document<br/>
+              • <strong>Total Planned:</strong> From Payment Intent (planning only)<br/>
+              • <strong>Total Actual Paid:</strong> Real payments received (accumulated)<br/>
+              • <strong>Payment Status:</strong> PARTIAL / MATCHED / OVERPAID (auto-detected)<br/>
+              • <strong>DN/CN:</strong> Enabled ONLY after reconciliation marked FINAL and payment difference exists
+            </AlertDescription>
+          </Alert>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <ModernKPI title="Total Invoiced" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.amount || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Nota amounts" icon={FileText} color="blue" />
-            <ModernKPI title="Total Paid" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.payment_received || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Payments received" icon={CheckCircle2} color="green" />
-            <ModernKPI title="Difference" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.difference || 0), 0) / 1000000).toFixed(1)}M`} subtitle="To be reconciled" icon={AlertTriangle} color="orange" />
-            <ModernKPI title="Exceptions" value={reconciliationItems.filter(r => r.has_exception).length} subtitle="Requires DN/CN" icon={AlertTriangle} color="red" />
+            <ModernKPI title="Total Paid" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.total_actual_paid || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Actual payments" icon={CheckCircle2} color="green" />
+            <ModernKPI title="Difference" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + ((r.amount || 0) - (r.total_actual_paid || 0)), 0) / 1000000).toFixed(1)}M`} subtitle="To reconcile" icon={AlertTriangle} color="orange" />
+            <ModernKPI title="Exceptions" value={reconciliationItems.filter(r => r.has_exception && r.reconciliation_status === 'FINAL').length} subtitle="Requires DN/CN" icon={AlertTriangle} color="red" />
           </div>
 
-          {/* Recon Filters */}
           <Card>
             <CardContent className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -814,57 +945,127 @@ export default function NotaManagement() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Reconciliation</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTable
-                columns={[
-                  { header: 'Nota', cell: (row) => <div><div className="font-medium">{row.nota_number}</div><div className="text-xs text-gray-500">{row.reference_id}</div></div> },
-                  { header: 'Nota Amount', cell: (row) => `Rp ${((row.amount || 0) / 1000000).toFixed(2)}M` },
-                  { header: 'Payment Received', cell: (row) => <div><div className="text-green-600 font-medium">Rp {((row.payment_received || 0) / 1000000).toFixed(2)}M</div><div className="text-xs text-gray-500">{row.payment_count} payments</div></div> },
-                  { header: 'Difference', cell: (row) => {
-                    const diff = row.difference || 0;
-                    return <div className="flex items-center gap-2"><span className={Math.abs(diff) > 1000 ? 'text-red-600 font-bold' : 'text-green-600'}>Rp {(diff / 1000000).toFixed(2)}M</span>{Math.abs(diff) > 1000 && <AlertTriangle className="w-4 h-4 text-orange-500" />}</div>;
-                  }},
-                  { header: 'Recon Status', cell: (row) => <StatusBadge status={row.recon_status} /> },
-                  { header: 'Nota Status', cell: (row) => <StatusBadge status={row.status} /> },
-                  { header: 'Actions', cell: (row) => (
-                    <div className="flex gap-1">
-                      {isTugure && row.status !== 'Paid' && (
-                        <Button size="sm" className="bg-blue-600" onClick={() => { 
-                          setSelectedRecon(row); 
-                          setActualPaidAmount(row.amount?.toString() || '');
-                          setShowReconActionDialog(true); 
-                        }}>
-                          Record Payment
-                        </Button>
-                      )}
-                      {isTugure && row.has_exception && row.status !== 'Paid' && (
-                        <Button size="sm" variant="outline" className="text-orange-600" onClick={() => { setSelectedNota(row); setShowDnCnDialog(true); }}>
-                          <Plus className="w-4 h-4 mr-1" />
-                          DN/CN
-                        </Button>
-                      )}
+          <DataTable
+            columns={[
+              { 
+                header: 'Nota', 
+                cell: (row) => (
+                  <div>
+                    <div className="font-medium font-mono">{row.nota_number}</div>
+                    <div className="text-xs text-gray-500">{row.reference_id}</div>
+                  </div>
+                )
+              },
+              { 
+                header: 'Nota Amount', 
+                cell: (row) => (
+                  <div>
+                    <div className="font-bold text-blue-600">Rp {((row.amount || 0) / 1000000).toFixed(2)}M</div>
+                    {row.is_immutable && <Lock className="w-3 h-3 text-red-500 inline ml-1" />}
+                  </div>
+                )
+              },
+              { 
+                header: 'Total Planned', 
+                cell: (row) => (
+                  <div>
+                    <div className="text-gray-600">Rp {((row.total_planned || 0) / 1000000).toFixed(2)}M</div>
+                    <div className="text-xs text-gray-400">{row.intent_count} intent(s)</div>
+                  </div>
+                )
+              },
+              { 
+                header: 'Total Actual Paid', 
+                cell: (row) => (
+                  <div>
+                    <div className="text-green-600 font-bold">Rp {((row.total_actual_paid || 0) / 1000000).toFixed(2)}M</div>
+                    <div className="text-xs text-gray-400">{row.payment_count} payment(s)</div>
+                  </div>
+                )
+              },
+              { 
+                header: 'Difference', 
+                cell: (row) => {
+                  const diff = (row.amount || 0) - (row.total_actual_paid || 0);
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span className={Math.abs(diff) > 1000 ? 'text-red-600 font-bold' : 'text-green-600'}>
+                        Rp {(diff / 1000000).toFixed(2)}M
+                      </span>
+                      {Math.abs(diff) > 1000 && <AlertTriangle className="w-4 h-4 text-orange-500" />}
                     </div>
-                  )}
-                ]}
-                data={reconciliationItems.filter(r => {
-                  if (reconFilters.contract !== 'all' && r.contract_id !== reconFilters.contract) return false;
-                  if (reconFilters.status !== 'all' && r.status !== reconFilters.status) return false;
-                  if (reconFilters.hasException === 'yes' && !r.has_exception) return false;
-                  if (reconFilters.hasException === 'no' && r.has_exception) return false;
-                  return true;
-                })}
-                isLoading={loading}
-                emptyMessage="No reconciliation items"
-              />
-            </CardContent>
-          </Card>
+                  );
+                }
+              },
+              { header: 'Recon Status', cell: (row) => <StatusBadge status={row.reconciliation_status} /> },
+              { header: 'Nota Status', cell: (row) => <StatusBadge status={row.status} /> },
+              { 
+                header: 'Actions', 
+                cell: (row) => (
+                  <div className="flex gap-1 flex-wrap">
+                    {isTugure && row.status !== 'Paid' && (
+                      <Button size="sm" className="bg-blue-600" onClick={() => { 
+                        setSelectedRecon(row); 
+                        setPaymentFormData({
+                          actual_paid_amount: '',
+                          payment_date: new Date().toISOString().split('T')[0],
+                          bank_reference: ''
+                        });
+                        setShowPaymentDialog(true); 
+                      }}>
+                        Record Payment
+                      </Button>
+                    )}
+                    {isTugure && row.reconciliation_status !== 'FINAL' && row.total_actual_paid > 0 && (
+                      <Button size="sm" variant="outline" onClick={() => handleMarkReconFinal(row)}>
+                        Mark FINAL
+                      </Button>
+                    )}
+                    {isTugure && row.has_exception && row.reconciliation_status === 'FINAL' && (
+                      <Button size="sm" variant="outline" className="text-orange-600 border-orange-300" onClick={() => { 
+                        setSelectedNota(row);
+                        const diff = (row.amount || 0) - (row.total_actual_paid || 0);
+                        setDnCnFormData({
+                          note_type: diff > 0 ? 'Debit Note' : 'Credit Note',
+                          adjustment_amount: Math.abs(diff),
+                          reason_code: 'Payment Difference',
+                          reason_description: `${diff > 0 ? 'Underpayment' : 'Overpayment'} of Rp ${Math.abs(diff).toLocaleString()}`
+                        });
+                        setShowDnCnDialog(true); 
+                      }}>
+                        <Plus className="w-4 h-4 mr-1" />
+                        DN/CN
+                      </Button>
+                    )}
+                    {(row.reconciliation_status === 'MATCHED' || dnCnRecords.some(d => d.original_nota_id === row.nota_number && d.status === 'Approved')) && row.status !== 'Paid' && (
+                      <Button size="sm" className="bg-green-600" onClick={() => handleCloseNota(row)}>
+                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                        Close Nota
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            ]}
+            data={filteredRecon}
+            isLoading={loading}
+            emptyMessage="No reconciliation items"
+          />
         </TabsContent>
 
+        {/* DN/CN TAB */}
         <TabsContent value="dncn" className="space-y-6">
+          <Alert className="bg-orange-50 border-orange-200">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-700">
+              <strong>DN/CN Workflow:</strong> Draft → Under Review → Approved → Acknowledged
+              <br/><br/>
+              • <strong>Creation:</strong> ONLY after reconciliation FINAL and payment difference exists<br/>
+              • <strong>Purpose:</strong> Final adjustment for payment differences<br/>
+              • <strong>Original Nota:</strong> Remains unchanged (immutable)
+            </AlertDescription>
+          </Alert>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <ModernKPI title="Total DN/CN" value={dnCnRecords.length} subtitle={`${dnCnRecords.filter(d => d.note_type === 'Debit Note').length} DN / ${dnCnRecords.filter(d => d.note_type === 'Credit Note').length} CN`} icon={FileText} color="blue" />
             <ModernKPI title="Pending Review" value={dnCnRecords.filter(d => d.status === 'Draft' || d.status === 'Under Review').length} subtitle="Awaiting action" icon={Clock} color="orange" />
@@ -872,7 +1073,6 @@ export default function NotaManagement() {
             <ModernKPI title="Total Adjustment" value={`Rp ${(dnCnRecords.reduce((sum, d) => sum + Math.abs(d.adjustment_amount || 0), 0) / 1000000).toFixed(1)}M`} icon={DollarSign} color="purple" />
           </div>
 
-          {/* DN/CN Filters */}
           <Card>
             <CardContent className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -909,94 +1109,233 @@ export default function NotaManagement() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Debit & Credit Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTable
-                columns={[
-                  { header: 'Note Number', cell: (row) => <div><div className="font-medium font-mono">{row.note_number}</div><Badge className={row.note_type === 'Debit Note' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>{row.note_type}</Badge></div> },
-                  { header: 'Original Nota', accessorKey: 'original_nota_id' },
-                  { header: 'Batch ID', accessorKey: 'batch_id' },
-                  { header: 'Adjustment', cell: (row) => <div className={row.note_type === 'Debit Note' ? 'text-red-600 font-bold' : 'text-blue-600 font-bold'}>Rp {(Math.abs(row.adjustment_amount || 0)).toLocaleString('id-ID')}</div> },
-                  { header: 'Reason', accessorKey: 'reason_code' },
-                  { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
-                  { header: 'Actions', cell: (row) => (
-                    <div className="flex gap-1">
-                      <Button variant="outline" size="sm" onClick={() => { setSelectedDnCn(row); setShowViewDialog(true); }}>
-                        <Eye className="w-4 h-4" />
+          <DataTable
+            columns={[
+              { 
+                header: 'Note Number', 
+                cell: (row) => (
+                  <div>
+                    <div className="font-medium font-mono">{row.note_number}</div>
+                    <Badge className={row.note_type === 'Debit Note' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>
+                      {row.note_type}
+                    </Badge>
+                  </div>
+                )
+              },
+              { header: 'Original Nota', accessorKey: 'original_nota_id' },
+              { header: 'Batch ID', accessorKey: 'batch_id' },
+              { 
+                header: 'Adjustment', 
+                cell: (row) => (
+                  <div className={row.note_type === 'Debit Note' ? 'text-red-600 font-bold' : 'text-blue-600 font-bold'}>
+                    Rp {(Math.abs(row.adjustment_amount || 0)).toLocaleString('id-ID')}
+                  </div>
+                )
+              },
+              { header: 'Reason', accessorKey: 'reason_code' },
+              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              { 
+                header: 'Actions', 
+                cell: (row) => (
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm" onClick={() => { setSelectedDnCn(row); setShowViewDialog(true); }}>
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    {isTugure && row.status === 'Draft' && (
+                      <Button size="sm" onClick={() => { setSelectedDnCn(row); setActionType('review'); setShowDnCnActionDialog(true); }}>
+                        Review
                       </Button>
-                      {isTugure && row.status === 'Draft' && (
-                        <Button size="sm" onClick={() => { setSelectedDnCn(row); setActionType('review'); setShowDnCnActionDialog(true); }}>Review</Button>
-                      )}
-                      {isTugure && row.status === 'Under Review' && (
-                        <Button size="sm" className="bg-green-600" onClick={() => { setSelectedDnCn(row); setActionType('approve'); setShowDnCnActionDialog(true); }}>Approve</Button>
-                      )}
-                      {isBrins && row.status === 'Approved' && (
-                        <Button size="sm" className="bg-blue-600" onClick={() => { setSelectedDnCn(row); setActionType('acknowledge'); setShowDnCnActionDialog(true); }}>Acknowledge</Button>
-                      )}
-                    </div>
-                  )}
-                ]}
-                data={dnCnRecords.filter(d => {
-                  if (dnCnFilters.contract !== 'all' && d.contract_id !== dnCnFilters.contract) return false;
-                  if (dnCnFilters.noteType !== 'all' && d.note_type !== dnCnFilters.noteType) return false;
-                  if (dnCnFilters.status !== 'all' && d.status !== dnCnFilters.status) return false;
-                  return true;
-                })}
-                isLoading={loading}
-                emptyMessage="No DN/CN records"
-              />
-            </CardContent>
-          </Card>
+                    )}
+                    {isTugure && row.status === 'Under Review' && (
+                      <div className="flex gap-1">
+                        <Button size="sm" className="bg-green-600" onClick={() => { setSelectedDnCn(row); setActionType('approve'); setShowDnCnActionDialog(true); }}>
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => { setSelectedDnCn(row); setActionType('reject'); setShowDnCnActionDialog(true); }}>
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                    {isBrins && row.status === 'Approved' && (
+                      <Button size="sm" className="bg-blue-600" onClick={() => { setSelectedDnCn(row); setActionType('acknowledge'); setShowDnCnActionDialog(true); }}>
+                        Acknowledge
+                      </Button>
+                    )}
+                  </div>
+                )
+              }
+            ]}
+            data={filteredDnCn}
+            isLoading={loading}
+            emptyMessage="No DN/CN records"
+          />
         </TabsContent>
       </Tabs>
 
-      {/* Detail Dialog (View only) */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+      {/* Generate Nota Dialog */}
+      <Dialog open={showGenerateNotaDialog} onOpenChange={setShowGenerateNotaDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nota Detail</DialogTitle>
-            <DialogDescription>
-              Nota Number: {selectedNota?.nota_number}
-            </DialogDescription>
+            <DialogTitle>Generate Nota from Batch</DialogTitle>
+            <DialogDescription>Select batch where Debtor Review is completed</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Type:</span>
-                  <span className="ml-2 font-medium">{selectedNota?.nota_type}</span>
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                <strong>Requirements:</strong>
+                <br/>✓ debtor_review_completed = TRUE (all debtors reviewed)
+                <br/>✓ batch_ready_for_nota = TRUE (at least 1 approved)
+                <br/>✓ final_premium_amount &gt; 0
+                <br/><br/>
+                Nota amount will be derived from <strong>final_premium_amount</strong>.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label>Select Batch *</Label>
+              <Select value={selectedBatch?.id || ''} onValueChange={(val) => {
+                const batch = batches.find(b => b.id === val);
+                setSelectedBatch(batch);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select batch" />
+                </SelectTrigger>
+                <SelectContent>
+                    {batches.filter(b => b.debtor_review_completed && b.batch_ready_for_nota && b.status === 'Approved' && (b.final_premium_amount || 0) > 0).map(b => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.batch_id} - Rp {((b.final_premium_amount || 0) / 1000000).toFixed(1)}M (✓ Ready)
+                      </SelectItem>
+                    ))}
+                    {batches.filter(b => !b.debtor_review_completed || !b.batch_ready_for_nota || b.status !== 'Approved' || (b.final_premium_amount || 0) === 0).map(b => (
+                      <SelectItem key={b.id} value={b.id} disabled>
+                        {b.batch_id} - {!b.debtor_review_completed ? '❌ Debtor Review Incomplete' : (!b.batch_ready_for_nota ? '❌ No Approved Debtors' : (b.status !== 'Approved' ? `Status: ${b.status}` : '❌ Zero Premium'))}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedBatch && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-gray-500">Final Exposure:</span><span className="ml-2 font-bold">Rp {((selectedBatch.final_exposure_amount || 0) / 1000000).toFixed(1)}M</span></div>
+                  <div><span className="text-gray-500">Final Premium:</span><span className="ml-2 font-bold text-green-600">Rp {((selectedBatch.final_premium_amount || 0) / 1000000).toFixed(1)}M</span></div>
+                  <div><span className="text-gray-500">Review Complete:</span><span className="ml-2 font-bold text-blue-600">{selectedBatch.debtor_review_completed ? '✓ YES' : '❌ NO'}</span></div>
+                  <div><span className="text-gray-500">Ready for Nota:</span><span className="ml-2 font-bold text-blue-600">{selectedBatch.batch_ready_for_nota ? '✓ YES' : '❌ NO'}</span></div>
                 </div>
-                <div>
-                  <span className="text-gray-500">Amount:</span>
-                  <span className="ml-2 font-medium">Rp {(selectedNota?.amount || 0).toLocaleString('id-ID')}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Currency:</span>
-                  <span className="ml-2 font-medium">{selectedNota?.currency}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Status:</span>
-                  <span className="ml-2"><StatusBadge status={selectedNota?.status} /></span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-gray-500">Reference:</span>
-                  <span className="ml-2 font-medium">{selectedNota?.reference_id}</span>
-                </div>
-                {selectedNota?.issued_by && (
-                  <div className="col-span-2">
-                    <span className="text-gray-500">Issued By:</span>
-                    <span className="ml-2 font-medium">{selectedNota?.issued_by} on {selectedNota?.issued_date}</span>
-                  </div>
-                )}
               </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowGenerateNotaDialog(false); setSelectedBatch(null); }}>Cancel</Button>
+            <Button onClick={handleGenerateNota} disabled={processing || !selectedBatch?.debtor_review_completed || !selectedBatch?.batch_ready_for_nota || selectedBatch?.status !== 'Approved' || (selectedBatch?.final_premium_amount || 0) === 0} className="bg-blue-600">
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+              Generate Nota
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Record Actual Payment</DialogTitle>
+            <DialogDescription>Nota: {selectedRecon?.nota_number}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2">
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">Nota Amount:</span>
+                  <div className="font-bold text-blue-600 text-lg">Rp {((selectedRecon?.amount || 0) / 1000000).toFixed(2)}M</div>
+                </div>
+                <div>
+                  <span className="text-gray-600">Total Planned:</span>
+                  <div className="font-medium text-gray-600 text-lg">Rp {((selectedRecon?.total_planned || 0) / 1000000).toFixed(2)}M</div>
+                  <div className="text-xs text-gray-500">{selectedRecon?.intent_count} intent(s)</div>
+                </div>
+                <div>
+                  <span className="text-gray-600">Already Paid:</span>
+                  <div className="font-bold text-green-600 text-lg">Rp {((selectedRecon?.total_actual_paid || 0) / 1000000).toFixed(2)}M</div>
+                  <div className="text-xs text-gray-500">{selectedRecon?.payment_count} payment(s)</div>
+                </div>
+              </div>
+            </div>
+
+            <Alert className="bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-700">
+                <strong>Payment Status Rules:</strong>
+                <br/>• PARTIAL: Actual Paid &lt; Nota Amount (normal, can add more payments)
+                <br/>• MATCHED: Actual Paid = Nota Amount (auto-close Nota)
+                <br/>• OVERPAID: Actual Paid &gt; Nota Amount (DN/CN required)
+                <br/><br/>
+                <strong>Note:</strong> Planned vs Actual mismatch is NORMAL. Multiple payments accumulate.
+              </AlertDescription>
+            </Alert>
+
+            <div>
+              <Label>Actual Paid Amount (Rp) *</Label>
+              <Input
+                type="number"
+                value={paymentFormData.actual_paid_amount}
+                onChange={(e) => {
+                  setPaymentFormData({...paymentFormData, actual_paid_amount: e.target.value});
+                }}
+                placeholder="Enter amount received from bank"
+              />
+              {paymentFormData.actual_paid_amount && (
+                <div className="mt-2 p-3 rounded-lg border-2" style={{
+                  backgroundColor: Math.abs((selectedRecon?.amount || 0) - ((selectedRecon?.total_actual_paid || 0) + parseFloat(paymentFormData.actual_paid_amount))) <= 1000 ? '#d1fae5' : '#fed7aa',
+                  borderColor: Math.abs((selectedRecon?.amount || 0) - ((selectedRecon?.total_actual_paid || 0) + parseFloat(paymentFormData.actual_paid_amount))) <= 1000 ? '#10b981' : '#f59e0b'
+                }}>
+                  <div className="text-sm font-semibold">
+                    New Total Paid: Rp {(((selectedRecon?.total_actual_paid || 0) + parseFloat(paymentFormData.actual_paid_amount)) / 1000000).toFixed(2)}M
+                  </div>
+                  <div className="text-xs mt-1">
+                    {Math.abs((selectedRecon?.amount || 0) - ((selectedRecon?.total_actual_paid || 0) + parseFloat(paymentFormData.actual_paid_amount))) <= 1000 
+                      ? '✓ MATCHED - Nota will auto-close' 
+                      : `⚠️ ${(selectedRecon?.amount || 0) - ((selectedRecon?.total_actual_paid || 0) + parseFloat(paymentFormData.actual_paid_amount)) > 0 ? 'PARTIAL' : 'OVERPAID'} - Difference: Rp ${Math.abs((selectedRecon?.amount || 0) - ((selectedRecon?.total_actual_paid || 0) + parseFloat(paymentFormData.actual_paid_amount))).toLocaleString()}`
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label>Payment Date *</Label>
+              <Input
+                type="date"
+                value={paymentFormData.payment_date}
+                onChange={(e) => setPaymentFormData({...paymentFormData, payment_date: e.target.value})}
+              />
+            </div>
+
+            <div>
+              <Label>Bank Reference / Transaction ID *</Label>
+              <Input
+                value={paymentFormData.bank_reference}
+                onChange={(e) => setPaymentFormData({...paymentFormData, bank_reference: e.target.value})}
+                placeholder="e.g., TRX-20250124-001"
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewDialog(false)}>
-              Close
+            <Button variant="outline" onClick={() => { 
+              setShowPaymentDialog(false); 
+              setPaymentFormData({
+                actual_paid_amount: '',
+                payment_date: new Date().toISOString().split('T')[0],
+                bank_reference: ''
+              });
+            }}>Cancel</Button>
+            <Button 
+              onClick={handleRecordPayment} 
+              disabled={processing || !paymentFormData.actual_paid_amount || !paymentFormData.bank_reference} 
+              className="bg-blue-600"
+            >
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              Record Payment
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1010,32 +1349,51 @@ export default function NotaManagement() {
             <DialogDescription>For Nota: {selectedNota?.nota_number}</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Prerequisites:</strong>
+                <br/>✓ Reconciliation must be marked FINAL
+                <br/>✓ Payment difference must exist
+                <br/><br/>
+                <strong>Original Nota remains UNCHANGED.</strong>
+              </AlertDescription>
+            </Alert>
+
+            {selectedNota && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-gray-500">Nota Amount:</span><span className="ml-2 font-bold">Rp {(selectedNota.amount || 0).toLocaleString()}</span></div>
+                  <div><span className="text-gray-500">Actual Paid:</span><span className="ml-2 font-bold text-green-600">Rp {(selectedNota.total_actual_paid || 0).toLocaleString()}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Difference:</span><span className="ml-2 font-bold text-red-600">Rp {Math.abs((selectedNota.amount || 0) - (selectedNota.total_actual_paid || 0)).toLocaleString()}</span></div>
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="text-sm font-medium">Note Type *</label>
+              <Label>Note Type *</Label>
               <Select value={dnCnFormData.note_type} onValueChange={(val) => setDnCnFormData({...dnCnFormData, note_type: val})}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Debit Note">Debit Note (Increase)</SelectItem>
-                  <SelectItem value="Credit Note">Credit Note (Decrease)</SelectItem>
+                  <SelectItem value="Debit Note">Debit Note (Underpayment - increase amount)</SelectItem>
+                  <SelectItem value="Credit Note">Credit Note (Overpayment - decrease amount)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
             <div>
-              <label className="text-sm font-medium">Adjustment Amount (IDR) *</label>
+              <Label>Adjustment Amount (IDR) *</Label>
               <Input
                 type="number"
                 value={dnCnFormData.adjustment_amount}
                 onChange={(e) => setDnCnFormData({...dnCnFormData, adjustment_amount: parseFloat(e.target.value) || 0})}
               />
             </div>
+
             <div>
-              <label className="text-sm font-medium">Reason Code *</label>
+              <Label>Reason Code *</Label>
               <Select value={dnCnFormData.reason_code} onValueChange={(val) => setDnCnFormData({...dnCnFormData, reason_code: val})}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Payment Difference">Payment Difference</SelectItem>
                   <SelectItem value="FX Adjustment">FX Adjustment</SelectItem>
@@ -1045,8 +1403,9 @@ export default function NotaManagement() {
                 </SelectContent>
               </Select>
             </div>
+
             <div>
-              <label className="text-sm font-medium">Description *</label>
+              <Label>Description *</Label>
               <Textarea
                 value={dnCnFormData.reason_description}
                 onChange={(e) => setDnCnFormData({...dnCnFormData, reason_description: e.target.value})}
@@ -1058,8 +1417,8 @@ export default function NotaManagement() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDnCnDialog(false)}>Cancel</Button>
             <Button onClick={handleCreateDnCn} disabled={processing || !dnCnFormData.reason_description}>
-              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Create
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+              Create DN/CN
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1070,158 +1429,116 @@ export default function NotaManagement() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{actionType} DN/CN</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <label className="text-sm font-medium">Remarks</label>
-            <Textarea
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Enter remarks..."
-              rows={3}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDnCnActionDialog(false)}>Cancel</Button>
-            <Button onClick={() => handleDnCnAction(selectedDnCn, actionType)} disabled={processing}>
-              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reconciliation Action Dialog */}
-      <Dialog open={showReconActionDialog} onOpenChange={setShowReconActionDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Record Payment - Reconciliation</DialogTitle>
-            <DialogDescription>Nota: {selectedRecon?.nota_number}</DialogDescription>
+            <DialogDescription>{selectedDnCn?.note_number}</DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Nota Amount:</span>
-                  <span className="ml-2 font-bold text-blue-600">Rp {(selectedRecon?.amount || 0).toLocaleString('id-ID')}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Currently Received:</span>
-                  <span className="ml-2 font-medium text-green-600">Rp {(selectedRecon?.payment_received || 0).toLocaleString('id-ID')}</span>
+            {selectedDnCn && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-gray-500">Type:</span><span className="ml-2 font-medium">{selectedDnCn.note_type}</span></div>
+                  <div><span className="text-gray-500">Adjustment:</span><span className="ml-2 font-bold">Rp {Math.abs(selectedDnCn.adjustment_amount || 0).toLocaleString()}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Original Nota:</span><span className="ml-2 font-medium">{selectedDnCn.original_nota_id}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Reason:</span><span className="ml-2 font-medium">{selectedDnCn.reason_description}</span></div>
                 </div>
               </div>
-            </div>
-            <Alert className="bg-blue-50 border-blue-200">
-              <AlertCircle className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-700">
-                Enter actual payment received. System will auto-detect: MATCHED (exact), UNDER (less), or OVER (more). 
-                Exceptions trigger DN/CN workflow.
-              </AlertDescription>
-            </Alert>
+            )}
             <div>
-              <label className="text-sm font-medium">Actual Paid Amount (Rp) *</label>
-              <Input
-                type="number"
-                value={actualPaidAmount}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) || 0;
-                  setActualPaidAmount(e.target.value);
-                  const diff = (selectedRecon?.amount || 0) - val;
-                  if (Math.abs(diff) > 1000) {
-                    setRemarks(`Payment difference detected: ${diff > 0 ? 'Underpayment' : 'Overpayment'} of Rp ${Math.abs(diff).toLocaleString()}`);
-                  } else {
-                    setRemarks('Payment matched - exact amount');
-                  }
-                }}
-                placeholder="Enter amount received from bank"
-              />
-              {actualPaidAmount && (
-                <p className={`text-xs mt-1 ${Math.abs((selectedRecon?.amount || 0) - parseFloat(actualPaidAmount)) > 1000 ? 'text-orange-600' : 'text-green-600'}`}>
-                  {Math.abs((selectedRecon?.amount || 0) - parseFloat(actualPaidAmount)) <= 1000 
-                    ? '✓ MATCHED - Payment complete' 
-                    : `⚠️ EXCEPTION - Difference: Rp ${Math.abs((selectedRecon?.amount || 0) - parseFloat(actualPaidAmount)).toLocaleString()}`
-                  }
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="text-sm font-medium">Payment Reference / Remarks</label>
+              <Label>Remarks</Label>
               <Textarea
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Bank reference or notes..."
-                rows={2}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowReconActionDialog(false); setActualPaidAmount(''); setRemarks(''); }}>Cancel</Button>
-            <Button onClick={handleReconAction} disabled={processing || !actualPaidAmount} className="bg-blue-600">
-              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Record Payment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Action Dialog */}
-      <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{actionType} Nota</DialogTitle>
-            <DialogDescription>
-              Move nota {selectedNota?.nota_number} from {selectedNota?.status} to {getNextStatus(selectedNota?.status)}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Type:</span>
-                  <span className="ml-2 font-medium">{selectedNota?.nota_type}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Amount:</span>
-                  <span className="ml-2 font-medium">Rp {(selectedNota?.amount || 0).toLocaleString('id-ID')}</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-gray-500">Reference:</span>
-                  <span className="ml-2 font-medium">{selectedNota?.reference_id}</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                {getNextStatus(selectedNota?.status) === 'Paid' ? 'Payment Reference' : 'Remarks'}
-              </label>
-              <Textarea
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder={getNextStatus(selectedNota?.status) === 'Paid' ? 'Enter payment reference...' : 'Enter remarks...'}
+                placeholder="Enter remarks..."
                 rows={3}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowActionDialog(false)}>
-              Cancel
+            <Button variant="outline" onClick={() => setShowDnCnActionDialog(false)}>Cancel</Button>
+            <Button onClick={() => handleDnCnAction(selectedDnCn, actionType)} disabled={processing}>
+              {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Confirm {actionType}
             </Button>
-            <Button
-              onClick={handleNotaAction}
-              disabled={processing}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <ArrowRight className="w-4 h-4 mr-2" />
-                  {actionType}
-                </>
-              )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nota Action Dialog */}
+      <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{actionType}</DialogTitle>
+            <DialogDescription>
+              Move nota {selectedNota?.nota_number} from {selectedNota?.status} to {getNextStatus(selectedNota?.status)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {getNextStatus(selectedNota?.status) === 'Issued' && (
+              <Alert variant="destructive">
+                <Lock className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Warning:</strong> After issuing, Nota amount becomes IMMUTABLE and cannot be edited.
+                  <br/>Any adjustments must be done via DN/CN.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><span className="text-gray-500">Type:</span><Badge>{selectedNota?.nota_type}</Badge></div>
+                <div><span className="text-gray-500">Amount:</span><span className="ml-2 font-medium">Rp {(selectedNota?.amount || 0).toLocaleString('id-ID')}</span></div>
+                <div className="col-span-2"><span className="text-gray-500">Reference:</span><span className="ml-2 font-medium">{selectedNota?.reference_id}</span></div>
+              </div>
+            </div>
+            <div>
+              <Label>Remarks</Label>
+              <Textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Enter remarks..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowActionDialog(false)}>Cancel</Button>
+            <Button onClick={handleNotaAction} disabled={processing} className="bg-blue-600 hover:bg-blue-700">
+              {processing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</> : <><ArrowRight className="w-4 h-4 mr-2" />{actionType}</>}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Dialog */}
+      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedNota ? 'Nota Detail' : 'Debit/Credit Note Detail'}</DialogTitle>
+            <DialogDescription>{selectedNota?.nota_number || selectedDnCn?.note_number}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {selectedNota && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-gray-500">Type:</span><Badge>{selectedNota.nota_type}</Badge></div>
+                  <div><span className="text-gray-500">Amount:</span><span className="ml-2 font-medium">Rp {(selectedNota.amount || 0).toLocaleString('id-ID')}</span></div>
+                  <div><span className="text-gray-500">Status:</span><span className="ml-2"><StatusBadge status={selectedNota.status} /></span></div>
+                  <div><span className="text-gray-500">Immutable:</span><span className="ml-2 font-bold">{selectedNota.is_immutable ? '🔒 YES' : 'NO'}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Reference:</span><span className="ml-2 font-medium">{selectedNota.reference_id}</span></div>
+                </div>
+              </div>
+            )}
+            {selectedDnCn && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-gray-500">Type:</span><Badge className={selectedDnCn?.note_type === 'Debit Note' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}>{selectedDnCn?.note_type}</Badge></div>
+                  <div><span className="text-gray-500">Adjustment:</span><span className="ml-2 font-bold">Rp {Math.abs(selectedDnCn.adjustment_amount || 0).toLocaleString()}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Original Nota:</span><span className="ml-2 font-medium">{selectedDnCn.original_nota_id}</span></div>
+                  <div className="col-span-2"><span className="text-gray-500">Reason:</span><span className="ml-2 font-medium">{selectedDnCn.reason_description}</span></div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowViewDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
