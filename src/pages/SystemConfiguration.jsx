@@ -100,25 +100,10 @@ export default function SystemConfiguration() {
                               !templates || templates.length === 0 ||
                               !rules || rules.length === 0;
       
-      if (needsSampleData) {
-        await createSampleConfigs();
-        // Reload all data after creating samples
-        const [newConfigData, newNotifData, newTemplateData, newRules] = await Promise.all([
-          base44.entities.SystemConfig.list(),
-          base44.entities.Notification.list(),
-          base44.entities.EmailTemplate.list(),
-          base44.entities.SlaRule.list()
-        ]);
-        setSystemConfigs(newConfigData || []);
-        setNotifications(newNotifData || []);
-        setEmailTemplates(newTemplateData || []);
-        setSlaRules(newRules || []);
-      } else {
-        setSystemConfigs(configData || []);
-        setNotifications(notifData || []);
-        setEmailTemplates(templates || []);
-        setSlaRules(rules || []);
-      }
+      setSystemConfigs(configData || []);
+      setNotifications(notifData || []);
+      setEmailTemplates(templates || []);
+      setSlaRules(rules || []);
       
       setNotificationSettings(settingsData || []);
       
@@ -1215,6 +1200,12 @@ export default function SystemConfiguration() {
         }
         deletedCount = notifications.length;
         loadData();
+      } else if (dataType === 'contracts') {
+        const contracts = await base44.entities.MasterContract.list();
+        for (const contract of contracts) {
+          await base44.entities.MasterContract.delete(contract.id);
+        }
+        deletedCount = contracts.length;
       } else if (dataType === 'all') {
         await handleResetData('debtors');
         await handleResetData('claims');
@@ -2024,7 +2015,7 @@ export default function SystemConfiguration() {
                 </Alert>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="border-orange-200">
                   <CardHeader>
                     <CardTitle className="text-lg">Reset Debtor Data</CardTitle>
@@ -2096,6 +2087,24 @@ export default function SystemConfiguration() {
                     </Button>
                   </CardContent>
                 </Card>
+
+                <Card className="border-orange-200">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Reset Master Contracts</CardTitle>
+                    <p className="text-sm text-gray-500">Delete all master contracts</p>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => handleResetData('contracts')}
+                      disabled={resetting}
+                      variant="outline"
+                      className="w-full border-orange-300 text-orange-700 hover:bg-orange-50"
+                    >
+                      {resetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Reset Master Contracts
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
 
               <Card className="border-red-300 bg-red-50">
@@ -2119,8 +2128,7 @@ export default function SystemConfiguration() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Note:</strong> Master Contracts and System Configurations are preserved during reset operations.
-                  These should be configured once and reused across testing sessions.
+                  <strong>Note:</strong> System Configurations are preserved during reset all. Master Contracts can be reset individually if needed for testing.
                 </AlertDescription>
               </Alert>
             </CardContent>
