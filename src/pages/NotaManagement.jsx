@@ -697,8 +697,8 @@ export default function NotaManagement() {
     return true;
   });
 
-  // Reconciliation items with payment details
-  const reconciliationItems = notas.filter(n => n.nota_type === 'Batch').map(nota => {
+  // Reconciliation items with payment details (ALL NOTA TYPES)
+  const reconciliationItems = notas.map(nota => {
     const relatedPayments = payments.filter(p => p.invoice_id === nota.id && p.is_actual_payment);
     const paymentReceived = relatedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
     const difference = (nota.amount || 0) - paymentReceived;
@@ -893,17 +893,19 @@ export default function NotaManagement() {
           <Alert className="bg-purple-50 border-purple-200">
             <Scale className="h-4 w-4 text-purple-600" />
             <AlertDescription className="text-purple-700">
-              <strong>Payment Reconciliation - Real Money Tracking:</strong>
+              <strong>Payment Reconciliation - All Nota Types (Batch + Claim + Subrogation):</strong>
               <br/><br/>
               • <strong>Nota Amount:</strong> IMMUTABLE financial document<br/>
               • <strong>Total Planned:</strong> From Payment Intent (planning only)<br/>
               • <strong>Total Actual Paid:</strong> Real payments received (accumulated)<br/>
               • <strong>Payment Status:</strong> PARTIAL / MATCHED / OVERPAID (auto-detected)<br/>
-              • <strong>DN/CN:</strong> Enabled ONLY after reconciliation marked FINAL and payment difference exists
+              • <strong>DN/CN:</strong> Enabled ONLY after reconciliation marked FINAL and payment difference exists<br/>
+              • <strong>Multiple Payments:</strong> 1 Nota can have multiple Payment records (accumulative)
             </AlertDescription>
           </Alert>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <ModernKPI title="All Notas" value={reconciliationItems.length} subtitle={`${reconciliationItems.filter(r => r.nota_type === 'Batch').length} batch / ${reconciliationItems.filter(r => r.nota_type === 'Claim').length} claim`} icon={FileText} color="purple" />
             <ModernKPI title="Total Invoiced" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.amount || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Nota amounts" icon={FileText} color="blue" />
             <ModernKPI title="Total Paid" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + (r.total_actual_paid || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Actual payments" icon={CheckCircle2} color="green" />
             <ModernKPI title="Difference" value={`Rp ${(reconciliationItems.reduce((sum, r) => sum + ((r.amount || 0) - (r.total_actual_paid || 0)), 0) / 1000000).toFixed(1)}M`} subtitle="To reconcile" icon={AlertTriangle} color="orange" />
@@ -952,7 +954,10 @@ export default function NotaManagement() {
                 cell: (row) => (
                   <div>
                     <div className="font-medium font-mono">{row.nota_number}</div>
-                    <div className="text-xs text-gray-500">{row.reference_id}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs">{row.nota_type}</Badge>
+                      <span className="text-xs text-gray-500">{row.reference_id}</span>
+                    </div>
                   </div>
                 )
               },
@@ -1203,12 +1208,12 @@ export default function NotaManagement() {
                 <SelectContent>
                     {batches.filter(b => b.debtor_review_completed && b.batch_ready_for_nota && b.status === 'Approved' && (b.final_premium_amount || 0) > 0).map(b => (
                       <SelectItem key={b.id} value={b.id}>
-                        {b.batch_id} - Rp {((b.final_premium_amount || 0) / 1000000).toFixed(1)}M (✓ Ready)
+                        {b.batch_id} - Rp {((b.final_premium_amount || 0) / 1000000).toFixed(1)}M ✓
                       </SelectItem>
                     ))}
                     {batches.filter(b => !b.debtor_review_completed || !b.batch_ready_for_nota || b.status !== 'Approved' || (b.final_premium_amount || 0) === 0).map(b => (
                       <SelectItem key={b.id} value={b.id} disabled>
-                        {b.batch_id} - {!b.debtor_review_completed ? '❌ Debtor Review Incomplete' : (!b.batch_ready_for_nota ? '❌ No Approved Debtors' : (b.status !== 'Approved' ? `Status: ${b.status}` : '❌ Zero Premium'))}
+                        {b.batch_id} - {!b.debtor_review_completed ? '❌ Review Incomplete' : (!b.batch_ready_for_nota ? '❌ No Approved' : (b.status !== 'Approved' ? `❌ ${b.status}` : '❌ Zero Premium'))}
                       </SelectItem>
                     ))}
                 </SelectContent>

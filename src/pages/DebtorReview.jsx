@@ -111,16 +111,18 @@ export default function DebtorReview() {
         // Track batch for final amount calculation
         if (!batchUpdates[debtor.batch_id]) {
           batchUpdates[debtor.batch_id] = {
+            batchIdString: debtor.batch_id,
             approvedExposure: 0,
             approvedPremium: 0,
             approvedCount: 0,
-            totalCount: 0
+            totalCount: 0,
+            allDebtors: debtors.filter(d => d.batch_id === debtor.batch_id)
           };
         }
         batchUpdates[debtor.batch_id].totalCount++;
         if (action === 'approve') {
-          batchUpdates[debtor.batch_id].approvedExposure += debtor.outstanding_amount || 0;
-          batchUpdates[debtor.batch_id].approvedPremium += debtor.gross_premium || 0;
+          batchUpdates[debtor.batch_id].approvedExposure += debtor.credit_plafond || 0;
+          batchUpdates[debtor.batch_id].approvedPremium += debtor.net_premium || 0;
           batchUpdates[debtor.batch_id].approvedCount++;
         }
 
@@ -138,24 +140,36 @@ export default function DebtorReview() {
       }
 
       // CRITICAL: Update batch with FINAL amounts after Debtor Review
-      for (const [batchId, amounts] of Object.entries(batchUpdates)) {
+      for (const [batchId, batchData] of Object.entries(batchUpdates)) {
         const batch = await base44.entities.Batch.filter({ batch_id: batchId });
         if (batch && batch.length > 0) {
           const batchRecord = batch[0];
           
-          // Check if ALL debtors in batch have been reviewed
-          const allBatchDebtors = debtors.filter(d => d.batch_id === batchId);
-          const reviewedDebtors = allBatchDebtors.filter(d => 
+          // Re-count ALL debtors with updated status
+          const updatedDebtors = batchData.allDebtors.map(d => {
+            const processed = debtorsToProcess.find(dp => dp.id === d.id);
+            if (processed) {
+              return { ...d, underwriting_status: newStatus };
+            }
+            return d;
+          });
+          
+          const reviewedDebtors = updatedDebtors.filter(d => 
             d.underwriting_status === 'APPROVED' || 
             d.underwriting_status === 'REJECTED'
           );
           
-          const allReviewed = reviewedDebtors.length === allBatchDebtors.length;
-          const hasApproved = amounts.approvedCount > 0;
+          const approvedDebto rs = updatedDebtors.filter(d => d.underwriting_status === 'APPROVED');
+          
+          const allReviewed = reviewedDebtors.length === updatedDebtors.length;
+          const hasApproved = approvedDebtors.length > 0;
+          
+          const totalApprovedExposure = approvedDebtors.reduce((sum, d) => sum + (d.credit_plafond || 0), 0);
+          const totalApprovedPremium = approvedDebtors.reduce((sum, d) => sum + (d.net_premium || 0), 0);
           
           await base44.entities.Batch.update(batchRecord.id, {
-            final_exposure_amount: amounts.approvedExposure,
-            final_premium_amount: amounts.approvedPremium,
+            final_exposure_amount: totalApprovedExposure,
+            final_premium_amount: totalApprovedPremium,
             debtor_review_completed: allReviewed,
             batch_ready_for_nota: allReviewed && hasApproved
           });
@@ -163,7 +177,7 @@ export default function DebtorReview() {
           if (allReviewed && hasApproved) {
             await createNotification(
               '✅ Debtor Review COMPLETED - Ready for Nota',
-              `Batch ${batchId}: ALL debtors reviewed. ${amounts.approvedCount} approved. Final premium: Rp ${amounts.approvedPremium.toLocaleString()}. ✓ debtor_review_completed = TRUE. ✓ batch_ready_for_nota = TRUE.`,
+              `Batch ${batchId}: ALL ${updatedDebtors.length} debtors reviewed. ${approvedDebtors.length} approved. Final premium: Rp ${totalApprovedPremium.toLocaleString()}. ✓ debtor_review_completed = TRUE. ✓ batch_ready_for_nota = TRUE.`,
               'ACTION_REQUIRED',
               'DEBTOR',
               batchRecord.id,
@@ -176,15 +190,17 @@ export default function DebtorReview() {
               'Batch',
               batchRecord.id,
               { debtor_review_completed: false },
-              { debtor_review_completed: true, batch_ready_for_nota: true, final_premium_amount: amounts.approvedPremium },
+              { debtor_review_completed: true, batch_ready_for_nota: true, final_premium_amount: totalApprovedPremium },
               user?.email,
               user?.role,
-              `All ${allBatchDebtors.length} debtors reviewed - ${amounts.approvedCount} approved`
+              `All ${updatedDebtors.length} debtors reviewed - ${approvedDebtors.length} approved`
             );
           } else if (allReviewed && !hasApproved) {
             await base44.entities.Batch.update(batchRecord.id, {
               status: 'Rejected',
-              rejection_reason: 'All debtors rejected in review'
+              rejection_reason: 'All debtors rejected in review',
+              debtor_review_completed: true,
+              batch_ready_for_nota: false
             });
             
             await createNotification(
