@@ -84,8 +84,11 @@ export default function SubmitDebtor() {
   };
 
   const loadMyDebtors = async () => {
+    if (!user?.email) return;
+    
     try {
       const allDebtors = await base44.entities.Debtor.list();
+      // Filter by created_by email
       const mySubmittedDebtors = allDebtors.filter(d => 
         d.created_by === user?.email && 
         d.record_status === 'ACTIVE'
@@ -93,6 +96,7 @@ export default function SubmitDebtor() {
       setMyDebtors(mySubmittedDebtors || []);
     } catch (error) {
       console.error('Failed to load my debtors:', error);
+      setMyDebtors([]);
     }
   };
 
@@ -321,7 +325,7 @@ export default function SubmitDebtor() {
         ...d,
         contract_id: selectedContract,
         underwriting_status: 'SUBMITTED',
-        batch_status: 'Uploaded',
+        batch_status: 'SUBMITTED',
         record_status: 'ACTIVE',
         bordero_status: 'PENDING',
         invoice_status: 'NOT_ISSUED',
@@ -331,7 +335,10 @@ export default function SubmitDebtor() {
         source_system: 'EXCEL-UPLOAD'
       }));
 
-      await base44.entities.Debtor.bulkCreate(debtorsToCreate);
+      // Create debtors one by one to ensure created_by is set
+      for (const debtor of debtorsToCreate) {
+        await base44.entities.Debtor.create(debtor);
+      }
 
       await base44.entities.Notification.create({
         title: submissionMode === 'revise' ? 'Batch Revised' : 'New Batch Submitted',
@@ -347,8 +354,13 @@ export default function SubmitDebtor() {
       setShowPreview(false);
       setUploadedFile(null);
       setSelectedBatch('');
-      loadBatches();
-      loadMyDebtors();
+      setActiveTab('tracking'); // Switch to tracking tab
+      
+      // Reload data with delay to ensure DB updated
+      setTimeout(() => {
+        loadBatches();
+        loadMyDebtors();
+      }, 500);
     } catch (error) {
       console.error('Submit error:', error);
       setErrorMessage('Failed to submit debtors');
@@ -439,7 +451,11 @@ export default function SubmitDebtor() {
       setSuccessMessage(`Debtor ${originalDebtor.debtor_name} revised successfully (v${newRevisionNumber})`);
       setShowReviseDialog(false);
       setSelectedDebtorForRevision(null);
-      loadMyDebtors();
+      
+      // Reload with delay
+      setTimeout(() => {
+        loadMyDebtors();
+      }, 500);
     } catch (error) {
       console.error('Revision error:', error);
       setErrorMessage('Failed to submit revision');
