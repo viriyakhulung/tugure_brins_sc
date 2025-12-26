@@ -82,6 +82,40 @@ export default function ClaimReview() {
   const handleClaimAction = async () => {
     if (!selectedClaim || !actionType) return;
 
+    // CRITICAL: Block claim approval if Nota payment not completed
+    if (actionType === 'check' || actionType === 'verify') {
+      // Find related batch and verify Nota payment status
+      const relatedDebtor = await base44.entities.Debtor.filter({ participant_no: selectedClaim.participant_no });
+      if (relatedDebtor.length > 0) {
+        const batchId = relatedDebtor[0].batch_id;
+        const batchNotas = await base44.entities.Nota.filter({ 
+          reference_id: batchId,
+          nota_type: 'Batch'
+        });
+
+        const hasCompletedPayment = batchNotas.some(n => n.status === 'Paid');
+
+        if (!hasCompletedPayment) {
+          setErrorMessage(`❌ BLOCKED: Claim review not allowed.\n\nClaim Review may proceed ONLY IF nota_payment_status = PAID.\n\nCurrent Nota status: ${batchNotas[0]?.status || 'No Nota found'}`);
+          
+          await base44.entities.AuditLog.create({
+            action: 'BLOCKED_CLAIM_REVIEW',
+            module: 'CLAIM',
+            entity_type: 'Claim',
+            entity_id: selectedClaim.id,
+            old_value: {},
+            new_value: { blocked_reason: 'Nota payment not completed' },
+            user_email: user?.email,
+            user_role: user?.role,
+            reason: 'Attempted claim review before Nota payment'
+          });
+
+          setProcessing(false);
+          return;
+        }
+      }
+    }
+
     setProcessing(true);
     setErrorMessage('');
     

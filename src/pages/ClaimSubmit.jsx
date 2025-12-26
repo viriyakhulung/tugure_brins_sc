@@ -183,6 +183,38 @@ export default function ClaimSubmit() {
   const handleBulkUpload = async () => {
     if (parsedClaims.length === 0) return;
 
+    // CRITICAL: Validate Nota payment status before allowing claim submission
+    if (selectedBatch) {
+      const batch = batches.find(b => b.id === selectedBatch);
+      if (batch) {
+        const batchNotas = await base44.entities.Nota.filter({ 
+          reference_id: batch.batch_id,
+          nota_type: 'Batch'
+        });
+
+        const hasCompletedPayment = batchNotas.some(n => n.status === 'Paid');
+
+        if (!hasCompletedPayment) {
+          setErrorMessage(`❌ BLOCKED: Claim submission not allowed.\n\nClaim can only be submitted if related Nota payment_status = PAID.\n\nCurrent Nota status: ${batchNotas[0]?.status || 'No Nota found'}`);
+          
+          await base44.entities.AuditLog.create({
+            action: 'BLOCKED_CLAIM_SUBMISSION',
+            module: 'CLAIM',
+            entity_type: 'Batch',
+            entity_id: batch.id,
+            old_value: {},
+            new_value: { blocked_reason: 'Nota not PAID' },
+            user_email: user?.email,
+            user_role: user?.role,
+            reason: 'Attempted claim submission before Nota payment completion'
+          });
+
+          setProcessing(false);
+          return;
+        }
+      }
+    }
+
     setProcessing(true);
     
     try {

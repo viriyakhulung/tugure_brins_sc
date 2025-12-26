@@ -80,8 +80,10 @@ export default function CloseBatch() {
   const handleCloseBatch = async () => {
     if (!selectedBatch) return;
 
+    setProcessing(true);
+
     // VALIDATION: Check prerequisites
-    const batchDebtors = debtors.filter(d => d.batch_id === selectedBatch.batch_id);
+    const batchDebtors = debtors.filter(d => d.batch_id === selectedBatch.batch_id && d.record_status === 'ACTIVE');
     const pendingReview = batchDebtors.filter(d => 
       d.underwriting_status !== 'APPROVED' && 
       d.underwriting_status !== 'REJECTED'
@@ -102,17 +104,72 @@ export default function CloseBatch() {
         'Attempted to close batch with pending debtor review'
       );
       
+      setProcessing(false);
       return;
     }
 
-    setProcessing(true);
+    // Check for pending claims
+    const allClaims = await base44.entities.Claim.list();
+    const batchClaims = allClaims.filter(c => batchDebtors.some(d => d.participant_no === c.participant_no));
+    const pendingClaims = batchClaims.filter(c => c.claim_status === 'Draft' || c.claim_status === 'Checked');
+
+    if (pendingClaims.length > 0) {
+      alert(`❌ BLOCKED: Cannot close batch.\n\n${pendingClaims.length} claim(s) still under review.\n\nComplete claim review before closing batch.`);
+      
+      await createAuditLog(
+        'BLOCKED_BATCH_CLOSE',
+        'DEBTOR',
+        'Batch',
+        selectedBatch.id,
+        {},
+        { blocked_reason: 'Pending claim review', pending_count: pendingClaims.length },
+        user?.email,
+        user?.role,
+        'Attempted to close batch with pending claim review'
+      );
+      
+      setProcessing(false);
+      return;
+    }
+
+    // Check for pending subrogations
+    const allSubrogations = await base44.entities.Subrogation.list();
+    const batchSubrogations = allSubrogations.filter(s => batchClaims.some(c => c.claim_no === s.claim_id));
+    const pendingSubrogations = batchSubrogations.filter(s => s.status === 'Draft');
+
+    if (pendingSubrogations.length > 0) {
+      alert(`❌ BLOCKED: Cannot close batch.\n\n${pendingSubrogations.length} subrogation(s) pending review.\n\nComplete subrogation review before closing batch.`);
+      
+      await createAuditLog(
+        'BLOCKED_BATCH_CLOSE',
+        'DEBTOR',
+        'Batch',
+        selectedBatch.id,
+        {},
+        { blocked_reason: 'Pending subrogation review', pending_count: pendingSubrogations.length },
+        user?.email,
+        user?.role,
+        'Attempted to close batch with pending subrogation review'
+      );
+      
+      setProcessing(false);
+      return;
+    }
     try {
+      // Set operational lock - this DISABLES debtor revisions but KEEPS financial processes enabled
       await base44.entities.Batch.update(selectedBatch.id, {
         status: 'Closed',
         operational_locked: true,
         closed_by: user?.email,
         closed_date: new Date().toISOString().split('T')[0]
       });
+
+      // Mark all debtors in this batch as operationally locked (batch_status = COMPLETED)
+      for (const debtor of batchDebtors) {
+        await base44.entities.Debtor.update(debtor.id, {
+          batch_status: 'COMPLETED'
+        });
+      }
 
       await createNotification(
         'Batch Closed - Operational Lock Active',
