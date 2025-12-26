@@ -193,8 +193,8 @@ export default function ClaimReview() {
         'CLAIM',
         'Claim',
         selectedClaim.id,
-        { status: selectedClaim.status },
-        { status: newStatus },
+        JSON.stringify({ status: selectedClaim.status }),
+        JSON.stringify({ status: newStatus }),
         user?.email,
         user?.role,
         remarks

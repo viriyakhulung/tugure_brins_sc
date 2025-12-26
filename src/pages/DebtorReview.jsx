@@ -131,8 +131,8 @@ export default function DebtorReview() {
           'DEBTOR',
           'Debtor',
           debtor.id,
-          { status: debtor.status },
-          { status: newStatus, remarks: approvalRemarks },
+          JSON.stringify({ status: debtor.status }),
+          JSON.stringify({ status: newStatus, remarks: approvalRemarks }),
           user?.email,
           user?.role,
           approvalRemarks
@@ -196,8 +196,8 @@ export default function DebtorReview() {
               'DEBTOR',
               'Batch',
               batchRecord.id,
-              { debtor_review_completed: false },
-              { debtor_review_completed: true, batch_ready_for_nota: true, final_premium_amount: totalApprovedPremium, status: 'Approved' },
+              JSON.stringify({ debtor_review_completed: false }),
+              JSON.stringify({ debtor_review_completed: true, batch_ready_for_nota: true, final_premium_amount: totalApprovedPremium, status: 'Approved' }),
               user?.email,
               user?.role,
               `All ${updatedDebtors.length} debtors reviewed - ${approvedDebtors.length} approved`
