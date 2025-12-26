@@ -74,14 +74,14 @@ export default function Dashboard() {
       setBorderos(borderoData || []);
 
       // Calculate stats
-      const approved = debtorData.filter(d => d.underwriting_status === 'APPROVED').length;
-      const pending = debtorData.filter(d => d.underwriting_status === 'SUBMITTED').length;
-      const rejected = debtorData.filter(d => d.underwriting_status === 'REJECTED').length;
+      const approved = debtorData.filter(d => d.status === 'APPROVED').length;
+      const pending = debtorData.filter(d => d.status === 'SUBMITTED').length;
+      const rejected = debtorData.filter(d => d.status === 'REJECTED').length;
       
-      const totalExposure = debtorData.reduce((sum, d) => sum + (d.outstanding_amount || 0), 0);
-      const totalPremium = debtorData.reduce((sum, d) => sum + (d.net_premium || 0), 0);
+      const totalExposure = debtorData.reduce((sum, d) => sum + (d.plafon || 0), 0);
+      const totalPremium = debtorData.reduce((sum, d) => sum + (d.net_premi || 0), 0);
       const totalClaimValue = claimData.reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
-      const claimsPaid = claimData.filter(c => c.claim_status === 'SETTLED').reduce((sum, c) => sum + (c.approved_amount || 0), 0);
+      const claimsPaid = claimData.filter(c => c.status === 'Paid').reduce((sum, c) => sum + (c.nilai_klaim || 0), 0);
       
       const lossRatio = totalPremium > 0 ? ((claimsPaid / totalPremium) * 100).toFixed(1) : 0;
 
@@ -106,10 +106,10 @@ export default function Dashboard() {
 
   // Chart data
   const debtorStatusData = [
-    { name: 'Approved', value: stats.approvedDebtors, color: '#10B981' },
-    { name: 'Pending', value: stats.pendingDebtors, color: '#F59E0B' },
-    { name: 'Rejected', value: stats.rejectedDebtors, color: '#EF4444' },
-    { name: 'Draft', value: stats.totalDebtors - stats.approvedDebtors - stats.pendingDebtors - stats.rejectedDebtors, color: '#6B7280' }
+    { name: 'Submitted', value: debtors.filter(d => d.status === 'SUBMITTED').length, color: '#3b82f6' },
+    { name: 'Approved', value: debtors.filter(d => d.status === 'APPROVED').length, color: '#10b981' },
+    { name: 'Rejected', value: debtors.filter(d => d.status === 'REJECTED').length, color: '#ef4444' },
+    { name: 'Conditional', value: debtors.filter(d => d.status === 'CONDITIONAL').length, color: '#f59e0b' }
   ].filter(d => d.value > 0);
 
   const monthlyTrendData = [
@@ -135,11 +135,11 @@ export default function Dashboard() {
   ];
 
   const claimStatusData = [
-    { name: 'Draft', value: claims.filter(c => c.claim_status === 'Draft').length },
-    { name: 'Checked', value: claims.filter(c => c.claim_status === 'Checked').length },
-    { name: 'Doc Verified', value: claims.filter(c => c.claim_status === 'Doc Verified').length },
-    { name: 'Invoiced', value: claims.filter(c => c.claim_status === 'Invoiced').length },
-    { name: 'Paid', value: claims.filter(c => c.claim_status === 'Paid').length }
+    { name: 'Draft', value: claims.filter(c => c.status === 'Draft').length },
+    { name: 'Checked', value: claims.filter(c => c.status === 'Checked').length },
+    { name: 'Doc Verified', value: claims.filter(c => c.status === 'Doc Verified').length },
+    { name: 'Invoiced', value: claims.filter(c => c.status === 'Invoiced').length },
+    { name: 'Paid', value: claims.filter(c => c.status === 'Paid').length }
   ].filter(d => d.value > 0);
 
   const formatCurrency = (value) => {
@@ -152,7 +152,7 @@ export default function Dashboard() {
   const getFilteredData = () => {
     return debtors.filter(d => {
       if (filters.batch !== 'all' && d.batch_id !== filters.batch) return false;
-      if (filters.submitStatus !== 'all' && d.underwriting_status !== filters.submitStatus) return false;
+      if (filters.submitStatus !== 'all' && d.status !== filters.submitStatus) return false;
       return true;
     });
   };
@@ -193,8 +193,8 @@ export default function Dashboard() {
             onClick={() => {
               const data = getFilteredData();
               const csv = [
-                ['Debtor', 'Batch', 'Plafond', 'Underwriting Status'].join(','),
-                ...data.map(d => [d.debtor_name, d.batch_id, d.credit_plafond, d.underwriting_status].join(','))
+                ['Debtor', 'Batch', 'Plafond', 'Status'].join(','),
+                ...data.map(d => [d.nama_peserta, d.batch_id, d.plafon, d.status].join(','))
               ].join('\n');
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
@@ -229,7 +229,7 @@ export default function Dashboard() {
         <ModernKPI
           title="Claims Paid"
           value={`Rp ${formatCurrency(stats.claimsPaid)}`}
-          subtitle={`${claims.filter(c => c.claim_status === 'Paid' || c.claim_status === 'SETTLED').length} claims settled`}
+          subtitle={`${claims.filter(c => c.status === 'Paid').length} claims settled`}
           icon={FileText}
           color="orange"
         />
