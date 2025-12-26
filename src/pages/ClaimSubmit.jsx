@@ -218,8 +218,8 @@ export default function ClaimSubmit() {
             module: 'CLAIM',
             entity_type: 'Batch',
             entity_id: batch.id,
-            old_value: {},
-            new_value: { blocked_reason: 'Nota not PAID' },
+            old_value: '{}',
+            new_value: JSON.stringify({ blocked_reason: 'Nota not PAID' }),
             user_email: user?.email,
             user_role: user?.role,
             reason: 'Attempted claim submission before Nota payment completion'
