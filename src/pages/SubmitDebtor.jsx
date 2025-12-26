@@ -259,15 +259,18 @@ export default function SubmitDebtor() {
       setBatchMode('new');
       setSelectedBatch('');
       
-      // Reload data
-      await loadBatches();
-      await loadDebtors();
+      // Reload data with slight delay
+      setTimeout(async () => {
+        await loadBatches();
+        await loadDebtors();
+      }, 1000);
     } catch (error) {
       console.error('Failed to upload debtors:', error);
-      toast.error('Failed to upload debtors');
-      setErrorMessage('Failed to upload debtors');
+      toast.error('Failed to upload debtors: ' + error.message);
+      setErrorMessage('Failed to upload debtors: ' + error.message);
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   // Handle request revision for selected debtors

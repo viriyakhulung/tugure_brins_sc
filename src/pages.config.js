@@ -16,8 +16,9 @@ import NotificationCenter from './pages/NotificationCenter';
 import PaymentIntent from './pages/PaymentIntent';
 import PaymentStatus from './pages/PaymentStatus';
 import Profile from './pages/Profile';
-import SystemConfiguration from './pages/SystemConfiguration';
 import SubmitDebtor from './pages/SubmitDebtor';
+import SystemConfiguration from './pages/SystemConfiguration';
+import WorkflowGuide from './pages/WorkflowGuide';
 import __Layout from './Layout.jsx';
 
 
@@ -40,8 +41,9 @@ export const PAGES = {
     "PaymentIntent": PaymentIntent,
     "PaymentStatus": PaymentStatus,
     "Profile": Profile,
-    "SystemConfiguration": SystemConfiguration,
     "SubmitDebtor": SubmitDebtor,
+    "SystemConfiguration": SystemConfiguration,
+    "WorkflowGuide": WorkflowGuide,
 }
 
 export const pagesConfig = {
