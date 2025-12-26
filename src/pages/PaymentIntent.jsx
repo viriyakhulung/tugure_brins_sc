@@ -107,6 +107,8 @@ export default function PaymentIntent() {
           module: 'PAYMENT',
           entity_type: 'PaymentIntent',
           entity_id: nota.nota_number,
+          old_value: '{}',
+          new_value: JSON.stringify({ blocked_reason: `Current status: ${nota.status}` }),
           user_email: user?.email,
           user_role: user?.role,
           reason: `Attempted to create Payment Intent before Nota Issued (current status: ${nota.status})`
@@ -144,6 +146,7 @@ export default function PaymentIntent() {
         module: 'PAYMENT',
         entity_type: 'PaymentIntent',
         entity_id: intentId,
+        old_value: '{}',
         new_value: JSON.stringify({ planned_amount: parseFloat(plannedAmount), planned_date: plannedDate, note: 'PLANNING ONLY' }),
         user_email: user?.email,
         user_role: user?.role

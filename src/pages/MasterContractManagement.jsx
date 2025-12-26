@@ -219,8 +219,8 @@ export default function MasterContractManagement() {
         module: 'CONFIG',
         entity_type: 'MasterContract',
         entity_id: selectedContract.id,
-        old_value: selectedContract.effective_status,
-        new_value: updates.effective_status,
+        old_value: JSON.stringify({ status: selectedContract.effective_status }),
+        new_value: JSON.stringify({ status: updates.effective_status }),
         user_email: user?.email,
         user_role: user?.role,
         reason: approvalRemarks
@@ -659,8 +659,8 @@ export default function MasterContractManagement() {
                     module: 'CONFIG',
                     entity_type: 'MasterContract',
                     entity_id: selectedContract.id,
-                    old_value: selectedContract.effective_status,
-                    new_value: newStatus,
+                    old_value: JSON.stringify({ status: selectedContract.effective_status }),
+                    new_value: JSON.stringify({ status: newStatus }),
                     user_email: user?.email,
                     user_role: user?.role,
                     reason: approvalRemarks

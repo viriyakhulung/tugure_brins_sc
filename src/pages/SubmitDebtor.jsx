@@ -240,11 +240,10 @@ export default function SubmitDebtor() {
         'DEBTOR',
         'Debtor',
         batchId,
-        null,
+        '',
         JSON.stringify({ count: parsedData.length }),
         user?.email,
         user?.role,
-        null,
         `Uploaded ${parsedData.length} debtors to batch ${batchId}`
       );
 
@@ -307,11 +306,10 @@ export default function SubmitDebtor() {
           'DEBTOR',
           'Debtor',
           debtor.id,
-          debtor.status,
-          'CONDITIONAL',
+          JSON.stringify({ status: debtor.status }),
+          JSON.stringify({ status: 'CONDITIONAL' }),
           user?.email,
           user?.role,
-          null,
           revisionNote
         );
       }
