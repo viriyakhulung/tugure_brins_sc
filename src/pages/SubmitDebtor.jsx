@@ -97,16 +97,18 @@ export default function SubmitDebtor() {
   // Download template
   const handleDownloadTemplate = () => {
     const headers = [
-      'participant_no', 'loan_account_no', 'credit_agreement_no', 'debtor_name', 
-      'debtor_identifier', 'debtor_address', 'debtor_type', 'credit_type',
-      'loan_type', 'loan_type_desc', 'submission_type_desc', 'covering_type_desc',
-      'coverage_start_date', 'coverage_end_date', 'credit_plafond', 'outstanding_amount',
-      'gross_premium', 'reinsurance_premium', 'ric_amount', 'bf_amount', 'net_premium',
-      'unit_code', 'unit_desc', 'branch_code', 'branch_desc', 'region_desc'
+      'cover_id', 'program_id', 'nomor_rekening_pinjaman', 'nomor_peserta', 'loan_type', 
+      'loan_type_desc', 'cif_rekening_pinjaman', 'jenis_pengajuan_desc', 'jenis_covering_desc',
+      'tanggal_mulai_covering', 'tanggal_akhir_covering', 'plafon', 'nominal_premi',
+      'premi_percentage', 'ric_percentage', 'bf_percentage', 'net_premi',
+      'unit_code', 'unit_desc', 'branch_desc', 'region_desc',
+      'nama_peserta', 'alamat_usaha', 'nomor_perjanjian_kredit',
+      'tanggal_terima', 'tanggal_validasi', 'status_aktif', 'remark_premi', 
+      'flag_restruktur', 'kolektabilitas'
     ];
     
     const csvContent = headers.join(',') + '\n' + 
-      'P001,LA001,CA001,John Doe,1234567890,Jakarta,Individual,Individual,KPR,Mortgage,New,Full,2025-01-01,2030-12-31,100000000,95000000,950000,100000,50000,25000,775000,U001,Unit 1,B001,Branch 1,Region 1';
+      '1001,PRG001,LA001,P001,KPR,Kredit Pemilikan Rumah,CIF001,New,Full,2025-01-01,2030-12-31,100000000,950000,1.0,0.1,0.05,775000,U001,Unit 1,Branch 1,Region 1,John Doe,Jakarta Pusat,CA001,2025-01-15 10:00:00,2025-01-16 14:00:00,1,Sample remark,0,1';
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -184,8 +186,8 @@ export default function SubmitDebtor() {
           batch_year: new Date().getFullYear(),
           contract_id: selectedContract,
           total_records: parsedData.length,
-          total_exposure: parsedData.reduce((sum, d) => sum + (parseFloat(d.outstanding_amount) || 0), 0),
-          total_premium: parsedData.reduce((sum, d) => sum + (parseFloat(d.gross_premium) || 0), 0),
+          total_exposure: parsedData.reduce((sum, d) => sum + (parseFloat(d.plafon) || 0), 0),
+          total_premium: parsedData.reduce((sum, d) => sum + (parseFloat(d.nominal_premi) || 0), 0),
           status: 'Uploaded'
         });
       }
@@ -194,35 +196,40 @@ export default function SubmitDebtor() {
       const debtorsToCreate = parsedData.map(row => ({
         batch_id: batchId,
         contract_id: selectedContract,
-        participant_no: row.participant_no,
-        loan_account_no: row.loan_account_no,
-        credit_agreement_no: row.credit_agreement_no,
-        debtor_name: row.debtor_name,
-        debtor_identifier: row.debtor_identifier,
-        debtor_address: row.debtor_address,
-        debtor_type: row.debtor_type || 'Individual',
-        credit_type: row.credit_type || 'Individual',
+        cover_id: parseInt(row.cover_id) || 0,
+        program_id: row.program_id,
+        nomor_rekening_pinjaman: row.nomor_rekening_pinjaman,
+        nomor_peserta: row.nomor_peserta,
         loan_type: row.loan_type,
         loan_type_desc: row.loan_type_desc,
-        submission_type_desc: row.submission_type_desc,
-        covering_type_desc: row.covering_type_desc,
-        coverage_start_date: row.coverage_start_date,
-        coverage_end_date: row.coverage_end_date,
-        credit_plafond: parseFloat(row.credit_plafond) || 0,
-        outstanding_amount: parseFloat(row.outstanding_amount) || 0,
-        gross_premium: parseFloat(row.gross_premium) || 0,
-        reinsurance_premium: parseFloat(row.reinsurance_premium) || 0,
-        ric_amount: parseFloat(row.ric_amount) || 0,
-        bf_amount: parseFloat(row.bf_amount) || 0,
-        net_premium: parseFloat(row.net_premium) || 0,
+        cif_rekening_pinjaman: row.cif_rekening_pinjaman,
+        jenis_pengajuan_desc: row.jenis_pengajuan_desc,
+        jenis_covering_desc: row.jenis_covering_desc,
+        tanggal_mulai_covering: row.tanggal_mulai_covering,
+        tanggal_akhir_covering: row.tanggal_akhir_covering,
+        plafon: parseFloat(row.plafon) || 0,
+        nominal_premi: parseFloat(row.nominal_premi) || 0,
+        premi_percentage: parseFloat(row.premi_percentage) || 0,
+        ric_percentage: parseFloat(row.ric_percentage) || 0,
+        bf_percentage: parseFloat(row.bf_percentage) || 0,
+        net_premi: parseFloat(row.net_premi) || 0,
         unit_code: row.unit_code,
         unit_desc: row.unit_desc,
-        branch_code: row.branch_code,
         branch_desc: row.branch_desc,
         region_desc: row.region_desc,
-        underwriting_status: 'SUBMITTED',
-        batch_status: 'SUBMITTED',
-        record_status: 'ACTIVE'
+        nama_peserta: row.nama_peserta,
+        alamat_usaha: row.alamat_usaha,
+        nomor_perjanjian_kredit: row.nomor_perjanjian_kredit,
+        tanggal_terima: row.tanggal_terima,
+        tanggal_validasi: row.tanggal_validasi,
+        teller_premium_date: row.teller_premium_date,
+        status_aktif: parseInt(row.status_aktif) || 1,
+        remark_premi: row.remark_premi,
+        flag_restruktur: parseInt(row.flag_restruktur) || 0,
+        kolektabilitas: parseInt(row.kolektabilitas) || 1,
+        version_no: 1,
+        status: 'SUBMITTED',
+        is_locked: false
       }));
 
       await base44.entities.Debtor.bulkCreate(debtorsToCreate);
@@ -290,7 +297,7 @@ export default function SubmitDebtor() {
         const debtor = debtors.find(d => d.id === debtorId);
         
         await base44.entities.Debtor.update(debtor.id, {
-          underwriting_status: 'CONDITIONAL',
+          status: 'CONDITIONAL',
           validation_remarks: revisionNote
         });
 
@@ -300,7 +307,7 @@ export default function SubmitDebtor() {
           'DEBTOR',
           'Debtor',
           debtor.id,
-          debtor.underwriting_status,
+          debtor.status,
           'CONDITIONAL',
           user?.email,
           user?.role,
@@ -334,20 +341,20 @@ export default function SubmitDebtor() {
   // Calculate KPIs
   const kpis = {
     total: debtors.length,
-    submitted: debtors.filter(d => d.underwriting_status === 'SUBMITTED').length,
-    approved: debtors.filter(d => d.underwriting_status === 'APPROVED').length,
-    rejected: debtors.filter(d => d.underwriting_status === 'REJECTED').length,
-    conditional: debtors.filter(d => d.underwriting_status === 'CONDITIONAL').length
+    submitted: debtors.filter(d => d.status === 'SUBMITTED').length,
+    approved: debtors.filter(d => d.status === 'APPROVED').length,
+    rejected: debtors.filter(d => d.status === 'REJECTED').length,
+    conditional: debtors.filter(d => d.status === 'CONDITIONAL').length
   };
 
   // Filter debtors
   const filteredDebtors = debtors.filter(debtor => {
     const contractMatch = filterContract === 'all' || debtor.contract_id === filterContract;
     const batchMatch = filterBatch === 'all' || debtor.batch_id === filterBatch;
-    const statusMatch = filterStatus === 'all' || debtor.underwriting_status === filterStatus;
+    const statusMatch = filterStatus === 'all' || debtor.status === filterStatus;
     const searchMatch = !searchTerm || 
-      debtor.debtor_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      debtor.participant_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      debtor.nama_peserta?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      debtor.nomor_peserta?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       debtor.batch_id?.toLowerCase().includes(searchTerm.toLowerCase());
     
     return contractMatch && batchMatch && statusMatch && searchMatch;
@@ -390,50 +397,50 @@ export default function SubmitDebtor() {
       )
     },
     {
-      header: 'Participant No',
-      accessorKey: 'participant_no',
+      header: 'Nomor Peserta',
+      accessorKey: 'nomor_peserta',
       cell: (row) => (
         <div>
-          <div className="font-medium">{row.participant_no}</div>
-          <div className="text-xs text-gray-500">{row.debtor_name}</div>
+          <div className="font-medium">{row.nomor_peserta}</div>
+          <div className="text-xs text-gray-500">{row.nama_peserta}</div>
         </div>
       )
     },
     {
-      header: 'Credit Info',
+      header: 'Loan Info',
       cell: (row) => (
         <div className="text-sm">
-          <div>{row.credit_type}</div>
+          <div>{row.loan_type}</div>
           <div className="text-xs text-gray-500">{row.loan_type_desc}</div>
         </div>
       )
     },
     {
-      header: 'Outstanding',
-      accessorKey: 'outstanding_amount',
+      header: 'Plafon',
+      accessorKey: 'plafon',
       cell: (row) => (
         <div className="text-right">
           <div className="font-medium">
-            Rp {row.outstanding_amount?.toLocaleString('id-ID')}
+            Rp {row.plafon?.toLocaleString('id-ID')}
           </div>
         </div>
       )
     },
     {
-      header: 'Premium',
-      accessorKey: 'gross_premium',
+      header: 'Net Premi',
+      accessorKey: 'net_premi',
       cell: (row) => (
         <div className="text-right">
           <div className="font-medium">
-            Rp {row.gross_premium?.toLocaleString('id-ID')}
+            Rp {row.net_premi?.toLocaleString('id-ID')}
           </div>
         </div>
       )
     },
     {
       header: 'Status',
-      accessorKey: 'underwriting_status',
-      cell: (row) => <StatusBadge status={row.underwriting_status} />
+      accessorKey: 'status',
+      cell: (row) => <StatusBadge status={row.status} />
     },
     {
       header: 'Submitted',

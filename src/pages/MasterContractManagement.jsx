@@ -144,18 +144,28 @@ export default function MasterContractManagement() {
 
           await base44.entities.MasterContract.create({
             contract_id: uploadMode === 'revise' ? selectedContractForRevision : contractId,
-            policy_number: policyNumber,
-            product_type: values[2]?.trim() || 'Treaty',
-            credit_type: values[3]?.trim() || 'Individual',
-            coverage_start_date: values[4]?.trim(),
-            coverage_end_date: values[5]?.trim(),
-            coverage_limit: parseFloat(values[6]) || 0,
-            reinsurance_share: parseFloat(values[7]) || 0,
+            policy_no: policyNumber,
+            program_id: values[2]?.trim() || '',
+            product_type: values[3]?.trim() || 'Treaty',
+            credit_type: values[4]?.trim() || 'Individual',
+            loan_type: values[5]?.trim() || '',
+            loan_type_desc: values[6]?.trim() || '',
+            coverage_start_date: values[7]?.trim(),
+            coverage_end_date: values[8]?.trim(),
+            max_tenor_month: parseInt(values[9]) || 0,
+            max_plafond: parseFloat(values[10]) || 0,
+            share_tugure_percentage: parseFloat(values[11]) || 0,
+            premium_rate: parseFloat(values[12]) || 0,
+            ric_rate: parseFloat(values[13]) || 0,
+            bf_rate: parseFloat(values[14]) || 0,
+            allowed_kolektabilitas: values[15]?.trim() || '',
+            allowed_region: values[16]?.trim() || '',
+            currency: values[17]?.trim() || 'IDR',
+            remark: values[18]?.trim() || '',
             effective_status: 'Draft',
             version: latestVersion + 1,
             parent_contract_id: parentId,
-            effective_date: values[4]?.trim(),
-            remarks: values[8]?.trim() || ''
+            effective_date: values[7]?.trim()
           });
           
           uploaded++;
@@ -274,7 +284,7 @@ export default function MasterContractManagement() {
         </div>
       )
     },
-    { header: 'Policy Number', accessorKey: 'policy_number' },
+    { header: 'Policy Number', accessorKey: 'policy_no' },
     { header: 'Product Type', accessorKey: 'product_type' },
     { header: 'Credit Type', accessorKey: 'credit_type' },
     { 
@@ -286,12 +296,12 @@ export default function MasterContractManagement() {
       )
     },
     { 
-      header: 'Coverage Limit', 
-      cell: (row) => `IDR ${((row.coverage_limit || 0) / 1000000).toFixed(1)}M`
+      header: 'Max Plafond', 
+      cell: (row) => `IDR ${((row.max_plafond || 0) / 1000000).toFixed(1)}M`
     },
     { 
-      header: 'Share %', 
-      cell: (row) => `${row.reinsurance_share || 0}%`
+      header: 'Share TUGURE %', 
+      cell: (row) => `${row.share_tugure_percentage || 0}%`
     },
     { 
       header: 'Status', 
@@ -418,8 +428,8 @@ export default function MasterContractManagement() {
             </Button>
             <Button variant="outline" onClick={() => {
               const csv = [
-                ['contract_id', 'policy_number', 'product_type', 'credit_type', 'coverage_start_date', 'coverage_end_date', 'coverage_limit', 'reinsurance_share', 'remarks'].join(','),
-                ['MC-2025-001', 'POL-12345', 'Treaty', 'Individual', '2025-01-01', '2025-12-31', '1000000000', '75', 'Sample contract'].join(',')
+                ['contract_id', 'policy_no', 'program_id', 'product_type', 'credit_type', 'loan_type', 'loan_type_desc', 'coverage_start_date', 'coverage_end_date', 'max_tenor_month', 'max_plafond', 'share_tugure_percentage', 'premium_rate', 'ric_rate', 'bf_rate', 'allowed_kolektabilitas', 'allowed_region', 'currency', 'remark'].join(','),
+                ['MC-2025-001', 'POL-12345', 'PRG001', 'Treaty', 'Individual', 'KPR', 'Kredit Pemilikan Rumah', '2025-01-01', '2025-12-31', '240', '1000000000', '75', '1.0', '0.1', '0.05', '1,2,3', 'Jakarta,Bandung', 'IDR', 'Sample contract'].join(',')
               ].join('\n');
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
@@ -800,11 +810,11 @@ export default function MasterContractManagement() {
                             <StatusBadge status={version.effective_status} />
                           </div>
                           <div className="text-sm space-y-1">
-                            <p><strong>Policy:</strong> {version.policy_number}</p>
+                            <p><strong>Policy:</strong> {version.policy_no}</p>
                             <p><strong>Coverage:</strong> {version.coverage_start_date} to {version.coverage_end_date}</p>
-                            <p><strong>Limit:</strong> IDR {((version.coverage_limit || 0) / 1000000).toFixed(1)}M</p>
-                            <p><strong>Share:</strong> {version.reinsurance_share}%</p>
-                            {version.remarks && <p><strong>Remarks:</strong> {version.remarks}</p>}
+                            <p><strong>Max Plafond:</strong> IDR {((version.max_plafond || 0) / 1000000).toFixed(1)}M</p>
+                            <p><strong>Share TUGURE:</strong> {version.share_tugure_percentage}%</p>
+                            {version.remark && <p><strong>Remarks:</strong> {version.remark}</p>}
                           </div>
                         </div>
                       </div>

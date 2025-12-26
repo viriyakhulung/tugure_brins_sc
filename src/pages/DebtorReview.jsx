@@ -91,7 +91,7 @@ export default function DebtorReview() {
         if (!debtor || !debtor.id) continue;
         
         await base44.entities.Debtor.update(debtor.id, {
-          underwriting_status: newStatus,
+          status: newStatus,
           rejection_reason: action === 'reject' ? approvalRemarks : null
         });
 
@@ -100,8 +100,8 @@ export default function DebtorReview() {
             batch_id: debtor.batch_id,
             debtor_id: debtor.id,
             record_status: 'Accepted',
-            exposure_amount: debtor.outstanding_amount || 0,
-            premium_amount: debtor.gross_premium || 0,
+            exposure_amount: debtor.plafon || 0,
+            premium_amount: debtor.net_premi || 0,
             revision_count: 0,
             accepted_by: user?.email,
             accepted_date: new Date().toISOString().split('T')[0]
@@ -131,7 +131,7 @@ export default function DebtorReview() {
           'DEBTOR',
           'Debtor',
           debtor.id,
-          { status: debtor.underwriting_status },
+          { status: debtor.status },
           { status: newStatus, remarks: approvalRemarks },
           user?.email,
           user?.role,
@@ -149,23 +149,23 @@ export default function DebtorReview() {
           const updatedDebtors = batchData.allDebtors.map(d => {
             const processed = debtorsToProcess.find(dp => dp.id === d.id);
             if (processed) {
-              return { ...d, underwriting_status: newStatus };
+              return { ...d, status: newStatus };
             }
             return d;
           });
           
           const reviewedDebtors = updatedDebtors.filter(d => 
-            d.underwriting_status === 'APPROVED' || 
-            d.underwriting_status === 'REJECTED'
+            d.status === 'APPROVED' || 
+            d.status === 'REJECTED'
           );
           
-          const approvedDebtors = updatedDebtors.filter(d => d.underwriting_status === 'APPROVED');
+          const approvedDebtors = updatedDebtors.filter(d => d.status === 'APPROVED');
           
           const allReviewed = reviewedDebtors.length === updatedDebtors.length;
           const hasApproved = approvedDebtors.length > 0;
           
-          const totalApprovedExposure = approvedDebtors.reduce((sum, d) => sum + (d.credit_plafond || 0), 0);
-          const totalApprovedPremium = approvedDebtors.reduce((sum, d) => sum + (d.net_premium || 0), 0);
+          const totalApprovedExposure = approvedDebtors.reduce((sum, d) => sum + (d.plafon || 0), 0);
+          const totalApprovedPremium = approvedDebtors.reduce((sum, d) => sum + (d.net_premi || 0), 0);
           
           await base44.entities.Batch.update(batchRecord.id, {
             final_exposure_amount: totalApprovedExposure,
@@ -302,16 +302,15 @@ export default function DebtorReview() {
       header: 'Debtor',
       cell: (row) => (
         <div>
-          <p className="font-medium">{row.debtor_name}</p>
-          <p className="text-sm text-gray-500">{row.participant_no}</p>
+          <p className="font-medium">{row.nama_peserta}</p>
+          <p className="text-sm text-gray-500">{row.nomor_peserta}</p>
         </div>
       )
     },
     { header: 'Batch', accessorKey: 'batch_id', cell: (row) => <span className="font-mono text-sm">{row.batch_id?.slice(0, 15)}</span> },
-    { header: 'Plafond', cell: (row) => `Rp ${(row.credit_plafond || 0).toLocaleString('id-ID')}` },
-    { header: 'Premium', cell: (row) => `Rp ${(row.gross_premium || 0).toLocaleString('id-ID')}` },
-    { header: 'Underwriting', cell: (row) => <StatusBadge status={row.underwriting_status} /> },
-    { header: 'Batch Status', cell: (row) => <StatusBadge status={row.batch_status} /> },
+    { header: 'Plafond', cell: (row) => `Rp ${(row.plafon || 0).toLocaleString('id-ID')}` },
+    { header: 'Net Premi', cell: (row) => `Rp ${(row.net_premi || 0).toLocaleString('id-ID')}` },
+    { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     { 
       header: 'Remarks', 
       cell: (row) => row.validation_remarks ? (
@@ -334,7 +333,7 @@ export default function DebtorReview() {
           >
             <Eye className="w-4 h-4" />
           </Button>
-          {row.underwriting_status === 'SUBMITTED' && (
+          {row.status === 'SUBMITTED' && (
             <>
               <Button 
                 size="sm" 
@@ -422,11 +421,11 @@ export default function DebtorReview() {
 
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <ModernKPI title="Pending Review" value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length} subtitle="Awaiting approval" icon={FileText} color="orange" />
-        <ModernKPI title="Approved" value={debtors.filter(d => d.underwriting_status === 'APPROVED').length} subtitle="Ready for nota" icon={CheckCircle2} color="green" />
-        <ModernKPI title="Rejected" value={debtors.filter(d => d.underwriting_status === 'REJECTED').length} subtitle="Requires revision" icon={AlertCircle} color="red" />
-        <ModernKPI title="Conditional" value={debtors.filter(d => d.underwriting_status === 'CONDITIONAL').length} subtitle="Additional docs needed" icon={Clock} color="purple" />
-        <ModernKPI title="Total Exposure" value={`Rp ${(debtors.filter(d => d.underwriting_status === 'APPROVED').reduce((sum, d) => sum + (d.outstanding_amount || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Approved only" icon={DollarSign} color="blue" />
+        <ModernKPI title="Pending Review" value={debtors.filter(d => d.status === 'SUBMITTED').length} subtitle="Awaiting approval" icon={FileText} color="orange" />
+        <ModernKPI title="Approved" value={debtors.filter(d => d.status === 'APPROVED').length} subtitle="Ready for nota" icon={CheckCircle2} color="green" />
+        <ModernKPI title="Rejected" value={debtors.filter(d => d.status === 'REJECTED').length} subtitle="Requires revision" icon={AlertCircle} color="red" />
+        <ModernKPI title="Conditional" value={debtors.filter(d => d.status === 'CONDITIONAL').length} subtitle="Additional docs needed" icon={Clock} color="purple" />
+        <ModernKPI title="Total Plafon" value={`Rp ${(debtors.filter(d => d.status === 'APPROVED').reduce((sum, d) => sum + (d.plafon || 0), 0) / 1000000).toFixed(1)}M`} subtitle="Approved only" icon={DollarSign} color="blue" />
       </div>
 
       <DataTable
@@ -530,11 +529,11 @@ export default function DebtorReview() {
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div><span className="text-gray-500">Participant No:</span><p className="font-medium">{selectedDebtor?.participant_no}</p></div>
+              <div><span className="text-gray-500">Nomor Peserta:</span><p className="font-medium">{selectedDebtor?.nomor_peserta}</p></div>
               <div><span className="text-gray-500">Batch ID:</span><p className="font-medium">{selectedDebtor?.batch_id}</p></div>
-              <div><span className="text-gray-500">Plafond:</span><p className="font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</p></div>
-              <div><span className="text-gray-500">Premium:</span><p className="font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</p></div>
-              <div><span className="text-gray-500">Status:</span><StatusBadge status={selectedDebtor?.underwriting_status} /></div>
+              <div><span className="text-gray-500">Plafon:</span><p className="font-medium">Rp {(selectedDebtor?.plafon || 0).toLocaleString('id-ID')}</p></div>
+              <div><span className="text-gray-500">Net Premi:</span><p className="font-medium">Rp {(selectedDebtor?.net_premi || 0).toLocaleString('id-ID')}</p></div>
+              <div><span className="text-gray-500">Status:</span><StatusBadge status={selectedDebtor?.status} /></div>
               {selectedDebtor?.validation_remarks && (
                 <div className="col-span-2 p-3 bg-orange-50 border border-orange-200 rounded">
                   <p className="text-sm font-medium text-orange-700">Validation Remarks:</p>
@@ -570,8 +569,8 @@ export default function DebtorReview() {
             {!approvalAction?.includes('bulk') && selectedDebtor && (
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-gray-500">Plafond:</span><span className="ml-2 font-medium">Rp {(selectedDebtor?.credit_plafond || 0).toLocaleString('id-ID')}</span></div>
-                  <div><span className="text-gray-500">Premium:</span><span className="ml-2 font-medium">Rp {(selectedDebtor?.gross_premium || 0).toLocaleString('id-ID')}</span></div>
+                  <div><span className="text-gray-500">Plafond:</span><span className="ml-2 font-medium">Rp {(selectedDebtor?.plafon || 0).toLocaleString('id-ID')}</span></div>
+                  <div><span className="text-gray-500">Net Premi:</span><span className="ml-2 font-medium">Rp {(selectedDebtor?.net_premi || 0).toLocaleString('id-ID')}</span></div>
                 </div>
               </div>
             )}

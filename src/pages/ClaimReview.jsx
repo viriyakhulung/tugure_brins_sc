@@ -85,7 +85,7 @@ export default function ClaimReview() {
     // CRITICAL: Block claim approval if Nota payment not completed
     if (actionType === 'check' || actionType === 'verify') {
       // Find related batch and verify Nota payment status
-      const relatedDebtor = await base44.entities.Debtor.filter({ participant_no: selectedClaim.participant_no });
+      const relatedDebtor = await base44.entities.Debtor.filter({ nomor_peserta: selectedClaim.participant_no });
       if (relatedDebtor.length > 0) {
         const batchId = relatedDebtor[0].batch_id;
         const batchNotas = await base44.entities.Nota.filter({ 
@@ -129,19 +129,19 @@ export default function ClaimReview() {
       switch (actionType) {
         case 'check':
           newStatus = 'Checked';
-          updateData.claim_status = 'Checked';
+          updateData.status = 'Checked';
           updateData.checked_by = user?.email;
           updateData.checked_date = new Date().toISOString().split('T')[0];
           break;
         case 'verify':
           newStatus = 'Doc Verified';
-          updateData.claim_status = 'Doc Verified';
+          updateData.status = 'Doc Verified';
           updateData.doc_verified_by = user?.email;
           updateData.doc_verified_date = new Date().toISOString().split('T')[0];
           break;
         case 'invoice':
           newStatus = 'Invoiced';
-          updateData.claim_status = 'Invoiced';
+          updateData.status = 'Invoiced';
           updateData.invoiced_by = user?.email;
           updateData.invoiced_date = new Date().toISOString().split('T')[0];
           
@@ -171,7 +171,7 @@ export default function ClaimReview() {
           break;
         case 'reject':
           newStatus = 'Draft';
-          updateData.claim_status = 'Draft';
+          updateData.status = 'Draft';
           updateData.rejection_reason = remarks;
           break;
       }
@@ -192,7 +192,7 @@ export default function ClaimReview() {
         'CLAIM',
         'Claim',
         selectedClaim.id,
-        { status: selectedClaim.claim_status },
+        { status: selectedClaim.status },
         { status: newStatus },
         user?.email,
         user?.role,
@@ -211,7 +211,7 @@ export default function ClaimReview() {
     setProcessing(false);
   };
 
-  const pendingClaims = claims.filter(c => c.claim_status === 'Draft' || c.claim_status === 'Checked');
+  const pendingClaims = claims.filter(c => c.status === 'Draft' || c.status === 'Checked');
 
   const toggleClaimSelection = (claimId) => {
     setSelectedClaims(prev => 
@@ -242,7 +242,7 @@ export default function ClaimReview() {
     { header: 'Debtor', accessorKey: 'nama_tertanggung' },
     { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
     { header: 'Share Tugure', cell: (row) => `Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')}` },
-    { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> },
+    { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     {
       header: 'Actions',
       cell: (row) => (
@@ -250,7 +250,7 @@ export default function ClaimReview() {
           <Button variant="outline" size="sm" onClick={() => { setSelectedClaim(row); setShowViewDialog(true); }}>
             <Eye className="w-4 h-4" />
           </Button>
-          {row.claim_status === 'Draft' && (
+          {row.status === 'Draft' && (
             <>
               <Button size="sm" className="bg-blue-600" onClick={() => { setSelectedClaim(row); setActionType('check'); setShowActionDialog(true); }}>
                 Check
@@ -260,12 +260,12 @@ export default function ClaimReview() {
               </Button>
             </>
           )}
-          {row.claim_status === 'Checked' && (
+          {row.status === 'Checked' && (
             <Button size="sm" className="bg-green-600" onClick={() => { setSelectedClaim(row); setActionType('verify'); setShowActionDialog(true); }}>
               Verify Docs
             </Button>
           )}
-          {row.claim_status === 'Doc Verified' && (
+          {row.status === 'Doc Verified' && (
             <Button size="sm" className="bg-purple-600" onClick={() => { setSelectedClaim(row); setActionType('invoice'); setShowActionDialog(true); }}>
               Issue Nota
             </Button>
@@ -292,9 +292,9 @@ export default function ClaimReview() {
                   setProcessing(true);
                   for (const claimId of selectedClaims) {
                     const claim = claims.find(c => c.id === claimId);
-                    if (claim?.claim_status === 'Draft') {
+                    if (claim?.status === 'Draft') {
                       await base44.entities.Claim.update(claimId, {
-                        claim_status: 'Checked',
+                        status: 'Checked',
                         checked_by: user?.email,
                         checked_date: new Date().toISOString().split('T')[0]
                       });
@@ -312,7 +312,7 @@ export default function ClaimReview() {
                   setProcessing(true);
                   for (const claimId of selectedClaims) {
                     await base44.entities.Claim.update(claimId, {
-                      claim_status: 'Draft',
+                      status: 'Draft',
                       rejection_reason: 'Bulk rejection'
                     });
                   }
@@ -494,7 +494,7 @@ export default function ClaimReview() {
               <div><span className="text-gray-500">Claim No:</span><span className="ml-2 font-medium">{selectedClaim?.claim_no}</span></div>
               <div><span className="text-gray-500">Debtor:</span><span className="ml-2 font-medium">{selectedClaim?.nama_tertanggung}</span></div>
               <div><span className="text-gray-500">Amount:</span><span className="ml-2 font-medium">Rp {(selectedClaim?.nilai_klaim || 0).toLocaleString()}</span></div>
-              <div><span className="text-gray-500">Status:</span><StatusBadge status={selectedClaim?.claim_status} /></div>
+              <div><span className="text-gray-500">Status:</span><StatusBadge status={selectedClaim?.status} /></div>
             </div>
           </div>
           <DialogFooter>

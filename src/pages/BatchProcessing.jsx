@@ -127,11 +127,11 @@ export default function BatchProcessing() {
         const batchClaims = await base44.entities.Claim.filter({ debtor_id: { $in: batchDebtors.map(d => d.id) } });
         
         const unreviewed = batchDebtors.filter(d => 
-          d.underwriting_status !== 'APPROVED' && d.underwriting_status !== 'REJECTED'
+          d.status !== 'APPROVED' && d.status !== 'REJECTED'
         );
         
         const pendingClaims = batchClaims?.filter(c => 
-          c.claim_status !== 'Paid' && c.claim_status !== 'Draft'
+          c.status !== 'Paid' && c.status !== 'Draft'
         ) || [];
 
         if (unreviewed.length > 0 || pendingClaims.length > 0) {
@@ -147,10 +147,10 @@ export default function BatchProcessing() {
           closed_date: new Date().toISOString().split('T')[0]
         });
 
-        // Mark debtors as completed
+        // Mark debtors as locked
         for (const debtor of batchDebtors) {
           await base44.entities.Debtor.update(debtor.id, {
-            batch_status: 'COMPLETED'
+            is_locked: true
           });
         }
 
@@ -257,15 +257,8 @@ export default function BatchProcessing() {
         // Update APPROVED debtors only with invoice reference
         const approvedDebtors = debtors.filter(d => 
           d.batch_id === selectedBatch.batch_id && 
-          d.underwriting_status === 'APPROVED'
+          d.status === 'APPROVED'
         );
-        for (const debtor of approvedDebtors) {
-          await base44.entities.Debtor.update(debtor.id, {
-            invoice_no: invoiceNumber,
-            invoice_amount: debtor.gross_premium || 0,
-            invoice_status: 'ISSUED'
-          });
-        }
         
         await createAuditLog(
           'NOTA_GENERATED_FROM_FINAL',
