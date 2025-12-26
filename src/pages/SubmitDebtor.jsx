@@ -85,25 +85,35 @@ export default function SubmitDebtor() {
 
   const loadMyDebtors = async () => {
     if (!user?.email) {
-      console.log('User email not available yet');
+      console.log('❌ User email not available yet');
       return;
     }
     
     try {
+      console.log('🔄 Loading all debtors...');
       const allDebtors = await base44.entities.Debtor.list();
-      console.log('All debtors loaded:', allDebtors.length);
-      console.log('Current user email:', user.email);
+      console.log('✅ All debtors loaded:', allDebtors.length);
+      console.log('👤 Current user email:', user.email);
       
-      // Filter by created_by email
-      const mySubmittedDebtors = allDebtors.filter(d => 
-        d.created_by === user?.email && 
-        d.record_status === 'ACTIVE'
-      );
+      // Debug: Show sample created_by values
+      if (allDebtors.length > 0) {
+        console.log('📋 Sample created_by values:', allDebtors.slice(0, 3).map(d => d.created_by));
+      }
       
-      console.log('My submitted debtors:', mySubmittedDebtors.length);
+      // Filter by created_by email and ensure record is active
+      const mySubmittedDebtors = allDebtors.filter(d => {
+        const isMatch = d.created_by === user?.email && d.record_status === 'ACTIVE';
+        if (isMatch) {
+          console.log('✓ Match found:', d.participant_no, d.debtor_name);
+        }
+        return isMatch;
+      });
+      
+      console.log('✅ Filtered debtors for current user:', mySubmittedDebtors.length);
+      console.log('📊 Debtors to display:', mySubmittedDebtors);
       setMyDebtors(mySubmittedDebtors || []);
     } catch (error) {
-      console.error('Failed to load my debtors:', error);
+      console.error('❌ Failed to load my debtors:', error);
       setMyDebtors([]);
     }
   };
