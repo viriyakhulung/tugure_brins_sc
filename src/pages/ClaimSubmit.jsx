@@ -86,21 +86,36 @@ export default function ClaimSubmit() {
   };
 
   const downloadTemplate = () => {
+    // Sample data: 2 contracts, 2 batches each, 5 debtors each batch, 2 claims per batch
+    const sampleData = [
+      // Contract MC-001, Batch BATCH-2025-01-001
+      'CLM-2025-01-001,POL-2025-001,CERT-001,PT Maju Jaya,1234567890001,FK-001,2025-01,2025-01-15,500000000,375000000,1,2025-06-15,250000000,75,187500000,true,P-2025-001-001,BATCH-2025-01-001,MC-001',
+      'CLM-2025-01-002,POL-2025-001,CERT-002,CV Berkah Abadi,1234567890002,FK-002,2025-01,2025-01-16,300000000,225000000,1,2025-06-16,150000000,75,112500000,true,P-2025-001-002,BATCH-2025-01-001,MC-001',
+      // Contract MC-001, Batch BATCH-2025-01-002
+      'CLM-2025-01-003,POL-2025-001,CERT-006,UD Sentosa Makmur,1234567890006,FK-006,2025-01,2025-01-20,400000000,300000000,1,2025-06-20,200000000,75,150000000,true,P-2025-001-006,BATCH-2025-01-002,MC-001',
+      'CLM-2025-01-004,POL-2025-001,CERT-007,PT Sejahtera Indo,1234567890007,FK-007,2025-01,2025-01-21,450000000,337500000,2,2025-06-21,225000000,75,168750000,true,P-2025-001-007,BATCH-2025-01-002,MC-001',
+      // Contract MC-002, Batch BATCH-2025-02-001
+      'CLM-2025-02-001,POL-2025-002,CERT-011,CV Mandiri Jaya,2234567890001,FK-011,2025-02,2025-02-01,600000000,450000000,1,2025-07-01,300000000,80,240000000,true,P-2025-002-001,BATCH-2025-02-001,MC-002',
+      'CLM-2025-02-002,POL-2025-002,CERT-012,PT Global Tech,2234567890002,FK-012,2025-02,2025-02-02,550000000,412500000,1,2025-07-02,275000000,80,220000000,true,P-2025-002-002,BATCH-2025-02-001,MC-002',
+      // Contract MC-002, Batch BATCH-2025-02-002
+      'CLM-2025-02-003,POL-2025-002,CERT-016,UD Harapan Baru,2234567890006,FK-016,2025-02,2025-02-06,350000000,262500000,1,2025-07-06,175000000,80,140000000,true,P-2025-002-006,BATCH-2025-02-002,MC-002',
+      'CLM-2025-02-004,POL-2025-002,CERT-017,CV Mitra Usaha,2234567890007,FK-017,2025-02,2025-02-07,420000000,315000000,2,2025-07-07,210000000,80,168000000,true,P-2025-002-007,BATCH-2025-02-002,MC-002'
+    ];
+
     const headers = [
       'claim_no', 'policy_no', 'nomor_sertifikat', 'nama_tertanggung', 'no_ktp_npwp', 
       'no_fasilitas_kredit', 'bdo_premi', 'tanggal_realisasi_kredit', 'plafond',
       'max_coverage', 'kol_debitur', 'dol', 'nilai_klaim', 'share_tugure_percentage', 
-      'share_tugure_amount', 'check_bdo_premi'
+      'share_tugure_amount', 'check_bdo_premi', 'nomor_peserta', 'batch_id', 'contract_id'
     ];
     
-    const csvContent = headers.join(',') + '\n' + 
-      'CLM001,POL001,CERT001,John Doe,1234567890,FK001,2025-01,2025-01-01,100000000,75000000,1,2025-06-15,50000000,75,37500000,true';
+    const csvContent = headers.join(',') + '\n' + sampleData.join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'claim_template.csv';
+    a.download = 'claim_template_sample.csv';
     a.click();
   };
 
@@ -135,7 +150,7 @@ export default function ClaimSubmit() {
           row[header] = values[index]?.trim() || '';
         });
         
-        const debtor = batchDebtors.find(d => d.nomor_peserta === row.participant_no);
+        const debtor = batchDebtors.find(d => d.nomor_peserta === row.nomor_peserta);
         
         let rowRemarks = [];
         if (!debtor) {
@@ -152,7 +167,7 @@ export default function ClaimSubmit() {
         if (rowRemarks.length > 0) {
           validationErrors.push({ 
             row: i + 1, 
-            participant: row.participant_no, 
+            participant: row.nomor_peserta, 
             issues: rowRemarks 
           });
         }
@@ -176,8 +191,8 @@ export default function ClaimSubmit() {
           check_bdo_premi: row.check_bdo_premi === 'true' || row.check_bdo_premi === true,
           validation_remarks: rowRemarks.join('; '),
           debtor_id: debtor?.id,
-          contract_id: debtor?.contract_id,
-          batch_id: debtor?.batch_id
+          contract_id: row.contract_id || debtor?.contract_id,
+          batch_id: row.batch_id || debtor?.batch_id
         });
       }
       

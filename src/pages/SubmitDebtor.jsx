@@ -96,6 +96,34 @@ export default function SubmitDebtor() {
 
   // Download template
   const handleDownloadTemplate = () => {
+    // Sample: 2 contracts, 2 batches each, 5 debtors per batch (20 total)
+    const sampleData = [
+      // Contract MC-001, Batch BATCH-2025-01-001
+      '1001,PRG-001,LA-001,P-2025-001-001,KPR,Kredit Pemilikan Rumah,CIF-001,New,Full,2025-01-01,2030-12-31,500000000,4750000,1.0,0.1,0.05,3875000,U001,Unit Jakarta,Branch Sudirman,DKI Jakarta,PT Maju Jaya,Jl. Sudirman No.1 Jakarta,CA-001,2025-01-15 10:00:00,2025-01-16 14:00:00,1,Approved by underwriting,0,1,BATCH-2025-01-001,MC-001',
+      '1002,PRG-001,LA-002,P-2025-001-002,KPR,Kredit Pemilikan Rumah,CIF-002,New,Full,2025-01-01,2030-12-31,300000000,2850000,1.0,0.1,0.05,2325000,U001,Unit Jakarta,Branch Sudirman,DKI Jakarta,CV Berkah Abadi,Jl. Thamrin No.2 Jakarta,CA-002,2025-01-15 11:00:00,2025-01-16 15:00:00,1,Approved,0,1,BATCH-2025-01-001,MC-001',
+      '1003,PRG-001,LA-003,P-2025-001-003,KPR,Kredit Pemilikan Rumah,CIF-003,New,Full,2025-01-01,2030-12-31,450000000,4275000,1.0,0.1,0.05,3487500,U001,Unit Jakarta,Branch Sudirman,DKI Jakarta,PT Cahaya Terang,Jl. Gatot Subroto No.3,CA-003,2025-01-15 12:00:00,2025-01-16 16:00:00,1,Good standing,0,1,BATCH-2025-01-001,MC-001',
+      '1004,PRG-001,LA-004,P-2025-001-004,KPR,Kredit Pemilikan Rumah,CIF-004,New,Full,2025-01-01,2030-12-31,350000000,3325000,1.0,0.1,0.05,2712500,U001,Unit Jakarta,Branch Sudirman,DKI Jakarta,UD Sumber Rezeki,Jl. Rasuna Said No.4,CA-004,2025-01-15 13:00:00,2025-01-16 17:00:00,1,Verified,0,1,BATCH-2025-01-001,MC-001',
+      '1005,PRG-001,LA-005,P-2025-001-005,KPR,Kredit Pemilikan Rumah,CIF-005,New,Full,2025-01-01,2030-12-31,400000000,3800000,1.0,0.1,0.05,3100000,U001,Unit Jakarta,Branch Sudirman,DKI Jakarta,CV Mitra Sejati,Jl. HR Rasuna No.5,CA-005,2025-01-15 14:00:00,2025-01-16 18:00:00,1,Complete documents,0,1,BATCH-2025-01-001,MC-001',
+      // Contract MC-001, Batch BATCH-2025-01-002
+      '1006,PRG-001,LA-006,P-2025-001-006,KPR,Kredit Pemilikan Rumah,CIF-006,New,Full,2025-01-01,2030-12-31,400000000,3800000,1.0,0.1,0.05,3100000,U002,Unit Bandung,Branch Asia Afrika,Jawa Barat,UD Sentosa Makmur,Jl. Asia Afrika No.10,CA-006,2025-01-20 09:00:00,2025-01-21 10:00:00,1,Approved,0,1,BATCH-2025-01-002,MC-001',
+      '1007,PRG-001,LA-007,P-2025-001-007,KPR,Kredit Pemilikan Rumah,CIF-007,New,Full,2025-01-01,2030-12-31,450000000,4275000,1.0,0.1,0.05,3487500,U002,Unit Bandung,Branch Asia Afrika,Jawa Barat,PT Sejahtera Indo,Jl. Dago No.11,CA-007,2025-01-20 10:00:00,2025-01-21 11:00:00,1,Complete,0,2,BATCH-2025-01-002,MC-001',
+      '1008,PRG-001,LA-008,P-2025-001-008,KPR,Kredit Pemilikan Rumah,CIF-008,New,Full,2025-01-01,2030-12-31,380000000,3610000,1.0,0.1,0.05,2945000,U002,Unit Bandung,Branch Asia Afrika,Jawa Barat,CV Karya Mandiri,Jl. Braga No.12,CA-008,2025-01-20 11:00:00,2025-01-21 12:00:00,1,Good,0,1,BATCH-2025-01-002,MC-001',
+      '1009,PRG-001,LA-009,P-2025-001-009,KPR,Kredit Pemilikan Rumah,CIF-009,New,Full,2025-01-01,2030-12-31,420000000,3990000,1.0,0.1,0.05,3255000,U002,Unit Bandung,Branch Asia Afrika,Jawa Barat,PT Harapan Bangsa,Jl. Sudirman No.13,CA-009,2025-01-20 12:00:00,2025-01-21 13:00:00,1,Verified,0,1,BATCH-2025-01-002,MC-001',
+      '1010,PRG-001,LA-010,P-2025-001-010,KPR,Kredit Pemilikan Rumah,CIF-010,New,Full,2025-01-01,2030-12-31,360000000,3420000,1.0,0.1,0.05,2790000,U002,Unit Bandung,Branch Asia Afrika,Jawa Barat,UD Berkah Jaya,Jl. Merdeka No.14,CA-010,2025-01-20 13:00:00,2025-01-21 14:00:00,1,Approved,0,1,BATCH-2025-01-002,MC-001',
+      // Contract MC-002, Batch BATCH-2025-02-001
+      '2001,PRG-002,LA-011,P-2025-002-001,KMK,Kredit Modal Kerja,CIF-011,New,Full,2025-02-01,2026-02-01,600000000,6000000,1.0,0.15,0.08,4920000,U003,Unit Surabaya,Branch Basuki Rahmat,Jawa Timur,CV Mandiri Jaya,Jl. Basuki Rahmat No.20,CA-011,2025-02-01 09:00:00,2025-02-02 10:00:00,1,Complete docs,0,1,BATCH-2025-02-001,MC-002',
+      '2002,PRG-002,LA-012,P-2025-002-002,KMK,Kredit Modal Kerja,CIF-012,New,Full,2025-02-01,2026-02-01,550000000,5500000,1.0,0.15,0.08,4510000,U003,Unit Surabaya,Branch Basuki Rahmat,Jawa Timur,PT Global Tech,Jl. Pemuda No.21,CA-012,2025-02-01 10:00:00,2025-02-02 11:00:00,1,Approved,0,1,BATCH-2025-02-001,MC-002',
+      '2003,PRG-002,LA-013,P-2025-002-003,KMK,Kredit Modal Kerja,CIF-013,New,Full,2025-02-01,2026-02-01,480000000,4800000,1.0,0.15,0.08,3936000,U003,Unit Surabaya,Branch Basuki Rahmat,Jawa Timur,UD Sumber Makmur,Jl. Tunjungan No.22,CA-013,2025-02-01 11:00:00,2025-02-02 12:00:00,1,Verified,0,1,BATCH-2025-02-001,MC-002',
+      '2004,PRG-002,LA-014,P-2025-002-004,KMK,Kredit Modal Kerja,CIF-014,New,Full,2025-02-01,2026-02-01,520000000,5200000,1.0,0.15,0.08,4264000,U003,Unit Surabaya,Branch Basuki Rahmat,Jawa Timur,CV Usaha Bersama,Jl. Diponegoro No.23,CA-014,2025-02-01 12:00:00,2025-02-02 13:00:00,1,Good standing,0,1,BATCH-2025-02-001,MC-002',
+      '2005,PRG-002,LA-015,P-2025-002-005,KMK,Kredit Modal Kerja,CIF-015,New,Full,2025-02-01,2026-02-01,490000000,4900000,1.0,0.15,0.08,4018000,U003,Unit Surabaya,Branch Basuki Rahmat,Jawa Timur,PT Mitra Usaha,Jl. Embong Malang No.24,CA-015,2025-02-01 13:00:00,2025-02-02 14:00:00,1,Complete,0,1,BATCH-2025-02-001,MC-002',
+      // Contract MC-002, Batch BATCH-2025-02-002
+      '2006,PRG-002,LA-016,P-2025-002-006,KMK,Kredit Modal Kerja,CIF-016,New,Full,2025-02-01,2026-02-01,350000000,3500000,1.0,0.15,0.08,2870000,U004,Unit Semarang,Branch Pandanaran,Jawa Tengah,UD Harapan Baru,Jl. Pandanaran No.30,CA-016,2025-02-06 09:00:00,2025-02-07 10:00:00,1,Approved,0,1,BATCH-2025-02-002,MC-002',
+      '2007,PRG-002,LA-017,P-2025-002-007,KMK,Kredit Modal Kerja,CIF-017,New,Full,2025-02-01,2026-02-01,420000000,4200000,1.0,0.15,0.08,3444000,U004,Unit Semarang,Branch Pandanaran,Jawa Tengah,CV Mitra Usaha,Jl. Pemuda No.31,CA-017,2025-02-06 10:00:00,2025-02-07 11:00:00,1,Complete,0,2,BATCH-2025-02-002,MC-002',
+      '2008,PRG-002,LA-018,P-2025-002-008,KMK,Kredit Modal Kerja,CIF-018,New,Full,2025-02-01,2026-02-01,390000000,3900000,1.0,0.15,0.08,3198000,U004,Unit Semarang,Branch Pandanaran,Jawa Tengah,PT Sejahtera Raya,Jl. MT Haryono No.32,CA-018,2025-02-06 11:00:00,2025-02-07 12:00:00,1,Verified,0,1,BATCH-2025-02-002,MC-002',
+      '2009,PRG-002,LA-019,P-2025-002-009,KMK,Kredit Modal Kerja,CIF-019,New,Full,2025-02-01,2026-02-01,410000000,4100000,1.0,0.15,0.08,3362000,U004,Unit Semarang,Branch Pandanaran,Jawa Tengah,UD Berkah Mandiri,Jl. Gajah Mada No.33,CA-019,2025-02-06 12:00:00,2025-02-07 13:00:00,1,Good,0,1,BATCH-2025-02-002,MC-002',
+      '2010,PRG-002,LA-020,P-2025-002-010,KMK,Kredit Modal Kerja,CIF-020,New,Full,2025-02-01,2026-02-01,370000000,3700000,1.0,0.15,0.08,3034000,U004,Unit Semarang,Branch Pandanaran,Jawa Tengah,CV Karya Sejati,Jl. Imam Bonjol No.34,CA-020,2025-02-06 13:00:00,2025-02-07 14:00:00,1,Approved,0,1,BATCH-2025-02-002,MC-002'
+    ];
+
     const headers = [
       'cover_id', 'program_id', 'nomor_rekening_pinjaman', 'nomor_peserta', 'loan_type', 
       'loan_type_desc', 'cif_rekening_pinjaman', 'jenis_pengajuan_desc', 'jenis_covering_desc',
@@ -104,19 +132,18 @@ export default function SubmitDebtor() {
       'unit_code', 'unit_desc', 'branch_desc', 'region_desc',
       'nama_peserta', 'alamat_usaha', 'nomor_perjanjian_kredit',
       'tanggal_terima', 'tanggal_validasi', 'status_aktif', 'remark_premi', 
-      'flag_restruktur', 'kolektabilitas'
+      'flag_restruktur', 'kolektabilitas', 'batch_id', 'contract_id'
     ];
     
-    const csvContent = headers.join(',') + '\n' + 
-      '1001,PRG001,LA001,P001,KPR,Kredit Pemilikan Rumah,CIF001,New,Full,2025-01-01,2030-12-31,100000000,950000,1.0,0.1,0.05,775000,U001,Unit 1,Branch 1,Region 1,John Doe,Jakarta Pusat,CA001,2025-01-15 10:00:00,2025-01-16 14:00:00,1,Sample remark,0,1';
+    const csvContent = headers.join(',') + '\n' + sampleData.join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'debtor_template.csv';
+    a.download = 'debtor_template_sample.csv';
     a.click();
-    toast.success('Template downloaded');
+    toast.success('Template downloaded with 20 sample debtors (2 contracts, 4 batches)');
   };
 
   // Parse CSV
