@@ -84,8 +84,9 @@ export default function ClaimReview() {
 
     // CRITICAL: Block claim approval if Nota payment not completed
     if (actionType === 'check' || actionType === 'verify') {
-      // Find related batch and verify Nota payment status
-      const relatedDebtor = await base44.entities.Debtor.filter({ nomor_peserta: selectedClaim.participant_no });
+      // Find related debtor via claim
+      const relatedDebtor = selectedClaim.debtor_id ? 
+        await base44.entities.Debtor.filter({ id: selectedClaim.debtor_id }) : [];
       if (relatedDebtor.length > 0) {
         const batchId = relatedDebtor[0].batch_id;
         const batchNotas = await base44.entities.Nota.filter({ 
@@ -238,7 +239,6 @@ export default function ClaimReview() {
       width: '50px'
     },
     { header: 'Claim No', accessorKey: 'claim_no' },
-    { header: 'Participant', accessorKey: 'participant_no' },
     { header: 'Debtor', accessorKey: 'nama_tertanggung' },
     { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
     { header: 'Share Tugure', cell: (row) => `Rp ${(row.share_tugure_amount || 0).toLocaleString('id-ID')}` },

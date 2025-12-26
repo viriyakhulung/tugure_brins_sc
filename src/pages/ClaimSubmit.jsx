@@ -86,18 +86,18 @@ export default function ClaimSubmit() {
   };
 
   const downloadTemplate = () => {
-    const templateData = [
-      ['claimno', 'policyno', 'nomor_sertifikat', 'participant_no', 'nama_tertanggung', 'no_ktp_npwp', 
-       'no_fasilitas_kredit', 'tanggal_realisasi_kredit', 'nilai_klaim', 'dol', 'kol_debitur', 
-       'plafond', 'max_coverage', 'share_tugure_pct', 'share_tugure_amount', 'bdo_premi_period', 'check_bdo_premi'],
-      ['CLM/2025/01/001', 'POL/2025/001', 'CERT-001', 'P2025001', 'Budi Santoso', '3201234567890123', 
-       '1001234567', '2025-01-15', '35000000', '2025-12-01', '3', 
-       '50000000', '37500000', '75', '26250000', '2024-10', 'TRUE']
+    const headers = [
+      'claim_no', 'policy_no', 'nomor_sertifikat', 'nama_tertanggung', 'no_ktp_npwp', 
+      'no_fasilitas_kredit', 'bdo_premi', 'tanggal_realisasi_kredit', 'plafond',
+      'max_coverage', 'kol_debitur', 'dol', 'nilai_klaim', 'share_tugure_percentage', 
+      'share_tugure_amount', 'check_bdo_premi'
     ];
     
-    const csvContent = templateData.map(row => row.join(',')).join('\n');
+    const csvContent = headers.join(',') + '\n' + 
+      'CLM001,POL001,CERT001,John Doe,1234567890,FK001,2025-01,2025-01-01,100000000,75000000,1,2025-06-15,50000000,75,37500000,true';
+    
     const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+    const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'claim_template.csv';
@@ -129,39 +129,55 @@ export default function ClaimSubmit() {
       
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',');
-        const participantNo = values[3]?.trim();
-        const claimAmount = parseFloat(values[8]) || 0;
+        const row = {};
+        const headers = lines[0].split(',').map(h => h.trim());
+        headers.forEach((header, index) => {
+          row[header] = values[index]?.trim() || '';
+        });
         
-        const debtor = batchDebtors.find(d => d.participant_no === participantNo);
+        const debtor = batchDebtors.find(d => d.nomor_peserta === row.participant_no);
         
         let rowRemarks = [];
         if (!debtor) {
           rowRemarks.push('Debtor not found in batch');
         } else {
-          if (debtor.underwriting_status !== 'APPROVED') {
+          if (debtor.status !== 'APPROVED') {
             rowRemarks.push('Debtor not approved');
           }
-          if (claimAmount > (debtor.credit_plafond || 0)) {
-            rowRemarks.push(`Exceeds plafond (${debtor.credit_plafond})`);
+          if (parseFloat(row.nilai_klaim) > (debtor.plafon || 0)) {
+            rowRemarks.push(`Exceeds plafond (${debtor.plafon})`);
           }
         }
         
         if (rowRemarks.length > 0) {
           validationErrors.push({ 
             row: i + 1, 
-            participant: participantNo, 
+            participant: row.participant_no, 
             issues: rowRemarks 
           });
         }
 
         parsed.push({
-          claim_no: values[0]?.trim(),
-          policy_no: values[1]?.trim(),
-          participant_no: participantNo,
-          nama_tertanggung: values[4]?.trim(),
-          nilai_klaim: claimAmount,
+          claim_no: row.claim_no,
+          policy_no: row.policy_no,
+          nomor_sertifikat: row.nomor_sertifikat,
+          nama_tertanggung: row.nama_tertanggung,
+          no_ktp_npwp: row.no_ktp_npwp,
+          no_fasilitas_kredit: row.no_fasilitas_kredit,
+          bdo_premi: row.bdo_premi,
+          tanggal_realisasi_kredit: row.tanggal_realisasi_kredit,
+          plafond: parseFloat(row.plafond) || 0,
+          max_coverage: parseFloat(row.max_coverage) || 0,
+          kol_debitur: row.kol_debitur,
+          dol: row.dol,
+          nilai_klaim: parseFloat(row.nilai_klaim) || 0,
+          share_tugure_percentage: parseFloat(row.share_tugure_percentage) || 0,
+          share_tugure_amount: parseFloat(row.share_tugure_amount) || 0,
+          check_bdo_premi: row.check_bdo_premi === 'true' || row.check_bdo_premi === true,
           validation_remarks: rowRemarks.join('; '),
-          debtor_id: debtor?.id
+          debtor_id: debtor?.id,
+          contract_id: debtor?.contract_id,
+          batch_id: debtor?.batch_id
         });
       }
       
@@ -226,11 +242,25 @@ export default function ClaimSubmit() {
         await base44.entities.Claim.create({
           claim_no: claim.claim_no,
           policy_no: claim.policy_no,
-          participant_no: claim.participant_no,
+          nomor_sertifikat: claim.nomor_sertifikat,
           nama_tertanggung: claim.nama_tertanggung,
+          no_ktp_npwp: claim.no_ktp_npwp,
+          no_fasilitas_kredit: claim.no_fasilitas_kredit,
+          bdo_premi: claim.bdo_premi,
+          tanggal_realisasi_kredit: claim.tanggal_realisasi_kredit,
+          plafond: claim.plafond,
+          max_coverage: claim.max_coverage,
+          kol_debitur: claim.kol_debitur,
+          dol: claim.dol,
           nilai_klaim: claim.nilai_klaim,
+          share_tugure_percentage: claim.share_tugure_percentage,
+          share_tugure_amount: claim.share_tugure_amount,
+          check_bdo_premi: claim.check_bdo_premi,
           debtor_id: claim.debtor_id || '',
-          claim_status: 'Draft'
+          contract_id: claim.contract_id || '',
+          batch_id: claim.batch_id || '',
+          status: 'Draft',
+          version_no: 1
         });
         
         uploaded++;
@@ -327,7 +357,7 @@ export default function ClaimSubmit() {
         />
         <ModernKPI 
           title="Draft Claims" 
-          value={claims.filter(c => c.claim_status === 'Draft').length}
+          value={claims.filter(c => c.status === 'Draft').length}
           subtitle="Pending check"
           icon={Clock}
           color="orange"
@@ -405,15 +435,14 @@ export default function ClaimSubmit() {
           <DataTable
             columns={[
               { header: 'Claim No', accessorKey: 'claim_no' },
-              { header: 'Participant No', accessorKey: 'participant_no' },
               { header: 'Debtor', accessorKey: 'nama_tertanggung' },
               { header: 'Claim Amount', cell: (row) => `Rp ${(row.nilai_klaim || 0).toLocaleString('id-ID')}` },
-              { header: 'Status', cell: (row) => <StatusBadge status={row.claim_status} /> }
+              { header: 'Status', cell: (row) => <StatusBadge status={row.status} /> }
             ]}
             data={claims.filter(c => {
               if (filters.contract !== 'all' && c.contract_id !== filters.contract) return false;
               if (filters.batch && !c.debtor_id) return false;
-              if (filters.claimStatus !== 'all' && c.claim_status !== filters.claimStatus) return false;
+              if (filters.claimStatus !== 'all' && c.status !== filters.claimStatus) return false;
               return true;
             })}
             isLoading={loading}
@@ -558,7 +587,7 @@ export default function ClaimSubmit() {
                   <SelectValue placeholder="Select paid claim" />
                 </SelectTrigger>
                 <SelectContent>
-                  {claims.filter(c => c.claim_status === 'Paid').map(c => (
+                  {claims.filter(c => c.status === 'Paid').map(c => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.claim_no} - {c.nama_tertanggung}
                     </SelectItem>
