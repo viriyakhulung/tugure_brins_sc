@@ -154,6 +154,13 @@ export default function SubmitDebtor() {
         return;
       }
 
+      // CRITICAL: BLOCK upload if contract is not ACTIVE
+      if (contract.effective_status !== 'Active') {
+        setErrorMessage(`❌ BLOCKED: Cannot upload debtor data.\n\nOnly ACTIVE contract versions may be used for debtor batch validation.\n\nCurrent contract status: ${contract.effective_status}`);
+        setLoading(false);
+        return;
+      }
+
       const text = await file.text();
       const parsedData = parseCSV(text);
       

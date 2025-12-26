@@ -198,7 +198,8 @@ export default function MasterContractManagement() {
         updates.second_approved_by = user?.email;
         updates.second_approved_date = new Date().toISOString();
       } else if (approvalAction === 'REJECT') {
-        updates.effective_status = 'Draft';
+        updates.effective_status = 'Inactive';
+        updates.rejection_reason = approvalRemarks;
       }
 
       await base44.entities.MasterContract.update(selectedContract.id, updates);
@@ -208,9 +209,20 @@ export default function MasterContractManagement() {
         module: 'CONFIG',
         entity_type: 'MasterContract',
         entity_id: selectedContract.id,
+        old_value: selectedContract.effective_status,
+        new_value: updates.effective_status,
         user_email: user?.email,
         user_role: user?.role,
         reason: approvalRemarks
+      });
+
+      await base44.entities.Notification.create({
+        title: `Contract ${approvalAction === 'REJECT' ? 'Rejected' : 'Approved'}`,
+        message: `Master Contract ${selectedContract.contract_id} - ${approvalAction === 'FIRST_APPROVE' ? 'First approval completed, awaiting admin approval' : approvalAction === 'SECOND_APPROVE' ? 'Activated and ready for use' : 'Rejected: ' + approvalRemarks}`,
+        type: approvalAction === 'REJECT' ? 'WARNING' : 'INFO',
+        module: 'CONFIG',
+        reference_id: selectedContract.id,
+        target_role: approvalAction === 'FIRST_APPROVE' ? 'ADMIN' : 'ALL'
       });
 
       setSuccessMessage(`Contract ${approvalAction.toLowerCase().replace('_', ' ')} successfully`);
@@ -301,31 +313,59 @@ export default function MasterContractManagement() {
           </Button>
           
           {isTugure && row.effective_status === 'Draft' && (
-            <Button
-              size="sm"
-              className="bg-blue-600"
-              onClick={() => {
-                setSelectedContract(row);
-                setApprovalAction('FIRST_APPROVE');
-                setShowApprovalDialog(true);
-              }}
-            >
-              1st Approve
-            </Button>
+            <>
+              <Button
+                size="sm"
+                className="bg-blue-600"
+                onClick={() => {
+                  setSelectedContract(row);
+                  setApprovalAction('FIRST_APPROVE');
+                  setShowApprovalDialog(true);
+                }}
+              >
+                1st Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  setSelectedContract(row);
+                  setApprovalAction('REJECT');
+                  setShowApprovalDialog(true);
+                }}
+              >
+                <XCircle className="w-4 h-4 mr-1" />
+                Reject
+              </Button>
+            </>
           )}
           
           {isAdmin && row.effective_status === 'Pending Second Approval' && (
-            <Button
-              size="sm"
-              className="bg-green-600"
-              onClick={() => {
-                setSelectedContract(row);
-                setApprovalAction('SECOND_APPROVE');
-                setShowApprovalDialog(true);
-              }}
-            >
-              2nd Approve
-            </Button>
+            <>
+              <Button
+                size="sm"
+                className="bg-green-600"
+                onClick={() => {
+                  setSelectedContract(row);
+                  setApprovalAction('SECOND_APPROVE');
+                  setShowApprovalDialog(true);
+                }}
+              >
+                2nd Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  setSelectedContract(row);
+                  setApprovalAction('REJECT');
+                  setShowApprovalDialog(true);
+                }}
+              >
+                <XCircle className="w-4 h-4 mr-1" />
+                Reject
+              </Button>
+            </>
           )}
 
           {row.effective_status === 'Active' && (

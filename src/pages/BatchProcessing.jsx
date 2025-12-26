@@ -129,23 +129,27 @@ export default function BatchProcessing() {
       // STAGE 1-4: DATA INGESTION ONLY (Uploaded → Validated → Matched)
       // No financial implications, just data quality checks
       
-      // STAGE 5: APPROVE - OPERATIONAL VALIDATION ONLY
+      // CRITICAL: APPROVED status is set by Debtor Review, not here
+      // This menu (Batch Processing) handles only data ingestion phases
+      // BLOCK user from manually approving - redirect to Debtor Review
       if (nextStatus === 'Approved') {
-        // Approve = "Data is structurally correct"
-        // This does NOT freeze financial amounts
-        // Financial gate is in Debtor Review, NOT here
+        alert('❌ BLOCKED: Batch approval is handled automatically.\n\nApproval happens AFTER Debtor Review is completed.\n\nPlease use Debtor Review menu to review and approve/reject debtors.');
         
         await createAuditLog(
-          'BATCH_APPROVED_OPERATIONAL',
+          'BLOCKED_MANUAL_BATCH_APPROVAL',
           'DEBTOR',
           'Batch',
           selectedBatch.id,
           { status: selectedBatch.status },
-          { status: nextStatus, note: 'Operational approval - data structure validated. Financial amounts not frozen yet.' },
+          { blocked_action: 'Manual Approve', reason: 'Approval must come from Debtor Review completion' },
           user?.email,
           user?.role,
-          remarks || 'Operational approval - batch structure validated'
+          'Attempted manual batch approval - use Debtor Review instead'
         );
+        
+        setProcessing(false);
+        setShowActionDialog(false);
+        return;
       }
       
       // BLOCK: Cannot generate Nota before Debtor Review
@@ -179,21 +183,7 @@ export default function BatchProcessing() {
 
       await base44.entities.Batch.update(selectedBatch.id, updateData);
 
-      // STAGE 6: POSTING - Transform staging to production records
-      // Still NO financial freeze
-      if (nextStatus === 'Approved') {
-        await createAuditLog(
-          'BATCH_POSTING',
-          'DEBTOR',
-          'Batch',
-          selectedBatch.id,
-          { status: selectedBatch.status },
-          { status: nextStatus, note: 'Data posted to production - ready for Debtor Review' },
-          user?.email,
-          user?.role,
-          'Batch approved - proceed to Debtor Review for financial gate'
-        );
-      }
+
 
       // Generate Nota when moving to Nota Issued (ONLY IF batch_ready_for_nota = TRUE)
       if (nextStatus === 'Nota Issued') {
