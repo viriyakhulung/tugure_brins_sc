@@ -57,10 +57,14 @@ export default function SubmitDebtor() {
     try {
       const demoUserStr = localStorage.getItem('demo_user');
       if (demoUserStr) {
-        setUser(JSON.parse(demoUserStr));
+        const parsedUser = JSON.parse(demoUserStr);
+        console.log('👤 User loaded:', parsedUser.email, 'Role:', parsedUser.role);
+        setUser(parsedUser);
+      } else {
+        console.log('❌ No user found in localStorage');
       }
     } catch (error) {
-      console.error('Failed to load user:', error);
+      console.error('❌ Failed to load user:', error);
     }
   };
 
@@ -382,10 +386,12 @@ export default function SubmitDebtor() {
       
       // Reload data with delay to ensure DB updated
       setTimeout(async () => {
+        console.log('🔄 Reloading after submission...');
         await loadBatches();
         await loadMyDebtors();
+        console.log('✅ Data reloaded, switching to tracking tab');
         setActiveTab('tracking'); // Switch to tracking tab AFTER data loaded
-      }, 1000);
+      }, 1500);
     } catch (error) {
       console.error('Submit error:', error);
       setErrorMessage('Failed to submit debtors');
@@ -862,11 +868,21 @@ export default function SubmitDebtor() {
               </div>
             </CardHeader>
             <CardContent>
-              {myDebtors.length === 0 ? (
+              {!user ? (
+                <Alert>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <AlertDescription>
+                    Loading user data...
+                  </AlertDescription>
+                </Alert>
+              ) : myDebtors.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
                     No debtors submitted yet. Upload your first batch in the "Upload New Batch" tab.
+                    <div className="text-xs text-gray-500 mt-2">
+                      Logged in as: {user.email}
+                    </div>
                   </AlertDescription>
                 </Alert>
               ) : (
