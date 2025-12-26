@@ -328,19 +328,7 @@ export default function PaymentIntent() {
         </Alert>
       )}
 
-      <Alert className="bg-purple-50 border-purple-200">
-        <AlertCircle className="h-4 w-4 text-purple-600" />
-        <AlertDescription className="text-purple-700">
-          <strong>Payment Intent = PLANNING ONLY</strong>
-          <br/><br/>
-          • Multiple Payment Intents per Nota allowed<br/>
-          • Payment Intent does NOT:<br/>
-          &nbsp;&nbsp;❌ Mark payment as done<br/>
-          &nbsp;&nbsp;❌ Close Nota<br/>
-          &nbsp;&nbsp;❌ Affect reconciliation<br/>
-          • Actual payments must be recorded in <strong>Nota Management → Reconciliation</strong> tab
-        </AlertDescription>
-      </Alert>
+
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <ModernKPI title="Available Notas" value={notas.length} subtitle="Issued/Confirmed" icon={DollarSign} color="blue" />

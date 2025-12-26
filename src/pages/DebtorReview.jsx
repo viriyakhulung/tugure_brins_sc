@@ -175,6 +175,13 @@ export default function DebtorReview() {
           });
           
           if (allReviewed && hasApproved) {
+            // Auto-transition batch to Approved status
+            await base44.entities.Batch.update(batchRecord.id, {
+              status: 'Approved',
+              approved_by: user?.email,
+              approved_date: new Date().toISOString().split('T')[0]
+            });
+            
             await createNotification(
               '✅ Debtor Review COMPLETED - Ready for Nota',
               `Batch ${batchId}: ALL ${updatedDebtors.length} debtors reviewed. ${approvedDebtors.length} approved. Final premium: Rp ${totalApprovedPremium.toLocaleString()}. ✓ debtor_review_completed = TRUE. ✓ batch_ready_for_nota = TRUE.`,
@@ -190,7 +197,7 @@ export default function DebtorReview() {
               'Batch',
               batchRecord.id,
               { debtor_review_completed: false },
-              { debtor_review_completed: true, batch_ready_for_nota: true, final_premium_amount: totalApprovedPremium },
+              { debtor_review_completed: true, batch_ready_for_nota: true, final_premium_amount: totalApprovedPremium, status: 'Approved' },
               user?.email,
               user?.role,
               `All ${updatedDebtors.length} debtors reviewed - ${approvedDebtors.length} approved`
@@ -412,16 +419,7 @@ export default function DebtorReview() {
         </Alert>
       )}
 
-      <Alert className="bg-blue-50 border-blue-200">
-        <AlertCircle className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-700">
-          <strong>🔒 FINANCIAL GATE:</strong> This is the critical approval stage where final exposure and premium are calculated.
-          <br/><br/>
-          • <strong>APPROVED</strong> debtors → included in financial calculation<br/>
-          • <strong>REJECTED</strong> debtors → permanently excluded<br/>
-          • After all debtors reviewed → Batch becomes <strong>ready for Nota</strong>
-        </AlertDescription>
-      </Alert>
+
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <ModernKPI title="Pending Review" value={debtors.filter(d => d.underwriting_status === 'SUBMITTED').length} subtitle="Awaiting approval" icon={FileText} color="orange" />

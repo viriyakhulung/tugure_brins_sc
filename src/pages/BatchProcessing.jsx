@@ -120,6 +120,48 @@ export default function BatchProcessing() {
 
     setProcessing(true);
     try {
+      // Handle Close action separately
+      if (actionType === 'close') {
+        // Check all debtors and claims reviewed
+        const batchDebtors = debtors.filter(d => d.batch_id === selectedBatch.batch_id);
+        const batchClaims = await base44.entities.Claim.filter({ debtor_id: { $in: batchDebtors.map(d => d.id) } });
+        
+        const unreviewed = batchDebtors.filter(d => 
+          d.underwriting_status !== 'APPROVED' && d.underwriting_status !== 'REJECTED'
+        );
+        
+        const pendingClaims = batchClaims?.filter(c => 
+          c.claim_status !== 'Paid' && c.claim_status !== 'Draft'
+        ) || [];
+
+        if (unreviewed.length > 0 || pendingClaims.length > 0) {
+          alert(`❌ Cannot close batch.\n\n${unreviewed.length > 0 ? `${unreviewed.length} debtors not reviewed\n` : ''}${pendingClaims.length > 0 ? `${pendingClaims.length} claims pending` : ''}`);
+          setProcessing(false);
+          return;
+        }
+
+        await base44.entities.Batch.update(selectedBatch.id, {
+          status: 'Closed',
+          operational_locked: true,
+          closed_by: user?.email,
+          closed_date: new Date().toISOString().split('T')[0]
+        });
+
+        // Mark debtors as completed
+        for (const debtor of batchDebtors) {
+          await base44.entities.Debtor.update(debtor.id, {
+            batch_status: 'COMPLETED'
+          });
+        }
+
+        setSuccessMessage('Batch closed successfully');
+        setShowActionDialog(false);
+        setSelectedBatch(null);
+        loadData();
+        setProcessing(false);
+        return;
+      }
+
       const nextStatus = getNextStatus(selectedBatch.status);
       if (!nextStatus) {
         setProcessing(false);
@@ -130,8 +172,6 @@ export default function BatchProcessing() {
       // No financial implications, just data quality checks
       
       // CRITICAL: APPROVED status is set by Debtor Review, not here
-      // This menu (Batch Processing) handles only data ingestion phases
-      // BLOCK user from manually approving - redirect to Debtor Review
       if (nextStatus === 'Approved') {
         alert('❌ BLOCKED: Batch approval is handled automatically.\n\nApproval happens AFTER Debtor Review is completed.\n\nPlease use Debtor Review menu to review and approve/reject debtors.');
         
@@ -152,9 +192,9 @@ export default function BatchProcessing() {
         return;
       }
       
-      // BLOCK: Cannot generate Nota before Debtor Review
+      // CRITICAL FIX: Check if Debtor Review completed for Approved batches before Nota generation
       if (nextStatus === 'Nota Issued') {
-        if (!selectedBatch.batch_ready_for_nota) {
+        if (!selectedBatch.debtor_review_completed || !selectedBatch.batch_ready_for_nota) {
           await createAuditLog(
             'BLOCKED_NOTA_GENERATION',
             'DEBTOR',
@@ -197,7 +237,9 @@ export default function BatchProcessing() {
           amount: selectedBatch.final_premium_amount || 0,
           currency: 'IDR',
           status: 'Draft',
-          is_immutable: false
+          is_immutable: false,
+          total_actual_paid: 0,
+          reconciliation_status: 'PENDING'
         });
 
         // Create Invoice
@@ -472,7 +514,7 @@ export default function BatchProcessing() {
     {
       header: 'Actions',
       cell: (row) => (
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button 
             variant="outline" 
             size="sm"
@@ -492,6 +534,7 @@ export default function BatchProcessing() {
                 setActionType(getActionLabel(row.status));
                 setShowActionDialog(true);
               }}
+              disabled={row.status === 'Approved' && (!row.debtor_review_completed || !row.batch_ready_for_nota)}
             >
               <ArrowRight className="w-4 h-4 mr-1" />
               {getActionLabel(row.status)}
@@ -508,6 +551,19 @@ export default function BatchProcessing() {
             >
               <X className="w-4 h-4 mr-1" />
               Reject
+            </Button>
+          )}
+          {row.status === 'Paid' && (
+            <Button 
+              size="sm" 
+              className="bg-gray-600"
+              onClick={() => {
+                setSelectedBatch(row);
+                setActionType('close');
+                setShowActionDialog(true);
+              }}
+            >
+              Close Batch
             </Button>
           )}
         </div>
@@ -558,14 +614,7 @@ export default function BatchProcessing() {
         <ModernKPI title="Rejected" value={batches.filter(b => b.status === 'Rejected').length} subtitle="Requires revision" icon={AlertCircle} color="red" />
       </div>
 
-      <Alert className="bg-blue-50 border-blue-200 mb-6">
-        <AlertCircle className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-700">
-          <strong>Bordero Workflow:</strong> Uploaded → Validated → Matched → Approved → [Debtor Review] → Nota Issued → Branch Confirmed → Paid → Closed
-          <br/><br/>
-          <strong>Important:</strong> Stages 1-6 are DATA INGESTION ONLY. Financial amounts are finalized in <strong>Debtor Review</strong> menu before Nota generation.
-        </AlertDescription>
-      </Alert>
+
 
       <Card>
         <CardHeader>

@@ -348,16 +348,7 @@ export default function ClaimReview() {
         </Alert>
       )}
 
-      <Alert className="bg-blue-50 border-blue-200">
-        <AlertCircle className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-700">
-          <strong>Claim Workflow:</strong> Draft → Checked → Doc Verified → Invoiced (Nota Created) → Paid
-          <br/><br/>
-          • <strong>Issue Nota:</strong> Creates CLAIM Nota (managed in Nota Management)
-          <br/>• <strong>Claim Nota:</strong> Same workflow as Batch Nota (Draft → Issued → Confirmed → Paid)
-          <br/>• <strong>Multiple Notas:</strong> One Claim can have multiple Notas (initial + revisions)
-        </AlertDescription>
-      </Alert>
+
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <ModernKPI title="Pending Review" value={pendingClaims.length} subtitle="Awaiting action" icon={FileText} color="orange" />

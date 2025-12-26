@@ -774,16 +774,7 @@ export default function NotaManagement() {
 
         {/* NOTAS TAB */}
         <TabsContent value="notas" className="space-y-6">
-          <Alert className="bg-blue-50 border-blue-200">
-            <AlertCircle className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-700">
-              <strong>Nota Workflow:</strong> Draft → Issued → Confirmed → Paid
-              <br/><br/>
-              • <strong>Generate Nota:</strong> ONLY if debtor_review_completed = TRUE AND batch_ready_for_nota = TRUE<br/>
-              • <strong>Nota Amount:</strong> Derived from final_premium_amount (IMMUTABLE after Issued)<br/>
-              • <strong>Once Issued:</strong> Amount cannot be changed - use DN/CN for adjustments
-            </AlertDescription>
-          </Alert>
+
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <ModernKPI title="Total Notas" value={notas.length} subtitle={`${notas.filter(n => n.nota_type === 'Batch').length} batch / ${notas.filter(n => n.nota_type === 'Claim').length} claim`} icon={FileText} color="blue" />
@@ -890,19 +881,7 @@ export default function NotaManagement() {
 
         {/* RECONCILIATION TAB */}
         <TabsContent value="reconciliation" className="space-y-6">
-          <Alert className="bg-purple-50 border-purple-200">
-            <Scale className="h-4 w-4 text-purple-600" />
-            <AlertDescription className="text-purple-700">
-              <strong>Payment Reconciliation - All Nota Types (Batch + Claim + Subrogation):</strong>
-              <br/><br/>
-              • <strong>Nota Amount:</strong> IMMUTABLE financial document<br/>
-              • <strong>Total Planned:</strong> From Payment Intent (planning only)<br/>
-              • <strong>Total Actual Paid:</strong> Real payments received (accumulated)<br/>
-              • <strong>Payment Status:</strong> PARTIAL / MATCHED / OVERPAID (auto-detected)<br/>
-              • <strong>DN/CN:</strong> Enabled ONLY after reconciliation marked FINAL and payment difference exists<br/>
-              • <strong>Multiple Payments:</strong> 1 Nota can have multiple Payment records (accumulative)
-            </AlertDescription>
-          </Alert>
+
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <ModernKPI title="All Notas" value={reconciliationItems.length} subtitle={`${reconciliationItems.filter(r => r.nota_type === 'Batch').length} batch / ${reconciliationItems.filter(r => r.nota_type === 'Claim').length} claim`} icon={FileText} color="purple" />
@@ -1060,16 +1039,7 @@ export default function NotaManagement() {
 
         {/* DN/CN TAB */}
         <TabsContent value="dncn" className="space-y-6">
-          <Alert className="bg-orange-50 border-orange-200">
-            <AlertTriangle className="h-4 w-4 text-orange-600" />
-            <AlertDescription className="text-orange-700">
-              <strong>DN/CN Workflow:</strong> Draft → Under Review → Approved → Acknowledged
-              <br/><br/>
-              • <strong>Creation:</strong> ONLY after reconciliation FINAL and payment difference exists<br/>
-              • <strong>Purpose:</strong> Final adjustment for payment differences<br/>
-              • <strong>Original Nota:</strong> Remains unchanged (immutable)
-            </AlertDescription>
-          </Alert>
+
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <ModernKPI title="Total DN/CN" value={dnCnRecords.length} subtitle={`${dnCnRecords.filter(d => d.note_type === 'Debit Note').length} DN / ${dnCnRecords.filter(d => d.note_type === 'Credit Note').length} CN`} icon={FileText} color="blue" />

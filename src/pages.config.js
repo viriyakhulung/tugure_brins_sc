@@ -4,7 +4,6 @@ import BatchProcessing from './pages/BatchProcessing';
 import BorderoManagement from './pages/BorderoManagement';
 import ClaimReview from './pages/ClaimReview';
 import ClaimSubmit from './pages/ClaimSubmit';
-import CloseBatch from './pages/CloseBatch';
 import Dashboard from './pages/Dashboard';
 import DebtorReview from './pages/DebtorReview';
 import DocumentClaim from './pages/DocumentClaim';
@@ -29,7 +28,6 @@ export const PAGES = {
     "BorderoManagement": BorderoManagement,
     "ClaimReview": ClaimReview,
     "ClaimSubmit": ClaimSubmit,
-    "CloseBatch": CloseBatch,
     "Dashboard": Dashboard,
     "DebtorReview": DebtorReview,
     "DocumentClaim": DocumentClaim,
