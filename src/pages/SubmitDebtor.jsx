@@ -180,10 +180,17 @@ export default function SubmitDebtor() {
         return;
       }
 
-      // Generate batch ID
-      const batchId = batchMode === 'revise' 
-        ? selectedBatch 
-        : `BATCH-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${Date.now()}`;
+      // AUTO-GENERATE batch_id: BATCH-YYYY-MM-XXXXXX
+      let batchId;
+      if (batchMode === 'revise') {
+        batchId = selectedBatch;
+      } else {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const randomNum = Math.floor(Math.random() * 900000) + 100000;
+        batchId = `BATCH-${year}-${month}-${randomNum}`;
+      }
 
       // Create or update batch
       if (batchMode === 'new') {
@@ -700,8 +707,8 @@ export default function SubmitDebtor() {
                 </SelectTrigger>
                 <SelectContent>
                   {activeContracts.map(c => (
-                    <SelectItem key={c.id} value={c.contract_id}>
-                      {c.contract_id} - {c.policy_number}
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.contract_id} - {c.policy_no}
                     </SelectItem>
                   ))}
                 </SelectContent>
