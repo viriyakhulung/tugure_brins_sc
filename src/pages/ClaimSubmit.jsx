@@ -86,27 +86,16 @@ export default function ClaimSubmit() {
   };
 
   const downloadTemplate = () => {
-    // Sample data: 2 contracts, 2 batches each, 5 debtors each batch, 2 claims per batch
     const sampleData = [
-      // Contract MC-001, Batch BATCH-2025-01-001
-      'CLM-2025-01-001,POL-2025-001,CERT-001,PT Maju Jaya,1234567890001,FK-001,2025-01,2025-01-15,500000000,375000000,1,2025-06-15,250000000,75,187500000,true,P-2025-001-001,BATCH-2025-01-001,MC-001',
-      'CLM-2025-01-002,POL-2025-001,CERT-002,CV Berkah Abadi,1234567890002,FK-002,2025-01,2025-01-16,300000000,225000000,1,2025-06-16,150000000,75,112500000,true,P-2025-001-002,BATCH-2025-01-001,MC-001',
-      // Contract MC-001, Batch BATCH-2025-01-002
-      'CLM-2025-01-003,POL-2025-001,CERT-006,UD Sentosa Makmur,1234567890006,FK-006,2025-01,2025-01-20,400000000,300000000,1,2025-06-20,200000000,75,150000000,true,P-2025-001-006,BATCH-2025-01-002,MC-001',
-      'CLM-2025-01-004,POL-2025-001,CERT-007,PT Sejahtera Indo,1234567890007,FK-007,2025-01,2025-01-21,450000000,337500000,2,2025-06-21,225000000,75,168750000,true,P-2025-001-007,BATCH-2025-01-002,MC-001',
-      // Contract MC-002, Batch BATCH-2025-02-001
-      'CLM-2025-02-001,POL-2025-002,CERT-011,CV Mandiri Jaya,2234567890001,FK-011,2025-02,2025-02-01,600000000,450000000,1,2025-07-01,300000000,80,240000000,true,P-2025-002-001,BATCH-2025-02-001,MC-002',
-      'CLM-2025-02-002,POL-2025-002,CERT-012,PT Global Tech,2234567890002,FK-012,2025-02,2025-02-02,550000000,412500000,1,2025-07-02,275000000,80,220000000,true,P-2025-002-002,BATCH-2025-02-001,MC-002',
-      // Contract MC-002, Batch BATCH-2025-02-002
-      'CLM-2025-02-003,POL-2025-002,CERT-016,UD Harapan Baru,2234567890006,FK-016,2025-02,2025-02-06,350000000,262500000,1,2025-07-06,175000000,80,140000000,true,P-2025-002-006,BATCH-2025-02-002,MC-002',
-      'CLM-2025-02-004,POL-2025-002,CERT-017,CV Mitra Usaha,2234567890007,FK-017,2025-02,2025-02-07,420000000,315000000,2,2025-07-07,210000000,80,168000000,true,P-2025-002-007,BATCH-2025-02-002,MC-002'
+      'CERT-001,PT Maju Jaya,1234567890001,FK-001,2025-01,2025-01-15,500000000,375000000,1,2025-06-15,250000000,75,187500000,true,P-001,POL-001',
+      'CERT-002,CV Berkah Abadi,1234567890002,FK-002,2025-01,2025-01-16,300000000,225000000,1,2025-06-16,150000000,75,112500000,true,P-002,POL-001'
     ];
 
     const headers = [
-      'claim_no', 'policy_no', 'nomor_sertifikat', 'nama_tertanggung', 'no_ktp_npwp', 
+      'nomor_sertifikat', 'nama_tertanggung', 'no_ktp_npwp', 
       'no_fasilitas_kredit', 'bdo_premi', 'tanggal_realisasi_kredit', 'plafond',
       'max_coverage', 'kol_debitur', 'dol', 'nilai_klaim', 'share_tugure_percentage', 
-      'share_tugure_amount', 'check_bdo_premi', 'nomor_peserta', 'batch_id', 'contract_id'
+      'share_tugure_amount', 'check_bdo_premi', 'nomor_peserta', 'policy_no'
     ];
     
     const csvContent = headers.join(',') + '\n' + sampleData.join('\n');
@@ -115,7 +104,7 @@ export default function ClaimSubmit() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'claim_template_sample.csv';
+    a.download = 'claim_template.csv';
     a.click();
   };
 
@@ -173,7 +162,6 @@ export default function ClaimSubmit() {
         }
 
         parsed.push({
-          claim_no: row.claim_no,
           policy_no: row.policy_no,
           nomor_sertifikat: row.nomor_sertifikat,
           nama_tertanggung: row.nama_tertanggung,
@@ -191,8 +179,8 @@ export default function ClaimSubmit() {
           check_bdo_premi: row.check_bdo_premi === 'true' || row.check_bdo_premi === true,
           validation_remarks: rowRemarks.join('; '),
           debtor_id: debtor?.id,
-          contract_id: row.contract_id || debtor?.contract_id,
-          batch_id: row.batch_id || debtor?.batch_id
+          contract_id: debtor?.contract_id,
+          batch_id: debtor?.batch_id
         });
       }
       
@@ -212,50 +200,56 @@ export default function ClaimSubmit() {
   };
 
   const handleBulkUpload = async () => {
-    if (parsedClaims.length === 0) return;
-
-    // CRITICAL: Validate Nota payment status before allowing claim submission
-    if (selectedBatch) {
-      const batch = batches.find(b => b.id === selectedBatch);
-      if (batch) {
-        const batchNotas = await base44.entities.Nota.filter({ 
-          reference_id: batch.batch_id,
-          nota_type: 'Batch'
-        });
-
-        const hasCompletedPayment = batchNotas.some(n => n.status === 'Paid');
-
-        if (!hasCompletedPayment) {
-          setErrorMessage(`❌ BLOCKED: Claim submission not allowed.\n\nClaim can only be submitted if related Nota payment_status = PAID.\n\nCurrent Nota status: ${batchNotas[0]?.status || 'No Nota found'}`);
-          
-          await base44.entities.AuditLog.create({
-            action: 'BLOCKED_CLAIM_SUBMISSION',
-            module: 'CLAIM',
-            entity_type: 'Batch',
-            entity_id: batch.id,
-            old_value: '{}',
-            new_value: JSON.stringify({ blocked_reason: 'Nota not PAID' }),
-            user_email: user?.email,
-            user_role: user?.role,
-            reason: 'Attempted claim submission before Nota payment completion'
-          });
-
-          setProcessing(false);
-          return;
-        }
-      }
-    }
+    if (parsedClaims.length === 0 || !selectedBatch) return;
 
     setProcessing(true);
     
     try {
+      const batch = batches.find(b => b.id === selectedBatch);
+      if (!batch) {
+        setErrorMessage('Batch not found');
+        setProcessing(false);
+        return;
+      }
+
+      // Validate Nota payment
+      const batchNotas = await base44.entities.Nota.filter({ 
+        reference_id: batch.batch_id,
+        nota_type: 'Batch'
+      });
+
+      const hasCompletedPayment = batchNotas.some(n => n.status === 'Paid');
+
+      if (!hasCompletedPayment) {
+        setErrorMessage(`❌ BLOCKED: Claim submission not allowed. Nota must be PAID first.`);
+        
+        await base44.entities.AuditLog.create({
+          action: 'BLOCKED_CLAIM_SUBMISSION',
+          module: 'CLAIM',
+          entity_type: 'Batch',
+          entity_id: batch.id,
+          old_value: '{}',
+          new_value: JSON.stringify({ blocked_reason: 'Nota not PAID' }),
+          user_email: user?.email,
+          user_role: user?.role,
+          reason: 'Attempted claim submission before Nota payment'
+        });
+
+        setProcessing(false);
+        return;
+      }
+
       let uploaded = 0;
       
       for (const claim of parsedClaims) {
         if (claim.validation_remarks) continue;
         
+        // AUTO-GENERATE claim_no: CLM-YYYY-MM-XXXXXX
+        const now = new Date();
+        const claimNo = `CLM-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(uploaded + 1).padStart(6, '0')}`;
+        
         await base44.entities.Claim.create({
-          claim_no: claim.claim_no,
+          claim_no: claimNo,
           policy_no: claim.policy_no,
           nomor_sertifikat: claim.nomor_sertifikat,
           nama_tertanggung: claim.nama_tertanggung,
@@ -273,7 +267,7 @@ export default function ClaimSubmit() {
           check_bdo_premi: claim.check_bdo_premi,
           debtor_id: claim.debtor_id || '',
           contract_id: claim.contract_id || '',
-          batch_id: claim.batch_id || '',
+          batch_id: batch.batch_id,
           status: 'Draft',
           version_no: 1
         });
@@ -281,7 +275,7 @@ export default function ClaimSubmit() {
         uploaded++;
       }
       
-      setSuccessMessage(`Uploaded ${uploaded} claims successfully`);
+      setSuccessMessage(`✓ Uploaded ${uploaded} claims successfully`);
       setShowUploadDialog(false);
       setParsedClaims([]);
       setSelectedBatch('');

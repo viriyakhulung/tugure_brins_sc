@@ -429,14 +429,14 @@ export default function MasterContractManagement() {
             <Button variant="outline" onClick={() => {
               const csv = [
                 ['contract_id', 'policy_no', 'program_id', 'product_type', 'credit_type', 'loan_type', 'loan_type_desc', 'coverage_start_date', 'coverage_end_date', 'max_tenor_month', 'max_plafond', 'share_tugure_percentage', 'premium_rate', 'ric_rate', 'bf_rate', 'allowed_kolektabilitas', 'allowed_region', 'currency', 'remark'].join(','),
-                ['MC-001', 'POL-2025-001', 'PRG-001', 'Treaty', 'Individual', 'KPR', 'Kredit Pemilikan Rumah', '2025-01-01', '2030-12-31', '240', '1000000000', '75', '1.0', '0.1', '0.05', '1,2,3', 'DKI Jakarta,Jawa Barat', 'IDR', 'Housing credit insurance treaty'].join(','),
-                ['MC-002', 'POL-2025-002', 'PRG-002', 'Treaty', 'Corporate', 'KMK', 'Kredit Modal Kerja', '2025-02-01', '2026-02-01', '12', '1500000000', '80', '1.0', '0.15', '0.08', '1,2', 'Jawa Timur,Jawa Tengah', 'IDR', 'Working capital credit insurance'].join(',')
+                ['MC-001', 'POL-2025-001', 'PRG-001', 'Treaty', 'Individual', 'KPR', 'Kredit Pemilikan Rumah', '2025-01-01', '2030-12-31', '240', '1000000000', '75', '1.0', '0.1', '0.05', '1,2,3', 'DKI Jakarta,Jawa Barat', 'IDR', 'Housing credit treaty'].join(','),
+                ['MC-002', 'POL-2025-002', 'PRG-002', 'Treaty', 'Corporate', 'KMK', 'Kredit Modal Kerja', '2025-02-01', '2026-02-01', '12', '1500000000', '80', '1.0', '0.15', '0.08', '1,2', 'Jawa Timur,Jawa Tengah', 'IDR', 'Working capital treaty'].join(',')
               ].join('\n');
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = 'master_contract_template_sample.csv';
+              a.download = 'master_contract_template.csv';
               a.click();
             }}>
               <Download className="w-4 h-4 mr-2" />
