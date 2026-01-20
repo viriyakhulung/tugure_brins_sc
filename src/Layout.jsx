@@ -9,15 +9,25 @@ import {
   DollarSign, CreditCard, Scale, Bell, User, Settings, 
   LogOut, Menu, X, ChevronRight, Shield, Activity, Lock
 } from "lucide-react";
+import { useAuth } from './lib/AuthContext';
 export default function Layout({ children, currentPageName }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const { bypassAuth, user: authUser } = useAuth();
 
   useEffect(() => {
+    if (bypassAuth) {
+      if (authUser) {
+        setUser(authUser);
+        loadNotificationCount();
+      }
+      setLoading(false);
+      return;
+    }
     checkAuth();
-  }, []);
+  }, [bypassAuth, authUser]);
 
   const checkAuth = async () => {
     try {

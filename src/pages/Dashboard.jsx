@@ -14,6 +14,8 @@ import ModernKPI from "@/components/dashboard/ModernKPI";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ExportButton from "@/components/common/ExportButton";
 import { base44 } from '@/api/base44Client';
+import { backend } from '@/api/backendClient';
+import { useAuth } from '@/lib/AuthContext';
 import { format } from 'date-fns';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
@@ -46,10 +48,19 @@ export default function Dashboard() {
   const [claims, setClaims] = useState([]);
   const [borderos, setBorderos] = useState([]);
 
+  const { bypassAuth } = useAuth();
+  const useBackendApi = import.meta.env.VITE_USE_BACKEND_API === 'true';
+
   useEffect(() => {
-    checkAuth();
+    if (bypassAuth && !useBackendApi) {
+      setLoading(false);
+      return;
+    }
+    if (!bypassAuth) {
+      checkAuth();
+    }
     loadDashboardData();
-  }, [period]);
+  }, [period, bypassAuth]);
 
   const checkAuth = async () => {
     try {
@@ -63,20 +74,32 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const [debtorData, claimData, borderoData] = await Promise.all([
-        base44.entities.Debtor.list(),
-        base44.entities.Claim.list(),
-        base44.entities.Bordero.list()
-      ]);
+      let debtorData = [];
+      let claimData = [];
+      let borderoData = [];
+
+      if (useBackendApi) {
+        [debtorData, claimData, borderoData] = await Promise.all([
+          backend.list('Debtor'),
+          backend.list('Claim'),
+          backend.list('Bordero')
+        ]);
+      } else {
+        [debtorData, claimData, borderoData] = await Promise.all([
+          base44.entities.Debtor.list(),
+          base44.entities.Claim.list(),
+          base44.entities.Bordero.list()
+        ]);
+      }
 
       setDebtors(debtorData || []);
       setClaims(claimData || []);
       setBorderos(borderoData || []);
 
       // Calculate stats
-      const approved = debtorData.filter(d => d.status === 'APPROVED').length;
-      const pending = debtorData.filter(d => d.status === 'SUBMITTED').length;
-      const rejected = debtorData.filter(d => d.status === 'REJECTED').length;
+      const approved = (debtorData || []).filter(d => d.status === 'APPROVED').length;
+      const pending = (debtorData || []).filter(d => d.status === 'SUBMITTED').length;
+      const rejected = (debtorData || []).filter(d => d.status === 'REJECTED').length;
       
       const totalExposure = debtorData.reduce((sum, d) => sum + (d.plafon || 0), 0);
       const totalPremium = debtorData.reduce((sum, d) => sum + (d.net_premi || 0), 0);

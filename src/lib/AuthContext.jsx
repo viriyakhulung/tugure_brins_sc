@@ -12,8 +12,23 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
+  const bypassAuth = import.meta.env.VITE_BYPASS_AUTH === 'true';
 
   useEffect(() => {
+    if (bypassAuth) {
+      const demoUser = {
+        id: 'bypass-user',
+        full_name: 'Bypass User',
+        email: 'bypass@example.com',
+        role: 'ADMIN',
+        app_id: appParams.appId
+      };
+      setUser(demoUser);
+      setIsAuthenticated(true);
+      setIsLoadingAuth(false);
+      setIsLoadingPublicSettings(false);
+      return;
+    }
     checkAppState();
   }, []);
 
@@ -136,6 +151,7 @@ export const AuthProvider = ({ children }) => {
       isLoadingPublicSettings,
       authError,
       appPublicSettings,
+      bypassAuth,
       logout,
       navigateToLogin,
       checkAppState
